@@ -266,4 +266,88 @@ router.post('/upgrade', async (req: AuthRequest, res: Response) => {
     }
 });
 
+// Seed default plans and create tables
+router.get('/seed-defaults', async (req: AuthRequest, res: Response) => {
+    try {
+        console.log('[SEED] Starting seed process...');
+
+        // 1. Create Tables
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS subscription_plans (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name TEXT NOT NULL,
+                credits_per_month INTEGER NOT NULL,
+                price DECIMAL NOT NULL,
+                is_free_plan BOOLEAN DEFAULT false,
+                is_active BOOLEAN DEFAULT true,
+                features JSONB DEFAULT '[]',
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS user_subscriptions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                plan_id UUID REFERENCES subscription_plans(id),
+                current_credits INTEGER DEFAULT 0,
+                credits_consumed_this_month INTEGER DEFAULT 0,
+                last_renewal_date TIMESTAMPTZ,
+                next_renewal_date TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(user_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS credit_transactions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                amount INTEGER NOT NULL,
+                transaction_type TEXT NOT NULL,
+                description TEXT,
+                balance_after INTEGER,
+                metadata JSONB,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS credit_packages (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name TEXT NOT NULL,
+                credits INTEGER NOT NULL,
+                price DECIMAL NOT NULL,
+                is_active BOOLEAN DEFAULT true,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        `);
+        console.log('[SEED] Tables created (if not exist)');
+
+        // 2. Seed Plans
+        const plans = await pool.query('SELECT COUNT(*) FROM subscription_plans');
+        if (parseInt(plans.rows[0].count) === 0) {
+            await pool.query(`
+                INSERT INTO subscription_plans (name, credits_per_month, price, is_free_plan, features) VALUES
+                ('Free', 50, 0, true, '["Basic features", "50 credits/month"]'),
+                ('Pro', 1000, 9.99, false, '["Advanced features", "1000 credits/month", "Priority support"]'),
+                ('Ultra', 5000, 29.99, false, '["All features", "5000 credits/month", "VIP support", "Early access"]')
+            `);
+            console.log('[SEED] Default plans inserted');
+        }
+
+        // 3. Seed Credit Packages
+        const packages = await pool.query('SELECT COUNT(*) FROM credit_packages');
+        if (parseInt(packages.rows[0].count) === 0) {
+            await pool.query(`
+                INSERT INTO credit_packages (name, credits, price) VALUES
+                ('Small Pack', 100, 1.99),
+                ('Medium Pack', 500, 4.99),
+                ('Large Pack', 2000, 15.99)
+            `);
+            console.log('[SEED] Default credit packages inserted');
+        }
+
+        res.json({ success: true, message: 'Database seeded successfully' });
+    } catch (error) {
+        console.error('Seed error:', error);
+        res.status(500).json({ error: 'Seeding failed: ' + error });
+    }
+});
+
 export default router;
