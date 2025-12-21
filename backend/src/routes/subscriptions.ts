@@ -10,7 +10,7 @@ router.use(authenticateToken);
 // Get current user's subscription
 router.get('/me', async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
+        const userId = req.userId!;
 
         const result = await pool.query(`
       SELECT 
@@ -54,7 +54,7 @@ router.get('/plans', async (req: AuthRequest, res: Response) => {
 // Get credit balance
 router.get('/credits', async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
+        const userId = req.userId!;
 
         const result = await pool.query(`
       SELECT current_credits, credits_consumed_this_month 
@@ -79,7 +79,7 @@ router.get('/credits', async (req: AuthRequest, res: Response) => {
 // Get credit transaction history
 router.get('/transactions', async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
+        const userId = req.userId!;
         const limit = parseInt(req.query.limit as string) || 50;
 
         const result = await pool.query(`
@@ -115,7 +115,7 @@ router.get('/packages', async (req: AuthRequest, res: Response) => {
 // Consume credits
 router.post('/consume', async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
+        const userId = req.userId!;
         const { amount, feature, metadata } = req.body;
 
         if (!amount || amount <= 0) {
@@ -159,7 +159,7 @@ router.post('/consume', async (req: AuthRequest, res: Response) => {
 // Create subscription for user (if they don't have one)
 router.post('/create', async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
+        const userId = req.userId!;
 
         // Check if subscription exists
         const existing = await pool.query(
@@ -206,7 +206,7 @@ router.post('/create', async (req: AuthRequest, res: Response) => {
 // Upgrade plan
 router.post('/upgrade', async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
+        const userId = req.userId!;
         const { planId, transactionId } = req.body;
 
         // Get new plan
