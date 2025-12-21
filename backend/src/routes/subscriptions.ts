@@ -109,6 +109,48 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
     `, [userId]);
 
         if (result.rows.length === 0) {
+            // Lazy provisioning: Create free subscription if none exists
+            console.log(`[SUB] No subscription found for user ${userId}, attempting auto-provisioning`);
+
+            const planResult = await pool.query(`
+                SELECT id, credits_per_month FROM subscription_plans 
+                WHERE is_free_plan = TRUE 
+                LIMIT 1
+            `);
+
+            if (planResult.rows.length > 0) {
+                const freePlan = planResult.rows[0];
+                console.log(`[SUB] Found free plan ${freePlan.id}, creating subscription`);
+
+                await pool.query(`
+                  INSERT INTO user_subscriptions (
+                    user_id, plan_id, current_credits, 
+                    last_renewal_date, next_renewal_date
+                  )
+                  VALUES (
+                    $1, $2, $3,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 month'
+                  )
+                `, [userId, freePlan.id, freePlan.credits_per_month]);
+
+                // Fetch the newly created subscription with details
+                const newResult = await pool.query(`
+                  SELECT 
+                    us.*,
+                    sp.name as plan_name,
+                    sp.credits_per_month,
+                    sp.price as plan_price,
+                    sp.is_free_plan
+                  FROM user_subscriptions us
+                  JOIN subscription_plans sp ON us.plan_id = sp.id
+                  WHERE us.user_id = $1
+                `, [userId]);
+
+                console.log(`[SUB] Subscription created successfully`);
+                return res.json({ subscription: newResult.rows[0] });
+            }
+
+            console.log(`[SUB] No free plan found, returning null`);
             return res.json({ subscription: null });
         }
 
