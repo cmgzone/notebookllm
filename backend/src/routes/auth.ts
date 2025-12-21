@@ -86,7 +86,7 @@ router.post('/login', async (req: Request, res: Response) => {
         console.log(`[AUTH] Attempting login for: ${normalizedEmail}`);
 
         const result = await pool.query(
-            'SELECT id, email, display_name, password_hash, email_verified, two_factor_enabled, avatar_url FROM users WHERE email = $1',
+            'SELECT id, email, display_name, password_hash, email_verified, two_factor_enabled, avatar_url, role FROM users WHERE email = $1',
             [normalizedEmail]
         );
 
@@ -105,7 +105,7 @@ router.post('/login', async (req: Request, res: Response) => {
         }
 
         const token = jwt.sign(
-            { userId: user.id, email: user.email },
+            { userId: user.id, email: user.email, role: user.role },
             process.env.JWT_SECRET!,
             { expiresIn: '30d' }
         );
@@ -119,7 +119,8 @@ router.post('/login', async (req: Request, res: Response) => {
                 displayName: user.display_name,
                 emailVerified: user.email_verified,
                 twoFactorEnabled: user.two_factor_enabled,
-                avatarUrl: user.avatar_url
+                avatarUrl: user.avatar_url,
+                role: user.role
             },
         });
     } catch (error) {

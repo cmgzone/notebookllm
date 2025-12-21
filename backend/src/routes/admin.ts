@@ -1,11 +1,12 @@
 import express, { type Request, type Response, type Router } from 'express';
 import pool from '../config/database.js';
-import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
+import { authenticateToken, requireAdmin, type AuthRequest } from '../middleware/auth.js';
 
 const router: Router = express.Router();
 
-// All admin routes require authentication
+// All admin routes require authentication AND admin role
 router.use(authenticateToken);
+router.use(requireAdmin);
 
 // ============================================================================
 // AI MODELS
