@@ -1,0 +1,784 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:developer' as developer;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import '../../core/api/api_service.dart';
+
+// ============================================================================
+// ENUMS & CONSTANTS
+// ============================================================================
+
+enum AuthStatus { initial, authenticated, unauthenticated, loading, error }
+
+enum TokenType { access, refresh, passwordReset, emailVerification, twoFactor }
+
+class AuthConstants {
+  static const int accessTokenExpiryMinutes = 15;
+  static const int refreshTokenExpiryDays = 30;
+  static const int passwordResetExpiryMinutes = 30;
+  static const int emailVerificationExpiryHours = 24;
+  static const int twoFactorCodeExpiryMinutes = 5;
+  static const int maxLoginAttempts = 5;
+  static const int lockoutDurationMinutes = 15;
+  static const int minPasswordLength = 8;
+  static const int sessionHistoryLimit = 10;
+}
+
+// ============================================================================
+// MODELS
+// ============================================================================
+
+class AppUser {
+  final String uid;
+  final String email;
+  final String? displayName;
+  final DateTime createdAt;
+  final bool emailVerified;
+  final bool twoFactorEnabled;
+  final String? avatarUrl;
+
+  const AppUser({
+    required this.uid,
+    required this.email,
+    this.displayName,
+    required this.createdAt,
+    this.emailVerified = false,
+    this.twoFactorEnabled = false,
+    this.avatarUrl,
+  });
+
+  factory AppUser.fromMap(Map<String, dynamic> map) {
+    return AppUser(
+      uid: map['id'] as String,
+      email: map['email'] as String,
+      displayName: map['display_name'] as String?,
+      createdAt: _parseDateTime(map['created_at']),
+      emailVerified: map['email_verified'] as bool? ?? false,
+      twoFactorEnabled: map['two_factor_enabled'] as bool? ?? false,
+      avatarUrl: map['avatar_url'] as String?,
+    );
+  }
+
+  static DateTime _parseDateTime(dynamic value) {
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.parse(value);
+    return DateTime.now();
+  }
+
+  Map<String, dynamic> toMap() => {
+        'id': uid,
+        'email': email,
+        'display_name': displayName,
+        'created_at': createdAt.toIso8601String(),
+        'email_verified': emailVerified,
+        'two_factor_enabled': twoFactorEnabled,
+        'avatar_url': avatarUrl,
+      };
+
+  AppUser copyWith({
+    String? displayName,
+    bool? emailVerified,
+    bool? twoFactorEnabled,
+    String? avatarUrl,
+  }) {
+    return AppUser(
+      uid: uid,
+      email: email,
+      displayName: displayName ?? this.displayName,
+      createdAt: createdAt,
+      emailVerified: emailVerified ?? this.emailVerified,
+      twoFactorEnabled: twoFactorEnabled ?? this.twoFactorEnabled,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+    );
+  }
+}
+
+class AuthTokens {
+  final String accessToken;
+  final String refreshToken;
+  final DateTime accessTokenExpiry;
+  final DateTime refreshTokenExpiry;
+
+  const AuthTokens({
+    required this.accessToken,
+    required this.refreshToken,
+    required this.accessTokenExpiry,
+    required this.refreshTokenExpiry,
+  });
+
+  bool get isAccessTokenExpired => DateTime.now().isAfter(accessTokenExpiry);
+  bool get isRefreshTokenExpired => DateTime.now().isAfter(refreshTokenExpiry);
+
+  Map<String, dynamic> toMap() => {
+        'access_token': accessToken,
+        'refresh_token': refreshToken,
+        'access_token_expiry': accessTokenExpiry.toIso8601String(),
+        'refresh_token_expiry': refreshTokenExpiry.toIso8601String(),
+      };
+
+  factory AuthTokens.fromMap(Map<String, dynamic> map) {
+    return AuthTokens(
+      accessToken: map['access_token'] as String,
+      refreshToken: map['refresh_token'] as String,
+      accessTokenExpiry: DateTime.parse(map['access_token_expiry'] as String),
+      refreshTokenExpiry: DateTime.parse(map['refresh_token_expiry'] as String),
+    );
+  }
+}
+
+class AuthSession {
+  final String sessionId;
+  final String userId;
+  final String deviceInfo;
+  final String? ipAddress;
+  final DateTime createdAt;
+  final DateTime lastActiveAt;
+  final bool isCurrent;
+
+  const AuthSession({
+    required this.sessionId,
+    required this.userId,
+    required this.deviceInfo,
+    this.ipAddress,
+    required this.createdAt,
+    required this.lastActiveAt,
+    this.isCurrent = false,
+  });
+
+  factory AuthSession.fromMap(Map<String, dynamic> map,
+      {bool isCurrent = false}) {
+    return AuthSession(
+      sessionId: map['id'] as String,
+      userId: map['user_id'] as String,
+      deviceInfo: map['device_info'] as String? ?? 'Unknown',
+      ipAddress: map['ip_address'] as String?,
+      createdAt: AppUser._parseDateTime(map['created_at']),
+      lastActiveAt: AppUser._parseDateTime(map['last_active_at']),
+      isCurrent: isCurrent,
+    );
+  }
+}
+
+class AuthState {
+  final AuthStatus status;
+  final AppUser? user;
+  final String? error;
+  final bool requiresTwoFactor;
+  final String? pendingUserId;
+
+  const AuthState({
+    this.status = AuthStatus.initial,
+    this.user,
+    this.error,
+    this.requiresTwoFactor = false,
+    this.pendingUserId,
+  });
+
+  bool get isAuthenticated => status == AuthStatus.authenticated;
+  bool get isLoading =>
+      status == AuthStatus.loading || status == AuthStatus.initial;
+
+  AuthState copyWith({
+    AuthStatus? status,
+    AppUser? user,
+    String? error,
+    bool? requiresTwoFactor,
+    String? pendingUserId,
+  }) {
+    return AuthState(
+      status: status ?? this.status,
+      user: user ?? this.user,
+      error: error,
+      requiresTwoFactor: requiresTwoFactor ?? this.requiresTwoFactor,
+      pendingUserId: pendingUserId ?? this.pendingUserId,
+    );
+  }
+}
+
+class PasswordStrength {
+  final int score; // 0-4
+  final String label;
+  final List<String> suggestions;
+
+  const PasswordStrength({
+    required this.score,
+    required this.label,
+    required this.suggestions,
+  });
+
+  bool get isStrong => score >= 3;
+}
+
+class AuditLogEntry {
+  final String id;
+  final String userId;
+  final String action;
+  final String? details;
+  final String? ipAddress;
+  final DateTime timestamp;
+
+  const AuditLogEntry({
+    required this.id,
+    required this.userId,
+    required this.action,
+    this.details,
+    this.ipAddress,
+    required this.timestamp,
+  });
+
+  factory AuditLogEntry.fromMap(Map<String, dynamic> map) {
+    return AuditLogEntry(
+      id: map['id'] as String,
+      userId: map['user_id'] as String,
+      action: map['action'] as String,
+      details: map['details'] as String?,
+      ipAddress: map['ip_address'] as String?,
+      timestamp: AppUser._parseDateTime(map['created_at']),
+    );
+  }
+}
+
+// ============================================================================
+// PROVIDERS
+// ============================================================================
+
+final customAuthServiceProvider = Provider<CustomAuthService>((ref) {
+  return CustomAuthService(ref);
+});
+
+final customAuthStateProvider =
+    StateNotifierProvider<CustomAuthNotifier, AuthState>((ref) {
+  return CustomAuthNotifier(ref);
+});
+
+final legacyUserProvider = Provider<AppUser?>((ref) {
+  return ref.watch(customAuthStateProvider).user;
+});
+
+final legacyIsAuthenticatedProvider = Provider<bool>((ref) {
+  return ref.watch(customAuthStateProvider).isAuthenticated;
+});
+
+// ============================================================================
+// CUSTOM AUTH SERVICE
+// ============================================================================
+
+class CustomAuthService {
+  final Ref _ref;
+
+  // Secure storage instance - lazy initialized (kept for backward compatibility logic if needed)
+  static FlutterSecureStorage? _secureStorageInstance;
+  static FlutterSecureStorage get _secureStorage {
+    _secureStorageInstance ??= const FlutterSecureStorage(
+      aOptions: AndroidOptions(encryptedSharedPreferences: true),
+      iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+    );
+    return _secureStorageInstance!;
+  }
+
+  static const _userDataKey = 'auth_user_data';
+
+  CustomAuthService(this._ref);
+
+  ApiService get _api => _ref.read(apiServiceProvider);
+
+  // ============================================================================
+  // PASSWORD UTILITIES
+  // ============================================================================
+
+  PasswordStrength checkPasswordStrength(String password) {
+    int score = 0;
+    final suggestions = <String>[];
+
+    if (password.length >= 8) score++;
+    if (password.length >= 12) score++;
+    if (password.length < 8) suggestions.add('Use at least 8 characters');
+
+    if (RegExp(r'[a-z]').hasMatch(password)) {
+      score++;
+    } else {
+      suggestions.add('Add lowercase letters');
+    }
+
+    if (RegExp(r'[A-Z]').hasMatch(password)) {
+      score++;
+    } else {
+      suggestions.add('Add uppercase letters');
+    }
+
+    if (RegExp(r'[0-9]').hasMatch(password)) {
+      score++;
+    } else {
+      suggestions.add('Add numbers');
+    }
+
+    if (RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(password)) {
+      score++;
+    } else {
+      suggestions.add('Add special characters');
+    }
+
+    // Common patterns to avoid
+    if (RegExp(r'(.)\1{2,}').hasMatch(password)) {
+      score--;
+      suggestions.add('Avoid repeated characters');
+    }
+    if (RegExp(r'(012|123|234|345|456|567|678|789|890)').hasMatch(password)) {
+      score--;
+      suggestions.add('Avoid sequential numbers');
+    }
+
+    score = score.clamp(0, 4);
+
+    final labels = ['Very Weak', 'Weak', 'Fair', 'Strong', 'Very Strong'];
+    return PasswordStrength(
+      score: score,
+      label: labels[score],
+      suggestions: suggestions,
+    );
+  }
+
+  // ============================================================================
+  // SIGN UP
+  // ============================================================================
+
+  Future<AppUser> signUp({
+    required String email,
+    required String password,
+    String? displayName,
+    bool sendVerificationEmail = true,
+  }) async {
+    try {
+      final strength = checkPasswordStrength(password);
+      if (!strength.isStrong) {
+        throw AuthException(
+            'Password is too weak: ${strength.suggestions.join(", ")}');
+      }
+
+      final response = await _api.signup(
+          email: email, password: password, displayName: displayName);
+
+      if (response['success'] == true && response['user'] != null) {
+        final user = AppUser.fromMap(response['user']);
+        await _cacheUser(user);
+        return user;
+      } else {
+        throw AuthException(response['error'] ?? 'Sign up failed');
+      }
+    } catch (e) {
+      developer.log('Sign up error: $e', name: 'CustomAuthService');
+      if (e is AuthException) rethrow;
+      throw AuthException(e.toString());
+    }
+  }
+
+  // ============================================================================
+  // SIGN IN
+  // ============================================================================
+
+  Future<AuthResult> signIn({
+    required String email,
+    required String password,
+    bool rememberMe = false,
+    String? deviceInfo,
+  }) async {
+    try {
+      final response = await _api.login(email: email, password: password);
+
+      if (response['success'] == true && response['user'] != null) {
+        final user = AppUser.fromMap(response['user']);
+        await _cacheUser(user);
+
+        return AuthResult(success: true, user: user);
+      } else {
+        throw AuthException(response['error'] ?? 'Sign in failed');
+      }
+    } catch (e) {
+      developer.log('Sign in error: $e', name: 'CustomAuthService');
+      if (e is AuthException) rethrow;
+      throw AuthException(e.toString());
+    }
+  }
+
+  // ============================================================================
+  // TWO-FACTOR AUTHENTICATION
+  // ============================================================================
+
+  Future<AppUser> verifyTwoFactorCode(String userId, String code) async {
+    try {
+      await _api.verifyTwoFactor(code);
+      // Refresh user profile to ensure state is consistent
+      final user = await getCurrentUser();
+      if (user == null) throw AuthException('Failed to retrieve user profile');
+      return user;
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException(e.toString());
+    }
+  }
+
+  Future<void> enableTwoFactor(String userId) async {
+    try {
+      await _api.enableTwoFactor();
+      // Update local state
+      final user = await getCurrentUser();
+      if (user != null) {
+        await _cacheUser(user.copyWith(twoFactorEnabled: true));
+      }
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException(e.toString());
+    }
+  }
+
+  Future<void> disableTwoFactor(String userId, String password) async {
+    try {
+      await _api.disableTwoFactor(password);
+      // Update local state
+      final user = await getCurrentUser();
+      if (user != null) {
+        await _cacheUser(user.copyWith(twoFactorEnabled: false));
+      }
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException(e.toString());
+    }
+  }
+
+  Future<void> resendTwoFactorCode(String userId) async {
+    try {
+      await _api.resendTwoFactorCode(userId);
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException(e.toString());
+    }
+  }
+
+  // ============================================================================
+  // EMAIL VERIFICATION
+  // ============================================================================
+
+  Future<void> sendEmailVerification(String userId) async {
+    try {
+      await _api.resendVerification();
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException(e.toString());
+    }
+  }
+
+  Future<void> verifyEmail(String token) async {
+    try {
+      await _api.verifyEmail(token);
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException(e.toString());
+    }
+  }
+
+  // ============================================================================
+  // PASSWORD RESET
+  // ============================================================================
+
+  Future<void> requestPasswordReset(String email) async {
+    try {
+      await _api.requestPasswordReset(email);
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException(e.toString());
+    }
+  }
+
+  Future<void> resetPassword(String token, String newPassword) async {
+    try {
+      await _api.resetPassword(token, newPassword);
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException(e.toString());
+    }
+  }
+
+  Future<void> changePassword({
+    required String userId,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      await _api.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException(e.toString());
+    }
+  }
+
+  // ============================================================================
+  // SESSION MANAGEMENT
+  // ============================================================================
+
+  Future<AuthTokens?> refreshTokens() async {
+    return null;
+  }
+
+  Future<List<AuthSession>> getActiveSessions(String userId) async {
+    return [];
+  }
+
+  Future<void> revokeSession(String sessionId) async {}
+
+  Future<void> revokeAllOtherSessions(String userId) async {}
+
+  // ============================================================================
+  // SIGN OUT & ACCOUNT MANAGEMENT
+  // ============================================================================
+
+  Future<void> signOut() async {
+    await _api.clearToken();
+    await _secureStorage.delete(key: _userDataKey);
+  }
+
+  Future<AppUser?> getCurrentUser() async {
+    String? userData;
+    try {
+      userData = await _secureStorage.read(key: _userDataKey);
+      if (userData != null) {
+        try {
+          final map = jsonDecode(userData);
+          return AppUser.fromMap(map);
+        } catch (e) {
+          // ignore bad cache
+        }
+      }
+
+      final response = await _api.getCurrentUser();
+      if (response['success'] == true && response['user'] != null) {
+        final user = AppUser.fromMap(response['user']);
+        await _cacheUser(user);
+        return user;
+      }
+      return null;
+    } catch (e) {
+      if (userData != null) {
+        try {
+          final map = jsonDecode(userData);
+          return AppUser.fromMap(map);
+        } catch (e) {/* ignore */}
+      }
+      return null;
+    }
+  }
+
+  Future<void> _cacheUser(AppUser user) async {
+    await _secureStorage.write(
+        key: _userDataKey, value: jsonEncode(user.toMap()));
+  }
+
+  Future<bool> isSessionValid() async {
+    return await _api.getToken() != null;
+  }
+
+  Future<void> updateProfile({
+    required String userId,
+    String? displayName,
+    String? avatarUrl,
+  }) async {
+    try {
+      await _api.updateProfile(
+        displayName: displayName,
+        avatarUrl: avatarUrl,
+      );
+      // Update local state
+      final user = await getCurrentUser();
+      if (user != null) {
+        await _cacheUser(user.copyWith(
+          displayName: displayName,
+          avatarUrl: avatarUrl,
+        ));
+      }
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException(e.toString());
+    }
+  }
+
+  Future<void> deleteAccount(String userId, String password) async {
+    try {
+      await _api.deleteAccount(password);
+      await signOut();
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException(e.toString());
+    }
+  }
+
+  // ============================================================================
+  // AUDIT LOGGING
+  // ============================================================================
+
+  Future<List<AuditLogEntry>> getAuditLogs(String userId,
+      {int limit = 50}) async {
+    return [];
+  }
+}
+
+// ============================================================================
+// AUTH RESULT
+// ============================================================================
+
+class AuthResult {
+  final bool success;
+  final AppUser? user;
+  final bool requiresTwoFactor;
+  final String? pendingUserId;
+  final String? error;
+
+  const AuthResult({
+    required this.success,
+    this.user,
+    this.requiresTwoFactor = false,
+    this.pendingUserId,
+    this.error,
+  });
+}
+
+// ============================================================================
+// AUTH NOTIFIER
+// ============================================================================
+
+class CustomAuthNotifier extends StateNotifier<AuthState> {
+  final Ref _ref;
+  Timer? _tokenRefreshTimer;
+
+  CustomAuthNotifier(this._ref) : super(const AuthState()) {
+    _init();
+  }
+
+  CustomAuthService get _authService => _ref.read(customAuthServiceProvider);
+
+  Future<void> _init() async {
+    state = state.copyWith(status: AuthStatus.loading);
+
+    try {
+      final isValid = await _authService.isSessionValid();
+
+      if (isValid) {
+        final user = await _authService.getCurrentUser();
+        if (user != null) {
+          state = AuthState(status: AuthStatus.authenticated, user: user);
+          return;
+        }
+      }
+
+      state = const AuthState(status: AuthStatus.unauthenticated);
+    } catch (e) {
+      developer.log('Auth init error: $e', name: 'CustomAuthNotifier');
+      state = const AuthState(status: AuthStatus.unauthenticated);
+    }
+  }
+
+  Future<void> signUp({
+    required String email,
+    required String password,
+    String? displayName,
+  }) async {
+    state = state.copyWith(status: AuthStatus.loading);
+
+    try {
+      final user = await _authService.signUp(
+        email: email,
+        password: password,
+        displayName: displayName,
+      );
+      state = AuthState(status: AuthStatus.authenticated, user: user);
+    } on AuthException catch (e) {
+      state = AuthState(status: AuthStatus.error, error: e.message);
+      rethrow;
+    } catch (e) {
+      state =
+          const AuthState(status: AuthStatus.error, error: 'Sign up failed');
+      rethrow;
+    }
+  }
+
+  Future<void> signIn({
+    required String email,
+    required String password,
+    bool rememberMe = false,
+  }) async {
+    state = state.copyWith(status: AuthStatus.loading);
+
+    try {
+      final result = await _authService.signIn(
+        email: email,
+        password: password,
+        rememberMe: rememberMe,
+      );
+
+      if (result.requiresTwoFactor) {
+        state = AuthState(
+          status: AuthStatus.unauthenticated,
+          requiresTwoFactor: true,
+          pendingUserId: result.pendingUserId,
+        );
+      } else if (result.success && result.user != null) {
+        state = AuthState(status: AuthStatus.authenticated, user: result.user);
+      }
+    } on AuthException catch (e) {
+      state = AuthState(status: AuthStatus.error, error: e.message);
+      rethrow;
+    } catch (e) {
+      state =
+          const AuthState(status: AuthStatus.error, error: 'Sign in failed');
+      rethrow;
+    }
+  }
+
+  Future<void> verifyTwoFactor(String code) async {
+    if (state.pendingUserId == null) {
+      throw AuthException('No pending authentication');
+    }
+
+    state = state.copyWith(status: AuthStatus.loading);
+
+    try {
+      final user =
+          await _authService.verifyTwoFactorCode(state.pendingUserId!, code);
+      state = AuthState(status: AuthStatus.authenticated, user: user);
+    } on AuthException catch (e) {
+      state = state.copyWith(status: AuthStatus.error, error: e.message);
+      rethrow;
+    }
+  }
+
+  Future<void> signOut() async {
+    _tokenRefreshTimer?.cancel();
+    await _authService.signOut();
+    state = const AuthState(status: AuthStatus.unauthenticated);
+  }
+
+  Future<void> refresh() async {
+    await _init();
+  }
+
+  @override
+  void dispose() {
+    _tokenRefreshTimer?.cancel();
+    super.dispose();
+  }
+}
+
+// ============================================================================
+// AUTH EXCEPTION
+// ============================================================================
+
+class AuthException implements Exception {
+  final String message;
+  AuthException(this.message);
+
+  @override
+  String toString() => message;
+}

@@ -3,6 +3,7 @@ services:
     name: notbook-llm-backend
     runtime: node
     region: oregon
+    rootDirectory: backend
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /health

@@ -1,0 +1,82 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter run -d chrome
+
+## exception
+
+DartDevelopmentServiceException: DartDevelopmentServiceException: Failed to start Dart Development Service
+
+```
+```
+
+## flutter doctor
+
+```
+[32m[✓][39m Flutter (Channel stable, 3.38.1, on Microsoft
+    Windows [Version 10.0.19045.6466], locale
+    en-GB) [3.0s]
+    [32m•[39m Flutter version 3.38.1 on channel stable at
+      C:\src\flutter
+    [32m•[39m Upstream repository
+      https://github.com/flutter/flutter.git
+    [32m•[39m Framework revision b45fa18946 (6 days ago),
+      2025-11-12 22:09:06 -0600
+    [32m•[39m Engine revision b5990e5ccc
+    [32m•[39m Dart version 3.10.0
+    [32m•[39m DevTools version 2.51.1
+    [32m•[39m Feature flags: enable-web,
+      enable-linux-desktop, enable-macos-desktop,
+      enable-windows-desktop, enable-android,
+      enable-ios, cli-animations,
+      enable-native-assets,
+      omit-legacy-version-file,
+      enable-lldb-debugging
+
+[32m[✓][39m Windows Version (10 Pro 64-bit, 22H2, 2009)
+    [19.5s]
+
+[32m[✓][39m Android toolchain - develop for Android devices
+    (Android SDK version 36.0.0) [26.8s]
+    [32m•[39m Android SDK at
+      C:\Users\Admin\AppData\Local\Android\sdk
+    [32m•[39m Emulator version 35.6.11.0 (build_id
+      13610412) (CL:N/A)
+    [32m•[39m Platform android-36, build-tools 36.0.0
+    [32m•[39m Java binary at: C:\Program
+      Files\Android\Android Studio\jbr\bin\java
+      This is the JDK bundled with the latest
+      Android Studio installation on this machine.
+      To manually set the JDK path, use: `flutter
+      config --jdk-dir="path/to/jdk"`.
+    [32m•[39m Java version OpenJDK Runtime Environment
+      (build 21.0.6+-13391695-b895.109)
+    [32m•[39m All Android licenses accepted.
+
+[32m[✓][39m Chrome - develop for the web [1,219ms]
+    [32m•[39m Chrome at C:\Program
+      Files\Google\Chrome\Application\chrome.exe
+
+[32m[✓][39m Visual Studio - develop Windows apps (Visual
+    Studio Build Tools 2019 16.11.49) [1,216ms]
+    [32m•[39m Visual Studio at C:\Program Files
+      (x86)\Microsoft Visual Studio\2019\BuildTools
+    [32m•[39m Visual Studio Build Tools 2019 version
+      16.11.36227.6
+    [32m•[39m Windows 10 SDK version 10.0.19041.0
+
+[32m[✓][39m Connected device (3 available) [6.1s]
+    [32m•[39m Windows (desktop) • windows • windows-x64
+      • Microsoft Windows [Version 10.0.19045.6466]
+    [32m•[39m Chrome (web)      • chrome  • web-javascript
+      • Google Chrome 142.0.7444.163
+    [32m•[39m Edge (web)        • edge    • web-javascript
+      • Microsoft Edge 142.0.3595.80
+
+[32m[✓][39m Network resources [6.7s]
+    [32m•[39m All expected network resources are available.
+
+[32m•[39m No issues found!
+```

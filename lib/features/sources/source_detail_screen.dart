@@ -1,0 +1,783 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_player/video_player.dart';
+import '../../core/media/media_service.dart';
+import '../../core/api/api_service.dart';
+import 'dart:typed_data';
+import 'source.dart';
+import 'source_provider.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import '../../features/fact_check/fact_check_service.dart';
+import '../../theme/app_theme.dart';
+import 'dart:ui'; // For glass effects
+
+class SourceDetailScreen extends ConsumerWidget {
+  const SourceDetailScreen(
+      {super.key,
+      required this.sourceId,
+      this.highlightChunkId,
+      this.highlightSnippet});
+  final String sourceId;
+  final String? highlightChunkId;
+  final String? highlightSnippet;
+
+  void _showFactCheckSheet(
+      BuildContext context, WidgetRef ref, String content) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _FactCheckSheet(content: content),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sources = ref.watch(sourceProvider);
+    final source = sources.firstWhere((s) => s.id == sourceId,
+        orElse: () => Source(
+            id: sourceId,
+            notebookId: '',
+            title: 'Unknown',
+            type: 'url',
+            addedAt: DateTime.now(),
+            content: ''));
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    // final isStorage = source.content.startsWith('storage://');
+    return Scaffold(
+      appBar: AppBar(
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: AppTheme.premiumGradient,
+          ),
+        ),
+        title: Text(source.title,
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.fact_check_outlined),
+            tooltip: 'Verify Facts',
+            onPressed: () => _showFactCheckSheet(context, ref, source.content),
+          ),
+        ],
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              border: Border(
+                bottom: BorderSide(
+                  color: scheme.outline.withValues(alpha: 0.1),
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  source.type == 'youtube'
+                      ? Icons.play_circle_outline
+                      : Icons.article_outlined,
+                  size: 16,
+                  color: scheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${source.type.toUpperCase()} • Added on ${source.addedAt.day}/${source.addedAt.month}/${source.addedAt.year}',
+                  style: text.labelSmall?.copyWith(
+                    color: scheme.onSurface.withValues(alpha: 0.6),
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+              child: _DetailBody(
+                  source: source,
+                  highlightChunkId: highlightChunkId,
+                  highlightSnippet: highlightSnippet),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChunkItem {
+  _ChunkItem({required this.id, required this.text, required this.index});
+  final String id;
+  final String text;
+  final int index;
+}
+
+class _DetailBody extends ConsumerStatefulWidget {
+  const _DetailBody(
+      {required this.source, this.highlightChunkId, this.highlightSnippet});
+  final Source source;
+  final String? highlightChunkId;
+  final String? highlightSnippet;
+
+  @override
+  ConsumerState<_DetailBody> createState() => _DetailBodyState();
+}
+
+class _DetailBodyState extends ConsumerState<_DetailBody> {
+  final ScrollController _scroll = ScrollController();
+  List<_ChunkItem> _chunks = [];
+  int _highlightIndex = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChunks();
+  }
+
+  Future<void> _loadChunks() async {
+    final api = ref.read(apiServiceProvider);
+    final chunks = await api.getChunksForSource(widget.source.id);
+
+    if (chunks.isEmpty && widget.source.content.isNotEmpty) {
+      final items = [
+        _ChunkItem(
+          id: 'full_content',
+          text: widget.source.content,
+          index: 0,
+        )
+      ];
+      setState(() {
+        _chunks = items;
+        _highlightIndex = _findHighlightIndex();
+      });
+      return;
+    }
+
+    final items = chunks
+        .map((e) => _ChunkItem(
+              id: e['id']?.toString() ?? '',
+              text: (e['content_text'] ?? '') as String,
+              index: e['chunk_index'] is int
+                  ? e['chunk_index'] as int
+                  : int.tryParse('${e['chunk_index']}') ?? 0,
+            ))
+        .toList();
+    setState(() {
+      _chunks = items;
+      _highlightIndex = _findHighlightIndex();
+    });
+    if (_highlightIndex >= 0) {
+      await Future.delayed(const Duration(milliseconds: 50));
+      _scroll.animateTo(
+        _highlightIndex * 100,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  int _findHighlightIndex() {
+    if (widget.highlightChunkId != null) {
+      final i = _chunks.indexWhere((c) => c.id == widget.highlightChunkId);
+      if (i >= 0) return i;
+    }
+    if (widget.highlightSnippet != null) {
+      final i =
+          _chunks.indexWhere((c) => c.text.contains(widget.highlightSnippet!));
+      if (i >= 0) return i;
+    }
+    return -1;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: (widget.source.type == 'image' || widget.source.type == 'video')
+            ? Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: _MediaViewer(source: widget.source),
+                  ),
+                  if (widget.highlightSnippet != null &&
+                      widget.highlightSnippet!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _buildMatchesPanel(context),
+                    ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: _buildChunkList(context),
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                children: [
+                  if (widget.highlightSnippet != null &&
+                      widget.highlightSnippet!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: _buildMatchesPanel(context),
+                    ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: _buildChunkList(context),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildMatchesPanel(BuildContext context) {
+    final snippet = widget.highlightSnippet;
+    if (snippet == null || snippet.isEmpty || _chunks.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final matches = <int>[];
+    for (var i = 0; i < _chunks.length; i++) {
+      if (_chunks[i].text.contains(snippet)) matches.add(i);
+    }
+    if (matches.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border.all(
+            color:
+                Theme.of(context).colorScheme.outline.withValues(alpha: 0.2)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Matches (${matches.length})',
+              style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: matches.map((i) {
+              final preview = _chunks[i].text;
+              final label = preview.length > 36
+                  ? '${preview.substring(0, 36)}…'
+                  : preview;
+              return ActionChip(
+                label: Text(label, style: const TextStyle(fontSize: 11)),
+                onPressed: () {
+                  setState(() => _highlightIndex = i);
+                  _scroll.animateTo(i * 100,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut);
+                },
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChunkList(BuildContext context) {
+    if (_chunks.isEmpty) {
+      return const Center(child: Text('No text extracted'));
+    }
+    return ListView.builder(
+      controller: _scroll,
+      itemCount: _chunks.length,
+      itemBuilder: (context, i) {
+        final c = _chunks[i];
+        final highlight = i == _highlightIndex;
+        final snippet = widget.highlightSnippet;
+        InlineSpan contentSpan;
+        if (highlight && snippet != null && snippet.isNotEmpty) {
+          final idx = c.text.indexOf(snippet);
+          if (idx >= 0) {
+            final before = c.text.substring(0, idx);
+            final middle = c.text.substring(idx, idx + snippet.length);
+            final after = c.text.substring(idx + snippet.length);
+            contentSpan = TextSpan(children: [
+              TextSpan(text: before),
+              TextSpan(
+                text: middle,
+                style: TextStyle(
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.15)),
+              ),
+              TextSpan(text: after),
+            ]);
+          } else {
+            contentSpan = TextSpan(text: c.text);
+          }
+        } else {
+          contentSpan = TextSpan(text: c.text);
+        }
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: highlight
+                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: highlight
+                ? Border.all(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.2))
+                : null,
+          ),
+          child: widget.source.type == 'report'
+              ? MarkdownBody(
+                  data: c.text,
+                  selectable: true,
+                  styleSheet:
+                      MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                    p: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          height: 1.6,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.8),
+                        ),
+                    h1: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                    h2: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                    h3: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                    blockquote: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontStyle: FontStyle.italic,
+                          height: 1.5,
+                        ),
+                    code: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          backgroundColor: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
+                        ),
+                    blockSpacing: 16,
+                  ),
+                )
+              : Text.rich(
+                  contentSpan,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        height: 1.6,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.8),
+                      ),
+                ),
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+}
+
+class _MediaViewer extends ConsumerWidget {
+  const _MediaViewer({required this.source});
+  final Source source;
+
+  @override
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final service = ref.read(mediaServiceProvider);
+    return FutureBuilder<Uint8List?>(
+      future: service.getMediaBytes(source.id),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const SizedBox(
+              height: 200, child: Center(child: CircularProgressIndicator()));
+        }
+        final bytes = snap.data;
+        if (bytes == null) return const Text('Media not found');
+
+        if (source.type == 'image') {
+          return Center(child: Image.memory(bytes));
+        } else if (source.type == 'video') {
+          // Video from bytes is harder with video_player, usually needs a file.
+          // For now, show placeholder or unsupported message as video_player doesn't support memory easily without writing to file.
+          return const Center(
+              child: Text('Video playback from DB not fully supported yet'));
+        }
+        return SingleChildScrollView(
+            child: Text('Unsupported media type: ${source.type}'));
+      },
+    );
+  }
+}
+
+class _VideoPlayerView extends StatefulWidget {
+  const _VideoPlayerView({required this.url});
+  final String url;
+
+  @override
+  State<_VideoPlayerView> createState() => _VideoPlayerViewState();
+}
+
+class _VideoPlayerViewState extends State<_VideoPlayerView> {
+  late VideoPlayerController _controller;
+  bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..initialize().then((_) {
+        if (mounted) {
+          setState(() => _initialized = true);
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_initialized) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return Column(
+      children: [
+        AspectRatio(
+          aspectRatio: _controller.value.aspectRatio,
+          child: VideoPlayer(_controller),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              icon: Icon(
+                  _controller.value.isPlaying ? Icons.pause : Icons.play_arrow),
+              onPressed: () {
+                setState(() {
+                  _controller.value.isPlaying
+                      ? _controller.pause()
+                      : _controller.play();
+                });
+              },
+            ),
+          ],
+        )
+      ],
+    );
+  }
+}
+
+class _FactCheckSheet extends ConsumerStatefulWidget {
+  const _FactCheckSheet({required this.content});
+  final String content;
+
+  @override
+  ConsumerState<_FactCheckSheet> createState() => _FactCheckSheetState();
+}
+
+class _FactCheckSheetState extends ConsumerState<_FactCheckSheet> {
+  bool _isLoading = true;
+  List<FactCheckResult> _results = [];
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _analyze();
+  }
+
+  Future<void> _analyze() async {
+    try {
+      final results = await ref
+          .read(factCheckServiceProvider)
+          .verifyContent(widget.content);
+      if (mounted) {
+        setState(() {
+          _results = results;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          decoration: BoxDecoration(
+            color: scheme.surface.withValues(alpha: 0.9),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: scheme.outline.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.fact_check,
+                        color: scheme.onPrimaryContainer, size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Fact Check Analysis',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'Powered by AI verification',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                color: scheme.onSurface.withValues(alpha: 0.6),
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              if (_isLoading)
+                const Expanded(
+                    child: Center(child: CircularProgressIndicator()))
+              else if (_error != null)
+                Expanded(
+                    child: Center(
+                        child: Text('Error: $_error',
+                            style: TextStyle(color: scheme.error))))
+              else if (_results.isEmpty)
+                Expanded(
+                    child: Center(
+                        child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle_outline,
+                        size: 48, color: Colors.green.withValues(alpha: 0.5)),
+                    const SizedBox(height: 16),
+                    const Text('No controversial claims identified',
+                        style: TextStyle(fontWeight: FontWeight.w500)),
+                  ],
+                )))
+              else
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: _results.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      final item = _results[index];
+                      Color statusColor;
+                      IconData statusIcon;
+                      Color bgStatusColor;
+
+                      switch (item.verdict.toLowerCase()) {
+                        case 'true':
+                          statusColor = Colors.green;
+                          bgStatusColor = Colors.green;
+                          statusIcon = Icons.check_circle;
+                          break;
+                        case 'false':
+                          statusColor = Colors.red;
+                          bgStatusColor = Colors.red;
+                          statusIcon = Icons.cancel;
+                          break;
+                        case 'misleading':
+                          statusColor = Colors.orange;
+                          bgStatusColor = Colors.orange;
+                          statusIcon = Icons.warning;
+                          break;
+                        default:
+                          statusColor = Colors.grey;
+                          bgStatusColor = Colors.grey;
+                          statusIcon = Icons.help;
+                      }
+
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: scheme.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: scheme.outline.withValues(alpha: 0.1),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: bgStatusColor.withValues(alpha: 0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color:
+                                        scheme.outline.withValues(alpha: 0.05),
+                                  ),
+                                ),
+                                color: bgStatusColor.withValues(alpha: 0.05),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(statusIcon,
+                                      color: statusColor, size: 16),
+                                  const SizedBox(width: 8),
+                                  Text(item.verdict.toUpperCase(),
+                                      style: TextStyle(
+                                          color: statusColor,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          letterSpacing: 1)),
+                                  const Spacer(),
+                                  Text(
+                                    '${(item.confidence * 100).toInt()}% CONFIDENCE',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: scheme.onSurface
+                                              .withValues(alpha: 0.5),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.claim,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    item.explanation,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: scheme.onSurface
+                                              .withValues(alpha: 0.8),
+                                          height: 1.5,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

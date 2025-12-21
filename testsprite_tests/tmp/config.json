@@ -1,0 +1,17 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:5173",
+  "loginUser": "zonecmg@gmail.com",
+  "loginPassword": "Cmgcmg686@",
+  "executionArgs": {
+    "projectName": "NOTBOOK LLM",
+    "projectPath": "c:\\Users\\Admin\\Documents\\trae_projects\\NOTBOOK LLM",
+    "testIds": [],
+    "additionalInstruction": "",
+    "envs": {
+      "API_KEY": "sk-user-TdWfhG70V9Gx3Xt6KP7uyusB19B8pYqlObcEdZ97g4NBlUIsF1nZdRvLkAtjLVKfwPxdSCWZ0JsiTYQd6k8OET2Vs_LUEFmFqqE2gZ7ZeyqkbYAIm1SYFye8nIaDwbXsbVY"
+    }
+  }
+}

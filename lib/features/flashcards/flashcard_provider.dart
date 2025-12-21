@@ -1,0 +1,223 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
+import 'flashcard.dart';
+import '../sources/source_provider.dart';
+import '../gamification/gamification_provider.dart';
+import '../../core/ai/gemini_service.dart';
+import '../../core/ai/openrouter_service.dart';
+import '../../core/security/global_credentials_service.dart';
+import '../../core/api/api_service.dart';
+
+/// Provider for managing flashcard decks
+class FlashcardNotifier extends StateNotifier<List<FlashcardDeck>> {
+  final Ref ref;
+
+  FlashcardNotifier(this.ref) : super([]) {
+    _loadDecks();
+  }
+
+  Future<void> _loadDecks() async {
+    try {
+      final api = ref.read(apiServiceProvider);
+      final decksData = await api.getFlashcardDecks();
+      state = decksData.map((j) => FlashcardDeck.fromBackendJson(j)).toList()
+        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    } catch (e) {
+      debugPrint('Error loading flashcard decks: $e');
+      state = [];
+    }
+  }
+
+  /// Get decks for a specific notebook
+  List<FlashcardDeck> getDecksForNotebook(String notebookId) {
+    return state.where((deck) => deck.notebookId == notebookId).toList();
+  }
+
+  /// Add a new deck
+  Future<void> addDeck(FlashcardDeck deck) async {
+    try {
+      final api = ref.read(apiServiceProvider);
+      await api.createFlashcardDeck(
+        title: deck.title,
+        notebookId: deck.notebookId,
+        sourceId: deck.sourceId,
+        cards: deck.cards.map((c) => c.toBackendJson()).toList(),
+      );
+      await _loadDecks();
+    } catch (e) {
+      debugPrint('Error adding deck: $e');
+    }
+  }
+
+  /// Update existing deck
+  Future<void> updateDeck(FlashcardDeck deck) async {
+    try {
+      // The backend API for updating a deck is not yet implemented.
+      // For now, we just reload the decks to reflect any potential changes
+      // if the update was handled elsewhere or if this method is called
+      // after a local modification that needs to be re-synced.
+      await _loadDecks();
+    } catch (e) {
+      debugPrint('Error updating deck: $e');
+    }
+  }
+
+  /// Delete a deck
+  Future<void> deleteDeck(String id) async {
+    try {
+      final api = ref.read(apiServiceProvider);
+      await api.deleteFlashcardDeck(id);
+      state = state.where((deck) => deck.id != id).toList();
+    } catch (e) {
+      debugPrint('Error deleting deck: $e');
+    }
+  }
+
+  /// Generate flashcards from sources using AI
+  Future<FlashcardDeck> generateFromSources({
+    required String notebookId,
+    required String title,
+    String? sourceId,
+    int cardCount = 10,
+  }) async {
+    // Get source content
+    final sources = ref.read(sourceProvider);
+    final relevantSources = sourceId != null
+        ? sources.where((s) => s.id == sourceId).toList()
+        : sources.where((s) => s.notebookId == notebookId).toList();
+
+    if (relevantSources.isEmpty) {
+      throw Exception('No sources found to generate flashcards from');
+    }
+
+    final sourceContent =
+        relevantSources.map((s) => '## ${s.title}\n${s.content}').join('\n\n');
+
+    // Build prompt for AI
+    final prompt = '''
+Generate exactly $cardCount flashcards from the following content. 
+Each flashcard should have a clear question and concise answer.
+Focus on key concepts, definitions, and important facts.
+
+CONTENT:
+$sourceContent
+
+Return ONLY a JSON array with this exact format:
+[
+  {"question": "What is...?", "answer": "It is...", "difficulty": 1},
+  {"question": "How does...?", "answer": "It works by...", "difficulty": 2}
+]
+
+difficulty: 1=easy, 2=medium, 3=hard
+''';
+
+    // Call AI service
+    final response = await _callAI(prompt);
+    final cards = _parseFlashcardsFromResponse(response, notebookId, sourceId);
+
+    final now = DateTime.now();
+    final deck = FlashcardDeck(
+      id: const Uuid().v4(),
+      title: title,
+      notebookId: notebookId,
+      sourceId: sourceId,
+      cards: cards,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    await addDeck(deck);
+    return deck;
+  }
+
+  Future<String> _callAI(String prompt) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final provider = prefs.getString('ai_provider') ?? 'gemini';
+      final model = prefs.getString('ai_model') ?? 'gemini-2.5-flash';
+      final creds = ref.read(globalCredentialsServiceProvider);
+
+      debugPrint(
+          '[FlashcardProvider] Using AI provider: $provider, model: $model');
+
+      if (provider == 'openrouter') {
+        final apiKey = await creds.getApiKey('openrouter');
+        if (apiKey == null || apiKey.isEmpty) {
+          throw Exception(
+              'OpenRouter API key not found. Please configure it in Settings.');
+        }
+        final openRouter = OpenRouterService();
+        return await openRouter.generateContent(prompt,
+            model: model, apiKey: apiKey, maxTokens: 8192);
+      } else {
+        final apiKey = await creds.getApiKey('gemini');
+        if (apiKey == null || apiKey.isEmpty) {
+          throw Exception(
+              'Gemini API key not found. Please configure it in Settings.');
+        }
+        final gemini = GeminiService();
+        return await gemini.generateContent(prompt,
+            apiKey: apiKey, maxTokens: 8192);
+      }
+    } catch (e) {
+      debugPrint('[FlashcardProvider] AI call failed: $e');
+      rethrow;
+    }
+  }
+
+  List<Flashcard> _parseFlashcardsFromResponse(
+      String response, String notebookId, String? sourceId) {
+    try {
+      // Extract JSON from response
+      final jsonMatch = RegExp(r'\[[\s\S]*\]').firstMatch(response);
+      if (jsonMatch == null) throw Exception('No JSON array found');
+
+      final List<dynamic> jsonList = jsonDecode(jsonMatch.group(0)!);
+      final now = DateTime.now();
+
+      return jsonList.map((item) {
+        return Flashcard(
+          id: const Uuid().v4(),
+          question: item['question'] ?? '',
+          answer: item['answer'] ?? '',
+          notebookId: notebookId,
+          sourceId: sourceId,
+          difficulty: item['difficulty'] ?? 1,
+          createdAt: now,
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('Error parsing flashcards: $e');
+      return [];
+    }
+  }
+
+  /// Record a review attempt for a card
+  Future<void> recordReview(
+      String deckId, String cardId, bool wasCorrect) async {
+    // Track gamification - 1 flashcard reviewed
+    ref.read(gamificationProvider.notifier).trackFlashcardsReviewed(1);
+    ref.read(gamificationProvider.notifier).trackFeatureUsed('flashcards');
+
+    // Sync to backend
+    try {
+      final api = ref.read(apiServiceProvider);
+      await api.updateFlashcardProgress(
+        cardId: cardId,
+        wasCorrect: wasCorrect,
+      );
+      // Optional: reload state to get server-calculated nextReviewAt
+      // await _loadDecks();
+    } catch (e) {
+      debugPrint('Error recording review: $e');
+    }
+  }
+}
+
+final flashcardProvider =
+    StateNotifierProvider<FlashcardNotifier, List<FlashcardDeck>>((ref) {
+  return FlashcardNotifier(ref);
+});

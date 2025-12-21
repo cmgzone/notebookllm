@@ -1,0 +1,31 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'notebook.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+_$NotebookImpl _$$NotebookImplFromJson(Map<String, dynamic> json) =>
+    _$NotebookImpl(
+      id: json['id'] as String,
+      userId: json['userId'] as String,
+      title: json['title'] as String,
+      description: json['description'] as String? ?? '',
+      coverImage: json['coverImage'] as String?,
+      sourceCount: (json['sourceCount'] as num).toInt(),
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+    );
+
+Map<String, dynamic> _$$NotebookImplToJson(_$NotebookImpl instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'userId': instance.userId,
+      'title': instance.title,
+      'description': instance.description,
+      'coverImage': instance.coverImage,
+      'sourceCount': instance.sourceCount,
+      'createdAt': instance.createdAt.toIso8601String(),
+      'updatedAt': instance.updatedAt.toIso8601String(),
+    };

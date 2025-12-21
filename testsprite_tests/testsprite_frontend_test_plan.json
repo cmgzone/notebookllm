@@ -1,0 +1,462 @@
+[
+  {
+    "id": "TC001",
+    "title": "User Authentication Success",
+    "description": "Verify that user authentication succeeds with valid credentials via the Supabase-backed login screen.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Launch the app and navigate to the login screen."
+      },
+      {
+        "type": "action",
+        "description": "Enter valid username/email and password."
+      },
+      {
+        "type": "action",
+        "description": "Click login button."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that the user is successfully authenticated and navigated to the home screen."
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "User Authentication Failure",
+    "description": "Verify that login is rejected with invalid credentials and appropriate error messages are shown.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to login screen."
+      },
+      {
+        "type": "action",
+        "description": "Input invalid username/email and/or password."
+      },
+      {
+        "type": "action",
+        "description": "Press login button."
+      },
+      {
+        "type": "assertion",
+        "description": "Ensure login fails and an error message is displayed without navigating away from login screen."
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Onboarding Flow Display and Skip",
+    "description": "Verify onboarding screens display on first launch, allowing users to navigate or skip onboarding, and that onboarding can be repeated.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Launch the app as a new user."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that onboarding screens appear sequentially explaining the app features."
+      },
+      {
+        "type": "action",
+        "description": "Use navigation controls to move through onboarding steps."
+      },
+      {
+        "type": "action",
+        "description": "Press skip button during onboarding."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify onboarding flow exits and user navigates to main app screen."
+      },
+      {
+        "type": "action",
+        "description": "Restart app and choose to repeat onboarding from settings."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm onboarding screens display again on demand."
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Notebook Creation and Persistence",
+    "description": "Verify that users can create notebooks, view them in the home screen, and that notebooks persist across app sessions.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in and navigate to the home screen."
+      },
+      {
+        "type": "action",
+        "description": "Create a new notebook using the create notebook dialog."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that the new notebook appears with correct metadata in the notebook list."
+      },
+      {
+        "type": "action",
+        "description": "Close and restart the app, re-authenticate if necessary."
+      },
+      {
+        "type": "assertion",
+        "description": "Ensure the previously created notebook is still present and accessible."
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Source Ingestion via URL and File Upload",
+    "description": "Validate that knowledge sources can be ingested successfully either by entering a URL or uploading files, triggering chunking and embedding processes.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Select a notebook to add source documents."
+      },
+      {
+        "type": "action",
+        "description": "Choose to ingest source by entering a valid URL."
+      },
+      {
+        "type": "action",
+        "description": "Submit the URL and monitor ingestion progress."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm successful chunking and embedding of the URL contents and availability in source list."
+      },
+      {
+        "type": "action",
+        "description": "Repeat ingestion by uploading a valid file (e.g., PDF or text)."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify chunking, embedding complete successfully and file source is listed."
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Ingestion Failure Handling",
+    "description": "Verify appropriate error messages and graceful failure behavior when ingestion fails due to unsupported file, invalid URL, or network errors.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Enter an invalid or unreachable URL for ingestion."
+      },
+      {
+        "type": "assertion",
+        "description": "Validate that an informative error message is shown and the app remains stable."
+      },
+      {
+        "type": "action",
+        "description": "Try uploading a corrupted or unsupported file format."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm ingestion fails cleanly with an appropriate user-facing message."
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "AI-Powered Chat Interface Basic Interaction",
+    "description": "Verify that users can send queries using the chat interface and AI responses stream properly with visible token-by-token updates.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Open a notebook and navigate to its chat screen."
+      },
+      {
+        "type": "action",
+        "description": "Input a natural language query related to ingested knowledge and submit."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm that AI response begins streaming immediately and tokens appear progressively in the chat window."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that the response is coherent and relevant to the query."
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "AI Chat Citation Drawer Display",
+    "description": "Test that citations related to knowledge sources appear correctly in the citation drawer alongside AI chat responses.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Ask a question in the chat that is answerable by ingested sources."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that a citation drawer is available and displays referenced sources with correct metadata."
+      },
+      {
+        "type": "action",
+        "description": "Interact with citation drawer (e.g., open/close, navigate citations)."
+      },
+      {
+        "type": "assertion",
+        "description": "Ensure proper UI behavior and no crashes."
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Audio Playback and Media Controls",
+    "description": "Validate audio playback of media notes with functional play, pause, seek, and background audio service operation.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Select a note containing an audio artifact."
+      },
+      {
+        "type": "action",
+        "description": "Start audio playback."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify audio plays without interruption and UI reflects playback state."
+      },
+      {
+        "type": "action",
+        "description": "Use pause, resume, and seek controls."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm audio responds correctly to control inputs and progress bar updates accordingly."
+      },
+      {
+        "type": "action",
+        "description": "Switch app to background and verify audio continues playing."
+      },
+      {
+        "type": "assertion",
+        "description": "Ensure background audio service maintains playback without crashes or stopping unexpectedly."
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Voice Recording and Speech-to-Text Integration",
+    "description": "Test voice recording feature within notes or chat and verify speech-to-text conversion via Supabase edge functions is accurate and timely.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Start voice recording in a note or chat interface."
+      },
+      {
+        "type": "action",
+        "description": "Speak a clear query or note content."
+      },
+      {
+        "type": "action",
+        "description": "Stop recording to trigger speech-to-text processing."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm transcribed text appears correctly in input field without major errors."
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Search Feature Returns Relevant Results",
+    "description": "Ensure search queries return relevant results from both the ingested local knowledge base and integrated web search via Serper API.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Enter search terms related to previously ingested knowledge."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify search results include relevant notebook content and associated metadata from vector search."
+      },
+      {
+        "type": "action",
+        "description": "Switch to web search tab and input a web query."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm web search results are returned and displayed correctly."
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Supabase Edge Functions Operation",
+    "description": "Validate all relevant Supabase edge functions (ingestion, query answering, STT, TTS, voice management, web search) execute correctly and handle errors gracefully.",
+    "category": "integration",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Trigger ingestion function with valid and invalid inputs."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify successful ingestion with valid input and proper error handling on invalid input."
+      },
+      {
+        "type": "action",
+        "description": "Send queries to the answer_query function."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm AI-generated answers are returned within expected time."
+      },
+      {
+        "type": "action",
+        "description": "Use STT and TTS functions with correct audio inputs."
+      },
+      {
+        "type": "assertion",
+        "description": "Validate appropriate transcription and synthesized audio output."
+      },
+      {
+        "type": "action",
+        "description": "Test voice management and web search functions with expected request formats."
+      },
+      {
+        "type": "assertion",
+        "description": "Ensure correct response and error handling for edge cases."
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Database Migration Integrity and Vector Search RPC Functionality",
+    "description": "Test that the Supabase database migrations are applied successfully and that vector search RPC calls perform as expected.",
+    "category": "integration",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Apply initial and subsequent database migration scripts to a fresh database instance."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify schema and media asset tables are created without errors."
+      },
+      {
+        "type": "action",
+        "description": "Perform vector search queries using the RPC functionality."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the RPC returns accurate results consistent with stored embeddings."
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Notebook and Source UI Usability",
+    "description": "Test the user experience and UI components of notebook and source management including notebook cards, source detail screens, and editable dialogs.",
+    "category": "ui",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to home screen and browse notebooks via notebook cards."
+      },
+      {
+        "type": "assertion",
+        "description": "Ensure notebooks are displayed clearly with correct information and responsive UI."
+      },
+      {
+        "type": "action",
+        "description": "Open source detail screen from ingested source list."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify source details are correct and UI elements for editing or deleting are available."
+      },
+      {
+        "type": "action",
+        "description": "Edit notebook or source metadata via editable dialogs."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm changes persist after saving and UI updates accordingly."
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Streaming Token Handling Robustness",
+    "description": "Verify the chat streaming token mechanism handles slow network, cancellations, and interruptions gracefully without UI freezing or crashes.",
+    "category": "error handling",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Submit chat queries under simulated slow network conditions."
+      },
+      {
+        "type": "assertion",
+        "description": "Observe streaming tokens continue displaying incrementally without UI freezing."
+      },
+      {
+        "type": "action",
+        "description": "Interrupt a chat response stream midway by closing the chat screen or issuing cancellation."
+      },
+      {
+        "type": "assertion",
+        "description": "Ensure no crashes or memory leaks occur and UI returns to stable state."
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Text-to-Speech Audio Generation and Playback",
+    "description": "Verify text-to-speech capability generates correct audio output and plays back within the app, supporting different voices as managed by the voice provider.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Enter text in chat or note and request TTS audio generation."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm audio file is generated and playable without errors."
+      },
+      {
+        "type": "action",
+        "description": "Switch between available voices using the voice provider settings."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify audio output reflects selected voice appropriately."
+      }
+    ]
+  }
+]

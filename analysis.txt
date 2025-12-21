@@ -1,0 +1,50 @@
+Analyzing NOTBOOK LLM...                                        
+
+   info - Don't invoke 'print' in production code - lib\core\backend\neon_database_service.dart:27:7 - avoid_print
+   info - Use 'const' with the constructor to improve performance - lib\core\backend\neon_database_service.dart:40:19 - prefer_const_constructors
+   info - Don't invoke 'print' in production code - lib\core\backend\neon_database_service.dart:47:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\core\backend\neon_database_service.dart:145:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\core\backend\neon_database_service.dart:155:7 - avoid_print
+  error - Directives must appear before any declarations - lib\core\router.dart:25:1 - directive_after_declaration
+warning - Unused import: 'dart:convert' - lib\core\sources\content_extractor_service.dart:3:8 - unused_import
+warning - Unused import: 'package:flutter_dotenv/flutter_dotenv.dart' - lib\core\sources\content_extractor_service.dart:4:8 - unused_import
+warning - Unused import: 'package:flutter/foundation.dart' - lib\features\analytics\analytics_service.dart:1:8 - unused_import
+warning - The value of the local variable 'isDark' isn't used - lib\features\auth\login_screen.dart:90:11 - unused_local_variable
+  error - The method 'ask' isn't defined for the type 'StreamNotifier' - lib\features\chat\chat_provider.dart:27:54 - undefined_method
+warning - Unused import: '../../core/extensions/color_compat.dart' - lib\features\chat\citation_drawer.dart:5:8 - unused_import
+warning - Unused import: 'package:http/http.dart' - lib\features\chat\enhanced_chat_screen.dart:9:8 - unused_import
+warning - Unused import: 'package:flutter_dotenv/flutter_dotenv.dart' - lib\features\chat\enhanced_chat_screen.dart:10:8 - unused_import
+warning - Unused import: '../../core/backend/firebase_auth_service.dart' - lib\features\chat\enhanced_chat_screen.dart:22:8 - unused_import
+warning - The declaration '_splitForTTS' isn't referenced - lib\features\chat\enhanced_chat_screen.dart:74:16 - unused_element
+warning - The declaration '_VoiceSheet' isn't referenced - lib\features\chat\enhanced_chat_screen.dart:580:7 - unused_element
+   info - Statements in an if should be enclosed in a block - lib\features\chat\enhanced_chat_screen.dart:908:9 - curly_braces_in_flow_control_structures
+warning - Unused import: 'dart:async' - lib\features\chat\stream_provider.dart:1:8 - unused_import
+warning - Unused import: '../sources/source_provider.dart' - lib\features\chat\stream_provider.dart:4:8 - unused_import
+warning - Unused import: '../../core/rag/rag_provider.dart' - lib\features\chat\stream_provider.dart:5:8 - unused_import
+warning - Unused import: 'dart:convert' - lib\features\chat\stream_provider.dart:6:8 - unused_import
+warning - Unused import: 'package:http/http.dart' - lib\features\chat\stream_provider.dart:7:8 - unused_import
+warning - Unused import: 'package:flutter_dotenv/flutter_dotenv.dart' - lib\features\chat\stream_provider.dart:8:8 - unused_import
+   info - Unnecessary override - lib\features\chat\stream_provider.dart:14:8 - unnecessary_overrides
+warning - Unused import: '../../core/extensions/color_compat.dart' - lib\features\onboarding\onboarding_completion_screen.dart:7:8 - unused_import
+warning - Unused import: '../../core/extensions/color_compat.dart' - lib\features\onboarding\onboarding_screen.dart:6:8 - unused_import
+   info - The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart' - lib\features\sources\enhanced_sources_screen.dart:19:8 - unnecessary_import
+   info - The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/foundation.dart' - lib\features\sources\source_provider.dart:1:8 - unnecessary_import
+warning - The value of the local variable 'result' isn't used - lib\features\sources\source_provider.dart:30:13 - unused_local_variable
+warning - The '!' will have no effect because the receiver can't be null - lib\features\sources\source_provider.dart:250:19 - unnecessary_non_null_assertion
+warning - Unused import: 'package:flutter_dotenv/flutter_dotenv.dart' - lib\features\studio\audio_overview_provider.dart:3:8 - unused_import
+warning - Unused import: 'package:http/http.dart' - lib\features\studio\audio_overview_provider.dart:4:8 - unused_import
+warning - Unused import: 'dart:convert' - lib\features\studio\audio_overview_provider.dart:5:8 - unused_import
+warning - Unused import: '../sources/source_provider.dart' - lib\features\studio\audio_overview_provider.dart:7:8 - unused_import
+warning - Unused import: 'package:just_audio/just_audio.dart' - lib\features\studio\audio_overview_provider.dart:9:8 - unused_import
+warning - The declaration '_splitForTTS' isn't referenced - lib\features\studio\audio_overview_provider.dart:15:16 - unused_element
+warning - The declaration '_previewForSource' isn't referenced - lib\features\studio\audio_overview_provider.dart:48:10 - unused_element
+warning - The declaration '_generateAudioOverview' isn't referenced - lib\features\studio\studio_screen.dart:128:8 - unused_element
+warning - Unused import: '../../core/theme/theme_provider.dart' - lib\features\studio\visual_studio_screen.dart:7:8 - unused_import
+   info - Use 'const' with the constructor to improve performance - lib\features\studio\visual_studio_screen.dart:126:46 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\studio\visual_studio_screen.dart:126:60 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\studio\visual_studio_screen.dart:127:53 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\studio\visual_studio_screen.dart:136:21 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\studio\visual_studio_screen.dart:136:39 - prefer_const_constructors
+warning - The value of the local variable 'scheme' isn't used - lib\main.dart:133:15 - unused_local_variable
+warning - Unused import: 'package:notebook_llm/main.dart' - test\widget_test.dart:11:8 - unused_import
+

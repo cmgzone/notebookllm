@@ -1,0 +1,123 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter run -d web-server --web-port 5173
+
+## exception
+
+PathAccessException: PathAccessException: Deletion failed, path = 'C:\Users\Admin\AppData\Local\Temp\flutter_tools.c2a2a7cd\flutter_tool.8e185a90' (OS Error: The process cannot access the file because it is being used by another process.
+, errno = 32)
+
+```
+#0      _Directory._deleteSync (dart:io/directory_impl.dart:225:7)
+#1      FileSystemEntity.deleteSync (dart:io/file_system_entity.dart:425:7)
+#2      ForwardingFileSystemEntity.deleteSync (package:file/src/forwarding/forwarding_file_system_entity.dart:70:16)
+#3      ErrorHandlingDirectory.deleteSync.<anonymous closure> (package:flutter_tools/src/base/error_handling_io.dart:451:22)
+#4      _runSync (package:flutter_tools/src/base/error_handling_io.dart:552:14)
+#5      ErrorHandlingDirectory.deleteSync (package:flutter_tools/src/base/error_handling_io.dart:450:12)
+#6      ResidentRunner.preExit (package:flutter_tools/src/resident_runner.dart:1434:25)
+#7      ResidentRunner.exit (package:flutter_tools/src/resident_runner.dart:1277:11)
+<asynchronous suspension>
+#8      TerminalHandler._commonTerminalInputHandler (package:flutter_tools/src/resident_runner.dart:1753:9)
+<asynchronous suspension>
+#9      TerminalHandler.processTerminalInput (package:flutter_tools/src/resident_runner.dart:1829:7)
+<asynchronous suspension>
+```
+
+## flutter doctor
+
+```
+[32m[✓][39m Flutter (Channel stable, 3.38.1,
+    on Microsoft Windows [Version
+    10.0.19045.6466], locale en-GB)
+    [921ms]
+    [32m•[39m Flutter version 3.38.1 on
+      channel stable at
+      C:\src\flutter
+    [32m•[39m Upstream repository
+      https://github.com/flutter/flu
+      tter.git
+    [32m•[39m Framework revision b45fa18946
+      (5 days ago), 2025-11-12
+      22:09:06 -0600
+    [32m•[39m Engine revision b5990e5ccc
+    [32m•[39m Dart version 3.10.0
+    [32m•[39m DevTools version 2.51.1
+    [32m•[39m Feature flags: enable-web,
+      enable-linux-desktop,
+      enable-macos-desktop,
+      enable-windows-desktop,
+      enable-android, enable-ios,
+      cli-animations,
+      enable-native-assets,
+      omit-legacy-version-file,
+      enable-lldb-debugging
+
+[32m[✓][39m Windows Version (10 Pro 64-bit,
+    22H2, 2009) [5.8s]
+
+[32m[✓][39m Android toolchain - develop for
+    Android devices (Android SDK
+    version 36.0.0) [12.7s]
+    [32m•[39m Android SDK at
+      C:\Users\Admin\AppData\Local\A
+      ndroid\sdk
+    [32m•[39m Emulator version 35.6.11.0
+      (build_id 13610412) (CL:N/A)
+    [32m•[39m Platform android-36,
+      build-tools 36.0.0
+    [32m•[39m Java binary at: C:\Program
+      Files\Android\Android
+      Studio\jbr\bin\java
+      This is the JDK bundled with
+      the latest Android Studio
+      installation on this machine.
+      To manually set the JDK path,
+      use: `flutter config
+      --jdk-dir="path/to/jdk"`.
+    [32m•[39m Java version OpenJDK Runtime
+      Environment (build
+      21.0.6+-13391695-b895.109)
+    [32m•[39m All Android licenses accepted.
+
+[32m[✓][39m Chrome - develop for the web
+    [350ms]
+    [32m•[39m Chrome at C:\Program
+      Files\Google\Chrome\Applicatio
+      n\chrome.exe
+
+[32m[✓][39m Visual Studio - develop Windows
+    apps (Visual Studio Build Tools
+    2019 16.11.49) [348ms]
+    [32m•[39m Visual Studio at C:\Program
+      Files (x86)\Microsoft Visual
+      Studio\2019\BuildTools
+    [32m•[39m Visual Studio Build Tools 2019
+      version 16.11.36227.6
+    [32m•[39m Windows 10 SDK version
+      10.0.19041.0
+
+[32m[✓][39m Connected device (4 available)
+    [906ms]
+    [32m•[39m Windows (desktop) • windows
+      • windows-x64    • Microsoft
+      Windows [Version
+      10.0.19045.6466]
+    [32m•[39m Web Server (web)  • web-server
+      • web-javascript • Flutter
+      Tools
+    [32m•[39m Chrome (web)      • chrome
+      • web-javascript • Google
+      Chrome 142.0.7444.163
+    [32m•[39m Edge (web)        • edge
+      • web-javascript • Microsoft
+      Edge 142.0.3595.80
+
+[32m[✓][39m Network resources [2.1s]
+    [32m•[39m All expected network resources
+      are available.
+
+[32m•[39m No issues found!
+```

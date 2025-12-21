@@ -1,0 +1,437 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../theme/motion.dart';
+import 'auth/custom_auth_guard.dart';
+
+import '../features/onboarding/onboarding_screen.dart';
+import '../features/onboarding/onboarding_completion_screen.dart';
+import '../features/tour/feature_tour_screen.dart';
+import '../features/home/home_screen.dart';
+import '../features/sources/enhanced_sources_screen.dart';
+import '../features/chat/enhanced_chat_screen.dart';
+import '../features/studio/studio_screen.dart';
+import '../features/studio/artifact_viewer_screen.dart';
+import '../features/studio/artifact.dart';
+import '../features/search/web_search_screen.dart';
+import '../features/chat/enhanced_voice_mode_screen.dart';
+import '../features/chat/elevenlabs_agent_screen.dart';
+import '../features/studio/visual_studio_screen.dart';
+import '../features/research/deep_research_screen.dart';
+import '../features/settings/ai_model_settings_screen.dart';
+import '../features/settings/privacy_policy_screen.dart';
+import '../features/settings/migrate_agent_id_screen.dart';
+import '../features/notebook/notebook_detail_screen.dart';
+import '../features/notebook/notebook_chat_screen.dart';
+import '../features/chat/context_profile_screen.dart';
+import '../features/meeting/meeting_mode_screen.dart';
+import '../ui/app_scaffold.dart';
+import '../features/auth/custom_login_screen.dart';
+import '../features/subscription/screens/subscription_screen.dart';
+import '../features/auth/security_settings_screen.dart';
+import '../features/auth/password_reset_screen.dart';
+import '../features/auth/email_verification_screen.dart';
+import '../features/ebook/ui/ebook_creator_wizard.dart';
+import '../features/ebook/ui/ebook_library_screen.dart';
+import '../features/settings/background_settings_screen.dart';
+// New learning tools imports
+import '../features/flashcards/flashcards_list_screen.dart';
+import '../features/flashcards/flashcard_deck_screen.dart';
+import '../features/quiz/quizzes_list_screen.dart';
+import '../features/quiz/quiz_screen.dart';
+import '../features/mindmap/mind_map_screen.dart';
+import '../features/infographics/infographics_list_screen.dart';
+import '../features/meal_planner/meal_planner_screen.dart';
+import '../features/story_generator/story_generator_screen.dart';
+import '../features/ads/ads_generator_screen.dart';
+import '../features/wellness/wellness_screen.dart';
+import '../features/tutor/tutor_sessions_screen.dart';
+import '../features/tutor/ai_tutor_screen.dart';
+import '../features/gamification/gamification_hub_screen.dart';
+import '../features/gamification/achievements_screen.dart';
+import '../features/gamification/daily_challenges_screen.dart';
+import '../features/language_learning/language_learning_hub.dart';
+import '../features/language_learning/language_session_screen.dart';
+import '../features/admin/ai_models_manager_screen.dart';
+
+String getInitialLocation(bool hasSeenOnboarding) {
+  return hasSeenOnboarding ? '/home' : '/onboarding';
+}
+
+GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
+  final authNotifier = CustomAuthChangeNotifier(container);
+
+  return GoRouter(
+    initialLocation: getInitialLocation(hasSeenOnboarding),
+    refreshListenable: authNotifier,
+    redirect: createCustomAuthRedirect(container),
+    routes: [
+      // Public routes
+      GoRoute(
+        path: '/onboarding',
+        name: 'onboarding',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const OnboardingScreen()),
+      ),
+      GoRoute(
+        path: '/onboarding-completion',
+        name: 'onboarding-completion',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const OnboardingCompletionScreen()),
+      ),
+      GoRoute(
+        path: '/feature-tour',
+        name: 'feature-tour',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const FeatureTourScreen()),
+      ),
+      GoRoute(
+        path: '/login',
+        name: 'login',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const CustomLoginScreen()),
+      ),
+      GoRoute(
+        path: '/password-reset/:token',
+        name: 'password-reset',
+        pageBuilder: (context, state) {
+          final token = state.pathParameters['token'] ?? '';
+          return buildTransitionPage(
+            child: PasswordResetScreen(token: token),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/verify-email/:token',
+        name: 'verify-email',
+        pageBuilder: (context, state) {
+          final token = state.pathParameters['token'] ?? '';
+          return buildTransitionPage(
+            child: EmailVerificationScreen(token: token),
+          );
+        },
+      ),
+
+      // Protected routes with shell
+      ShellRoute(
+        builder: (context, state, child) => AppScaffold(child: child),
+        routes: [
+          GoRoute(
+            path: '/home',
+            name: 'home',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const HomeScreen()),
+          ),
+          GoRoute(
+            path: '/sources',
+            name: 'sources',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const EnhancedSourcesScreen()),
+          ),
+          GoRoute(
+            path: '/chat',
+            name: 'chat',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const EnhancedChatScreen()),
+          ),
+          GoRoute(
+            path: '/studio',
+            name: 'studio',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const StudioScreen()),
+          ),
+          GoRoute(
+            path: '/search',
+            name: 'search',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const WebSearchScreen()),
+          ),
+          GoRoute(
+            path: '/research',
+            name: 'research',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const DeepResearchScreen()),
+          ),
+          GoRoute(
+            path: '/settings',
+            name: 'settings',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const AIModelSettingsScreen()),
+          ),
+          // API key management has been moved to the web admin panel
+          // Users can no longer manage API keys from the mobile app
+          GoRoute(
+            path: '/migrate-agent-id',
+            name: 'migrate-agent-id',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const MigrateAgentIdScreen()),
+          ),
+          GoRoute(
+            path: '/subscription',
+            name: 'subscription',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const SubscriptionScreen()),
+          ),
+          GoRoute(
+            path: '/notebook/:id',
+            name: 'notebook-detail',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return buildTransitionPage(
+                child: NotebookDetailScreen(notebookId: id),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/notebook/:id/chat',
+            name: 'notebook-chat',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return buildTransitionPage(
+                child: NotebookChatScreen(notebookId: id),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/notebook/:id/studio',
+            name: 'notebook-studio',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return buildTransitionPage(
+                child: StudioScreen(notebookId: id),
+              );
+            },
+          ),
+          // Flashcard routes
+          GoRoute(
+            path: '/notebook/:id/flashcards',
+            name: 'notebook-flashcards',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return buildTransitionPage(
+                child: FlashcardsListScreen(notebookId: id),
+              );
+            },
+          ),
+          // Quiz routes
+          GoRoute(
+            path: '/notebook/:id/quizzes',
+            name: 'notebook-quizzes',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return buildTransitionPage(
+                child: QuizzesListScreen(notebookId: id),
+              );
+            },
+          ),
+          // Infographics route
+          GoRoute(
+            path: '/notebook/:id/infographics',
+            name: 'notebook-infographics',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return buildTransitionPage(
+                child: InfographicsListScreen(notebookId: id),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/context-profile',
+            name: 'context-profile',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const ContextProfileScreen()),
+          ),
+          GoRoute(
+            path: '/security',
+            name: 'security',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const SecuritySettingsScreen()),
+          ),
+          GoRoute(
+            path: '/background-settings',
+            name: 'background-settings',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const BackgroundSettingsScreen()),
+          ),
+          GoRoute(
+            path: '/meal-planner',
+            name: 'meal-planner',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const MealPlannerScreen()),
+          ),
+          GoRoute(
+            path: '/story-generator',
+            name: 'story-generator',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const StoryGeneratorScreen()),
+          ),
+          GoRoute(
+            path: '/ads-generator',
+            name: 'ads-generator',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const AdsGeneratorScreen()),
+          ),
+          GoRoute(
+            path: '/wellness',
+            name: 'wellness',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const WellnessScreen()),
+          ),
+          GoRoute(
+            path: '/privacy-policy',
+            name: 'privacy-policy',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const PrivacyPolicyScreen()),
+          ),
+          // Gamification routes
+          GoRoute(
+            path: '/progress',
+            name: 'progress',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GamificationHubScreen()),
+          ),
+          GoRoute(
+            path: '/achievements',
+            name: 'achievements',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const AchievementsScreen()),
+          ),
+          GoRoute(
+            path: '/daily-challenges',
+            name: 'daily-challenges',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const DailyChallengesScreen()),
+          ),
+          // Tutor routes
+          GoRoute(
+            path: '/notebook/:id/tutor-sessions',
+            name: 'tutor-sessions',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return buildTransitionPage(
+                child: TutorSessionsScreen(notebookId: id),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/notebook/:id/tutor',
+            name: 'tutor',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              final extra = state.extra as Map<String, dynamic>?;
+              final sessionId = extra?['sessionId'] as String?;
+              return buildTransitionPage(
+                child: AITutorScreen(notebookId: id, sessionId: sessionId),
+              );
+            },
+          ),
+          // Language Learning Routes
+          GoRoute(
+            path: '/language-learning',
+            name: 'language-learning',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const LanguageLearningHub()),
+          ),
+          GoRoute(
+            path: '/language-learning/:id',
+            name: 'language-learning-session',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return buildTransitionPage(
+                child: LanguageSessionScreen(sessionId: id),
+              );
+            },
+          ),
+        ],
+      ),
+
+      // Full-screen routes (no shell)
+      GoRoute(
+        path: '/elevenlabs-agent',
+        name: 'elevenlabs-agent',
+        builder: (context, state) => const ElevenLabsAgentScreen(),
+      ),
+      GoRoute(
+        path: '/voice-mode',
+        name: 'voice-mode',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const EnhancedVoiceModeScreen()),
+      ),
+      GoRoute(
+        path: '/visual-studio',
+        name: 'visual-studio',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const VisualStudioScreen()),
+      ),
+      GoRoute(
+        path: '/meeting-mode',
+        name: 'meeting-mode',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const MeetingModeScreen()),
+      ),
+      GoRoute(
+        path: '/artifact',
+        name: 'artifact',
+        pageBuilder: (context, state) {
+          final extra = state.extra;
+          if (extra is Artifact) {
+            return buildTransitionPage(
+              child: ArtifactViewerScreen(artifact: extra),
+            );
+          }
+          return buildTransitionPage(child: const StudioScreen());
+        },
+      ),
+      GoRoute(
+        path: '/ebook-creator',
+        name: 'ebook-creator',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const EbookCreatorWizard()),
+      ),
+      GoRoute(
+        path: '/ebooks',
+        name: 'ebooks',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const EbookLibraryScreen()),
+      ),
+      // Flashcard study route
+      GoRoute(
+        path: '/flashcards/:id/study',
+        name: 'flashcard-study',
+        pageBuilder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          return buildTransitionPage(
+            child: FlashcardDeckScreen(deckId: id),
+          );
+        },
+      ),
+      // Quiz play route
+      GoRoute(
+        path: '/quiz/:id/play',
+        name: 'quiz-play',
+        pageBuilder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          return buildTransitionPage(
+            child: QuizScreen(quizId: id),
+          );
+        },
+      ),
+      // Mind map route
+      GoRoute(
+        path: '/mindmap/:id',
+        name: 'mindmap',
+        pageBuilder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          return buildTransitionPage(
+            child: MindMapScreen(mindMapId: id),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/admin/ai-models',
+        name: 'admin-ai-models',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const AIModelsManagerScreen()),
+      ),
+    ],
+  );
+}

@@ -1,0 +1,243 @@
+{
+  "meta": {
+    "project": "notebook_llm",
+    "date": "2025-11-14",
+    "prepared_by": "Software Development Manager"
+  },
+  "product_overview": "notebook_llm is a Flutter-based knowledge management and AI-powered query assistant app. It enables users to ingest various knowledge sources, manage notebooks, and interact through a chat interface powered by LLM and vector search. With integrated audio and media capabilities, the app supports rich media notes and voice interactions.",
+  "core_goals": [
+    "Provide users with a seamless way to ingest, organize, and manage knowledge sources into notebooks.",
+    "Enable natural language interaction with ingested data using AI-driven chat and query answering features.",
+    "Support multimedia content such as audio playback and voice recording within notes and notebooks.",
+    "Offer robust authentication and onboarding flows to personalize and secure user data.",
+    "Leverage vector embeddings and retrieval augmented generation (RAG) techniques for efficient semantic search and answer generation."
+  ],
+  "key_features": [
+    "User authentication and secure login backed by Supabase services.",
+    "Notebook creation, editing, and management with intuitive UI components.",
+    "Source ingestion from URLs or files with automatic chunking and embedding.",
+    "AI-powered chat interface with streaming token support and citation drawer for context.",
+    "Integrated voice provider supporting speech-to-text and text-to-speech capabilities.",
+    "Rich audio playback and media management with background service support.",
+    "Search functionality including web search integration via Serper API.",
+    "Onboarding screens to guide new users through app features and setup.",
+    "Supabase edge functions supporting ingestion, query answering, STT, TTS, and voice management.",
+    "Database migrations to enable vector search and media asset handling."
+  ],
+  "user_flow_summary": [
+    "User opens the app and authenticates via login screen.",
+    "User is onboarded through introductory screens explaining core features.",
+    "User creates or selects a notebook from the home screen.",
+    "User ingests knowledge sources through URL input or file uploads.",
+    "App processes ingestion by chunking, embedding, and storing vectors with RAG pipeline.",
+    "User interacts with the ingested knowledge by chatting in a dedicated chat screen with AI-driven responses streamed in real-time.",
+    "User can listen to audio artifacts or use voice input/output features within notes or chat.",
+    "User can search knowledge sources and the web using integrated search screens.",
+    "User manages notebooks and sources through dedicated UIs including detail screens and editable cards."
+  ],
+  "validation_criteria": [
+    "User authentication succeeds with valid credentials and rejects invalid logins.",
+    "Notebooks can be created, displayed, and persisted accurately across sessions.",
+    "Sources are ingested properly with successful embedding and chunking, and can be browsed and viewed in detail.",
+    "Chat interface streams AI responses smoothly and displays proper citations when applicable.",
+    "Audio playback and recording features operate without crashes and manage media assets correctly.",
+    "Search features return relevant results from both local knowledge and web queries.",
+    "Supabase edge functions execute correctly and support expected backend operations.",
+    "Onboarding screens appear as first-time user experience and can be skipped or repeated as needed."
+  ],
+  "code_summary": {
+    "tech_stack": [
+      "Dart",
+      "Flutter",
+      "Supabase (Postgres, Edge Functions)",
+      "TypeScript",
+      "Deno",
+      "Android/Gradle",
+      "PowerShell"
+    ],
+    "features": [
+      {
+        "name": "App Entry & Scaffold",
+        "description": "Flutter app entry point and global scaffold/theme setup.",
+        "files": [
+          "lib/main.dart",
+          "lib/ui/app_scaffold.dart",
+          "lib/theme/app_theme.dart",
+          "lib/theme/motion.dart",
+          "lib/router.dart"
+        ]
+      },
+      {
+        "name": "Authentication",
+        "description": "User login screen and Supabase-backed auth utilities.",
+        "files": [
+          "lib/features/auth/login_screen.dart",
+          "lib/core/backend/supabase_service.dart"
+        ]
+      },
+      {
+        "name": "Chat",
+        "description": "Chat UI, providers, messages, streaming tokens.",
+        "files": [
+          "lib/features/chat/chat_screen.dart",
+          "lib/features/chat/enhanced_chat_screen.dart",
+          "lib/features/chat/citation_drawer.dart",
+          "lib/features/chat/chat_provider.dart",
+          "lib/features/chat/stream_provider.dart",
+          "lib/features/chat/stream_token.dart",
+          "lib/features/chat/stream_token.freezed.dart",
+          "lib/features/chat/message.dart",
+          "lib/features/chat/message.freezed.dart",
+          "lib/features/chat/message.g.dart"
+        ]
+      },
+      {
+        "name": "Notebook Management",
+        "description": "Notebook model, provider, and UI components.",
+        "files": [
+          "lib/features/notebook/notebook.dart",
+          "lib/features/notebook/notebook.freezed.dart",
+          "lib/features/notebook/notebook.g.dart",
+          "lib/features/notebook/notebook_provider.dart",
+          "lib/features/home/home_screen.dart",
+          "lib/features/home/create_notebook_dialog.dart",
+          "lib/ui/widgets/notebook_card.dart"
+        ]
+      },
+      {
+        "name": "Sources Ingestion",
+        "description": "Manage knowledge sources and ingestion UI.",
+        "files": [
+          "lib/features/sources/sources_screen.dart",
+          "lib/features/sources/enhanced_sources_screen.dart",
+          "lib/features/sources/add_source_sheet.dart",
+          "lib/features/sources/add_url_sheet.dart",
+          "lib/features/sources/source_detail_screen.dart",
+          "lib/features/sources/source.dart",
+          "lib/features/sources/source.freezed.dart",
+          "lib/features/sources/source.g.dart",
+          "lib/features/sources/source_provider.dart"
+        ]
+      },
+      {
+        "name": "RAG Pipeline",
+        "description": "Chunking, embeddings, ingestion, and vector store utilities.",
+        "files": [
+          "lib/core/rag/chunk.dart",
+          "lib/core/rag/chunk.freezed.dart",
+          "lib/core/rag/chunk.g.dart",
+          "lib/core/rag/embedding_service.dart",
+          "lib/core/rag/gemini_embedding_service.dart",
+          "lib/core/rag/ingestion_service.dart",
+          "lib/core/rag/real_ingestion_service.dart",
+          "lib/core/rag/vector_store.dart",
+          "lib/core/rag/rag_provider.dart",
+          "lib/core/rag/smart_ingestion_provider.dart"
+        ]
+      },
+      {
+        "name": "AI Services",
+        "description": "Gemini AI config and service layer for LLM interactions.",
+        "files": [
+          "lib/core/ai/ai_provider.dart",
+          "lib/core/ai/gemini_config.dart",
+          "lib/core/ai/gemini_service.dart"
+        ]
+      },
+      {
+        "name": "Search",
+        "description": "Serper search config/service and web search screen.",
+        "files": [
+          "lib/core/search/serper_config.dart",
+          "lib/core/search/serper_service.dart",
+          "lib/core/search/search_provider.dart",
+          "lib/features/search/web_search_screen.dart"
+        ]
+      },
+      {
+        "name": "Audio & Media",
+        "description": "Audio playback, caching, background service; media utilities and UI.",
+        "files": [
+          "lib/core/audio/audio_cache.dart",
+          "lib/core/audio/audio_handler.dart",
+          "lib/core/audio/audio_playback_provider.dart",
+          "lib/core/audio/audio_service.dart",
+          "lib/core/audio/background_audio_service.dart",
+          "lib/core/media/media_service.dart",
+          "lib/features/audio/voice_provider.dart",
+          "lib/features/studio/audio_player_sheet.dart",
+          "lib/features/studio/artifact.dart",
+          "lib/features/studio/artifact.freezed.dart",
+          "lib/features/studio/artifact.g.dart",
+          "lib/features/studio/artifact_provider.dart",
+          "lib/features/studio/audio_overview.dart",
+          "lib/features/studio/audio_overview.freezed.dart",
+          "lib/features/studio/audio_overview.g.dart",
+          "lib/features/studio/audio_overview_provider.dart",
+          "lib/features/studio/studio_screen.dart",
+          "lib/features/studio/artifact_viewer_screen.dart"
+        ]
+      },
+      {
+        "name": "Onboarding",
+        "description": "Onboarding flow providers and screens.",
+        "files": [
+          "lib/features/onboarding/onboarding_provider.dart",
+          "lib/features/onboarding/onboarding_screen.dart"
+        ]
+      },
+      {
+        "name": "Supabase Functions",
+        "description": "Edge functions for query answering, ingestion, STT, TTS, voices, web search.",
+        "files": [
+          "supabase/functions/answer_query/index.ts",
+          "supabase/functions/ingest_source/index.ts",
+          "supabase/functions/stt/index.ts",
+          "supabase/functions/tts/index.ts",
+          "supabase/functions/voices/index.ts",
+          "supabase/functions/web_search/index.ts",
+          "supabase/functions/deno_shims.d.ts"
+        ]
+      },
+      {
+        "name": "Database Migrations",
+        "description": "Supabase SQL migrations for schema, vector search RPC, and media assets.",
+        "files": [
+          "supabase/migrations/0001_init.sql",
+          "supabase/migrations/0002_vector_search_rpc.sql",
+          "supabase/migrations/0003_media_assets.sql",
+          "supabase/migrations/20251118000001_rls_policies.sql",
+          "supabase/config.toml"
+        ]
+      },
+      {
+        "name": "Scripts",
+        "description": "Operational PowerShell scripts for testing AI and deploying Supabase.",
+        "files": [
+          "scripts/test_ai.ps1",
+          "scripts/deploy_supabase.ps1"
+        ]
+      },
+      {
+        "name": "Web Assets",
+        "description": "PWA web assets and manifest for Flutter web build.",
+        "files": [
+          "web/index.html",
+          "web/manifest.json",
+          "web/icons/Icon-192.png",
+          "web/icons/Icon-512.png",
+          "web/icons/Icon-maskable-192.png",
+          "web/icons/Icon-maskable-512.png",
+          "web/favicon.png"
+        ]
+      },
+      {
+        "name": "Testing",
+        "description": "Flutter widget tests.",
+        "files": [
+          "test/widget_test.dart"
+        ]
+      }
+    ]
+  }
+}
