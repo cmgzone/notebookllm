@@ -24,6 +24,7 @@ const getUserFromToken = (req: Request): string | null => {
 router.post('/signup', async (req: Request, res: Response) => {
     try {
         const { email, password, displayName } = req.body;
+        const normalizedEmail = email ? email.toLowerCase() : email;
 
         if (!email || !password) {
             return res.status(400).json({ error: 'Email and password are required' });
@@ -31,7 +32,7 @@ router.post('/signup', async (req: Request, res: Response) => {
 
         const existingUser = await pool.query(
             'SELECT id FROM users WHERE email = $1',
-            [email]
+            [normalizedEmail]
         );
 
         if (existingUser.rows.length > 0) {
@@ -45,11 +46,11 @@ router.post('/signup', async (req: Request, res: Response) => {
         await pool.query(
             `INSERT INTO users (id, email, display_name, password_hash, password_salt, created_at, email_verified, two_factor_enabled) 
        VALUES ($1, $2, $3, $4, $5, NOW(), false, false)`,
-            [userId, email, displayName || email.split('@')[0], passwordHash, salt]
+            [userId, normalizedEmail, displayName || normalizedEmail.split('@')[0], passwordHash, salt]
         );
 
         const token = jwt.sign(
-            { userId, email },
+            { userId, normalizedEmail },
             process.env.JWT_SECRET!,
             { expiresIn: '30d' }
         );
@@ -59,7 +60,7 @@ router.post('/signup', async (req: Request, res: Response) => {
             token,
             user: {
                 id: userId,
-                email,
+                email: normalizedEmail,
                 displayName: displayName || email.split('@')[0],
                 emailVerified: false,
                 twoFactorEnabled: false,
@@ -81,17 +82,24 @@ router.post('/login', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
+        const normalizedEmail = email.toLowerCase();
+        console.log(`[AUTH] Attempting login for: ${normalizedEmail}`);
+
         const result = await pool.query(
             'SELECT id, email, display_name, password_hash, email_verified, two_factor_enabled, avatar_url FROM users WHERE email = $1',
-            [email]
+            [normalizedEmail]
         );
 
         if (result.rows.length === 0) {
+            console.log(`[AUTH] User not found: ${normalizedEmail}`);
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
         const user = result.rows[0];
         const isValid = await bcrypt.compare(password, user.password_hash);
+
+        console.log(`[AUTH] Password valid for ${normalizedEmail}: ${isValid}`);
+
         if (!isValid) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
