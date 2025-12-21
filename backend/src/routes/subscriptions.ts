@@ -112,6 +112,7 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
             // Lazy provisioning: Create free subscription if none exists
             console.log(`[SUB] No subscription found for user ${userId}, attempting auto-provisioning`);
 
+            let freePlan;
             const planResult = await pool.query(`
                 SELECT id, credits_per_month FROM subscription_plans 
                 WHERE is_free_plan = TRUE 
@@ -119,9 +120,20 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
             `);
 
             if (planResult.rows.length > 0) {
-                const freePlan = planResult.rows[0];
+                freePlan = planResult.rows[0];
                 console.log(`[SUB] Found free plan ${freePlan.id}, creating subscription`);
+            } else {
+                console.log('[SUB] No Free plan found, creating default Free plan...');
+                const insertResult = await pool.query(`
+                    INSERT INTO subscription_plans (name, credits_per_month, price, is_free_plan, features, is_active) 
+                    VALUES ('Free', 50, 0, true, '["Basic features", "50 credits/month"]', true)
+                    RETURNING id, credits_per_month
+                `);
+                freePlan = insertResult.rows[0];
+                console.log(`[SUB] Created new Free plan ${freePlan.id}`);
+            }
 
+            if (freePlan) {
                 await pool.query(`
                   INSERT INTO user_subscriptions (
                     user_id, plan_id, current_credits, 
@@ -150,8 +162,7 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
                 return res.json({ subscription: newResult.rows[0] });
             }
 
-            console.log(`[SUB] No free plan found, returning null`);
-            return res.json({ subscription: null });
+            return res.status(500).json({ error: 'Failed to provision subscription' });
         }
 
         res.json({ subscription: result.rows[0] });
