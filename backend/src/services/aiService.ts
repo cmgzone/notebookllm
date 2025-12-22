@@ -19,7 +19,7 @@ export interface ChatMessage {
  */
 export async function generateWithGemini(
     messages: ChatMessage[],
-    model: string = 'gemini-1.5-flash'
+    model: string = 'gemini-2.0-flash'
 ): Promise<string> {
     if (!genAI) {
         throw new Error('Gemini API key not configured');
@@ -29,13 +29,19 @@ export async function generateWithGemini(
         const geminiModel = genAI.getGenerativeModel({ model });
 
         // Convert messages to Gemini format
-        const prompt = messages
-            .map(msg => `${msg.role}: ${msg.content}`)
-            .join('\n\n');
+        const history = messages.slice(0, -1).map(msg => ({
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: msg.content }]
+        }));
 
-        const result = await geminiModel.generateContent(prompt);
-        const response = result.response;
-        return response.text();
+        const lastMessage = messages[messages.length - 1];
+        
+        const chat = geminiModel.startChat({
+            history: history.length > 0 ? history : undefined,
+        });
+
+        const result = await chat.sendMessage(lastMessage.content);
+        return result.response.text();
     } catch (error: any) {
         console.error('Gemini error:', error);
         throw new Error(`Gemini API error: ${error.message}`);
@@ -63,7 +69,8 @@ export async function generateWithOpenRouter(
                 messages: messages.map(msg => ({
                     role: msg.role,
                     content: msg.content
-                }))
+                })),
+                max_tokens: 4096,
             },
             {
                 headers: {
@@ -83,49 +90,49 @@ export async function generateWithOpenRouter(
 }
 
 /**
- * Generate embeddings using OpenAI-compatible endpoint
+ * Stream AI response using Gemini
  */
-export async function generateEmbeddings(text: string): Promise<number[]> {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-
-    if (!apiKey) {
-        throw new Error('OpenRouter API key not configured');
+export async function* streamWithGemini(
+    messages: ChatMessage[],
+    model: string = 'gemini-2.0-flash'
+): AsyncGenerator<string> {
+    if (!genAI) {
+        throw new Error('Gemini API key not configured');
     }
 
     try {
-        const response = await axios.post(
-            'https://openrouter.ai/api/v1/embeddings',
-            {
-                model: 'text-embedding-ada-002',
-                input: text
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
-                }
+        const geminiModel = genAI.getGenerativeModel({ model });
+        const prompt = messages.map(msg => `${msg.role}: ${msg.content}`).join('\n\n');
+        
+        const result = await geminiModel.generateContentStream(prompt);
+        
+        for await (const chunk of result.stream) {
+            const text = chunk.text();
+            if (text) {
+                yield text;
             }
-        );
-
-        return response.data.data[0].embedding;
+        }
     } catch (error: any) {
-        console.error('Embeddings error:', error.response?.data || error);
-        throw new Error(`Embeddings API error: ${error.response?.data?.error?.message || error.message}`);
+        console.error('Gemini streaming error:', error);
+        throw new Error(`Gemini streaming error: ${error.message}`);
     }
 }
 
 /**
  * Generate content summary using AI
  */
-export async function generateSummary(content: string, provider: 'gemini' | 'openrouter' = 'gemini'): Promise<string> {
+export async function generateSummary(
+    content: string, 
+    provider: 'gemini' | 'openrouter' = 'gemini'
+): Promise<string> {
     const messages: ChatMessage[] = [
         {
             role: 'system',
-            content: 'You are a helpful assistant that creates concise summaries of content.'
+            content: 'You are a helpful assistant that creates concise, informative summaries of content. Focus on key points and main ideas.'
         },
         {
             role: 'user',
-            content: `Please create a concise summary of the following content:\n\n${content}`
+            content: `Please create a comprehensive summary of the following content:\n\n${content.substring(0, 15000)}`
         }
     ];
 
@@ -139,18 +146,94 @@ export async function generateSummary(content: string, provider: 'gemini' | 'ope
 /**
  * Generate question suggestions based on content
  */
-export async function generateQuestions(content: string, count: number = 5): Promise<string[]> {
+export async function generateQuestions(
+    content: string, 
+    count: number = 5
+): Promise<string[]> {
     const messages: ChatMessage[] = [
         {
             role: 'system',
-            content: 'You are a helpful assistant that generates relevant questions about content.'
+            content: 'You are a helpful assistant that generates insightful questions about content to help users learn and understand better.'
         },
         {
             role: 'user',
-            content: `Generate ${count} insightful questions that could be asked about the following content. Return only the questions, one per line:\n\n${content}`
+            content: `Generate ${count} thoughtful questions that could be asked about the following content. Return only the questions, one per line, without numbering:\n\n${content.substring(0, 10000)}`
         }
     ];
 
     const response = await generateWithGemini(messages);
-    return response.split('\n').filter(q => q.trim().length > 0).slice(0, count);
+    return response
+        .split('\n')
+        .map(q => q.trim())
+        .filter(q => q.length > 0 && q.endsWith('?'))
+        .slice(0, count);
+}
+
+/**
+ * Generate flashcards from content
+ */
+export async function generateFlashcards(
+    content: string,
+    count: number = 10
+): Promise<Array<{ question: string; answer: string }>> {
+    const messages: ChatMessage[] = [
+        {
+            role: 'system',
+            content: 'You are an expert educator creating flashcards for effective learning.'
+        },
+        {
+            role: 'user',
+            content: `Create ${count} flashcards from this content. Return as JSON array with "question" and "answer" fields:\n\n${content.substring(0, 10000)}`
+        }
+    ];
+
+    const response = await generateWithGemini(messages);
+    
+    try {
+        const jsonMatch = response.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+        }
+    } catch (e) {
+        console.error('Failed to parse flashcards:', e);
+    }
+    
+    return [];
+}
+
+/**
+ * Generate quiz questions from content
+ */
+export async function generateQuiz(
+    content: string,
+    count: number = 5
+): Promise<Array<{
+    question: string;
+    options: string[];
+    correctIndex: number;
+    explanation: string;
+}>> {
+    const messages: ChatMessage[] = [
+        {
+            role: 'system',
+            content: 'You are an expert educator creating multiple-choice quiz questions.'
+        },
+        {
+            role: 'user',
+            content: `Create ${count} multiple-choice questions from this content. Each should have 4 options. Return as JSON array with fields: "question", "options" (array of 4 strings), "correctIndex" (0-3), "explanation":\n\n${content.substring(0, 10000)}`
+        }
+    ];
+
+    const response = await generateWithGemini(messages);
+    
+    try {
+        const jsonMatch = response.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+        }
+    } catch (e) {
+        console.error('Failed to parse quiz:', e);
+    }
+    
+    return [];
 }

@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
+// Import all routes
 import authRoutes from './routes/auth.js';
 import notebooksRoutes from './routes/notebooks.js';
 import sourcesRoutes from './routes/sources.js';
@@ -19,24 +21,46 @@ import ebookRoutes from './routes/ebooks.js';
 import researchRoutes from './routes/research.js';
 import searchRoutes from './routes/search.js';
 import featuresRoutes from './routes/features.js';
+import voiceRoutes from './routes/voice.js';
+
+// Import services
+import bunnyService from './services/bunnyService.js';
 
 // Load environment variables
 dotenv.config();
+
+// Initialize services
+bunnyService.initialize();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+
+// Request logging middleware
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    next();
+});
 
 // Health check
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok', message: 'Backend is running' });
+    res.json({ 
+        status: 'ok', 
+        message: 'Backend is running',
+        timestamp: new Date().toISOString(),
+        version: '2.0.0'
+    });
 });
 
-// Routes
+// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/notebooks', notebooksRoutes);
 app.use('/api/sources', sourcesRoutes);
@@ -55,22 +79,28 @@ app.use('/api/ebooks', ebookRoutes);
 app.use('/api/research', researchRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/features', featuresRoutes);
+app.use('/api/voice', voiceRoutes);
 
 // 404 handler
 app.use((req, res) => {
-    res.status(404).json({ error: 'Route not found' });
+    console.log(`[404] Route not found: ${req.method} ${req.path}`);
+    res.status(404).json({ error: 'Route not found', path: req.path });
 });
 
 // Error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error('Error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ 
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
 });
 
 // Start server
 app.listen(PORT, () => {
     console.log(`🚀 Server is running on http://localhost:${PORT}`);
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`📅 Started at: ${new Date().toISOString()}`);
 });
 
 export default app;

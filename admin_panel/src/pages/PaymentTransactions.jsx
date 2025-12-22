@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { neon } from '../lib/neon';
+import api from '../lib/api';
 import { Search, Filter, RefreshCw, Loader2, Download } from 'lucide-react';
 
 export default function PaymentTransactions() {
@@ -15,18 +15,8 @@ export default function PaymentTransactions() {
     const fetchTransactions = async () => {
         setLoading(true);
         try {
-            const data = await neon.query(`
-                SELECT 
-                    pt.*,
-                    u.email as user_email,
-                    cp.name as package_name
-                FROM payment_transactions pt
-                LEFT JOIN users u ON pt.user_id = u.id
-                LEFT JOIN credit_packages cp ON pt.package_id = cp.id
-                ORDER BY pt.created_at DESC
-                LIMIT 100
-            `, []);
-            setTransactions(data);
+            const data = await api.getTransactions(100);
+            setTransactions(data.transactions || []);
         } catch (error) {
             console.error('Error fetching transactions:', error);
             alert('Failed to fetch transactions');
@@ -37,10 +27,11 @@ export default function PaymentTransactions() {
 
     const getStatusColor = (status) => {
         switch (status) {
-            case 'completed': return 'bg-green-100 text-green-800';
-            case 'pending': return 'bg-yellow-100 text-yellow-800';
-            case 'failed': return 'bg-red-100 text-red-800';
-            case 'refunded': return 'bg-purple-100 text-purple-800';
+            case 'purchase': return 'bg-green-100 text-green-800';
+            case 'subscription': return 'bg-blue-100 text-blue-800';
+            case 'usage': return 'bg-yellow-100 text-yellow-800';
+            case 'refund': return 'bg-purple-100 text-purple-800';
+            case 'bonus': return 'bg-cyan-100 text-cyan-800';
             default: return 'bg-gray-100 text-gray-800';
         }
     };
@@ -53,10 +44,10 @@ export default function PaymentTransactions() {
     const filteredTransactions = transactions.filter(tx => {
         const matchesSearch =
             (tx.user_email?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-            (tx.paypal_transaction_id?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-            (tx.paypal_order_id?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+            (tx.description?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+            (tx.transaction_type?.toLowerCase() || '').includes(searchTerm.toLowerCase());
 
-        const matchesStatus = statusFilter === 'all' || tx.payment_status === statusFilter;
+        const matchesStatus = statusFilter === 'all' || tx.transaction_type === statusFilter;
 
         return matchesSearch && matchesStatus;
     });
@@ -65,9 +56,9 @@ export default function PaymentTransactions() {
         <div className="p-8 space-y-8">
             <div className="flex justify-between items-center mb-8">
                 <div>
-                    <h1 className="text-3xl font-bold mb-2">Payment Transactions</h1>
+                    <h1 className="text-3xl font-bold mb-2">Credit Transactions</h1>
                     <p className="text-muted-foreground bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-cyan-600">
-                        Monitor revenue and credit purchases
+                        Monitor credit purchases and usage
                     </p>
                 </div>
                 <button
@@ -99,11 +90,12 @@ export default function PaymentTransactions() {
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
                         >
-                            <option value="all">All Status</option>
-                            <option value="completed">Completed</option>
-                            <option value="pending">Pending</option>
-                            <option value="failed">Failed</option>
-                            <option value="refunded">Refunded</option>
+                            <option value="all">All Types</option>
+                            <option value="purchase">Purchase</option>
+                            <option value="subscription">Subscription</option>
+                            <option value="usage">Usage</option>
+                            <option value="refund">Refund</option>
+                            <option value="bonus">Bonus</option>
                         </select>
                     </div>
                 </div>
@@ -117,10 +109,10 @@ export default function PaymentTransactions() {
                             <tr>
                                 <th className="px-6 py-4 font-semibold text-slate-700">Date</th>
                                 <th className="px-6 py-4 font-semibold text-slate-700">User</th>
-                                <th className="px-6 py-4 font-semibold text-slate-700">Package</th>
-                                <th className="px-6 py-4 font-semibold text-slate-700">Amount</th>
-                                <th className="px-6 py-4 font-semibold text-slate-700">Status</th>
-                                <th className="px-6 py-4 font-semibold text-slate-700">Transaction ID</th>
+                                <th className="px-6 py-4 font-semibold text-slate-700">Description</th>
+                                <th className="px-6 py-4 font-semibold text-slate-700">Balance After</th>
+                                <th className="px-6 py-4 font-semibold text-slate-700">Type</th>
+                                <th className="px-6 py-4 font-semibold text-slate-700">ID</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -152,28 +144,23 @@ export default function PaymentTransactions() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-slate-600">
-                                            {tx.package_name || 'Custom'}
+                                            {tx.description || tx.transaction_type || 'Credit Transaction'}
                                             <div className="text-xs text-slate-400">
-                                                +{tx.credits_granted} credits
+                                                {tx.amount > 0 ? '+' : ''}{tx.amount} credits
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 font-medium text-slate-900">
-                                            ${Number(tx.amount).toFixed(2)}
+                                            {tx.balance_after != null ? `${tx.balance_after} credits` : '-'}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(tx.payment_status)}`}>
-                                                {tx.payment_status.charAt(0).toUpperCase() + tx.payment_status.slice(1)}
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(tx.transaction_type)}`}>
+                                                {(tx.transaction_type || 'unknown').charAt(0).toUpperCase() + (tx.transaction_type || 'unknown').slice(1)}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="font-mono text-xs text-slate-500">
-                                                {tx.paypal_transaction_id || '-'}
+                                                {tx.id?.substring(0, 8) || '-'}
                                             </div>
-                                            {tx.paypal_order_id && (
-                                                <div className="font-mono text-[10px] text-slate-400 mt-0.5">
-                                                    Ord: {tx.paypal_order_id}
-                                                </div>
-                                            )}
                                         </td>
                                     </tr>
                                 ))

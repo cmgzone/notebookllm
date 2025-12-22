@@ -11,6 +11,7 @@ import SubscriptionPlans from './pages/SubscriptionPlans';
 import PaymentTransactions from './pages/PaymentTransactions';
 import CreditPackages from './pages/CreditPackages';
 import AIModels from './pages/AIModels';
+import StorageManager from './pages/StorageManager';
 
 function ProtectedRoute() {
   const { user, loading } = useAuth();
@@ -39,6 +40,7 @@ function Router() {
               <Route path="/credit-packages" element={<CreditPackages />} />
               <Route path="/transactions" element={<PaymentTransactions />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/storage" element={<StorageManager />} />
               <Route path="/onboarding" element={<OnboardingManager />} />
               <Route path="/privacy" element={<PrivacyPolicyEditor />} />
               <Route path="/ai-models" element={<AIModels />} />

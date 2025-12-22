@@ -1,4 +1,4 @@
-import express, { type Request, type Response } from 'express';
+import express, { type Response } from 'express';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 import {
     generateWithGemini,
@@ -10,6 +10,20 @@ import {
 import pool from '../config/database.js';
 
 const router = express.Router();
+
+// Public endpoint - list available AI models (no admin required)
+router.get('/models', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await pool.query(
+            'SELECT id, name, model_id, provider, description, context_window, is_active, is_premium FROM ai_models WHERE is_active = true ORDER BY provider, name'
+        );
+        res.json({ success: true, models: result.rows });
+    } catch (error) {
+        console.error('Error listing AI models:', error);
+        res.status(500).json({ error: 'Failed to list AI models' });
+    }
+});
+
 router.use(authenticateToken);
 
 // Chat completion endpoint
@@ -81,7 +95,7 @@ router.post('/questions', async (req: AuthRequest, res: Response) => {
         const content = sourcesResult.rows
             .map(s => `${s.title}: ${s.content || ''}`)
             .join('\n\n')
-            .substring(0, 5000); // Limit content length
+            .substring(0, 8000);
 
         const questions = await generateQuestions(content, count);
 
@@ -114,17 +128,30 @@ router.post('/notebook-summary', async (req: AuthRequest, res: Response) => {
         // Get all chunks for the notebook
         const chunksResult = await pool.query(
             `SELECT c.content_text FROM chunks c
-       INNER JOIN sources s ON c.source_id = s.id
-       WHERE s.notebook_id = $1
-       ORDER BY c.chunk_index ASC
-       LIMIT 100`,
+             INNER JOIN sources s ON c.source_id = s.id
+             WHERE s.notebook_id = $1
+             ORDER BY c.chunk_index ASC
+             LIMIT 100`,
             [notebookId]
         );
 
-        const content = chunksResult.rows
-            .map(c => c.content_text)
-            .join(' ')
-            .substring(0, 10000); // Limit content length
+        let content = '';
+        if (chunksResult.rows.length > 0) {
+            content = chunksResult.rows
+                .map(c => c.content_text)
+                .join(' ')
+                .substring(0, 15000);
+        } else {
+            // Fall back to sources content
+            const sourcesResult = await pool.query(
+                `SELECT title, content FROM sources WHERE notebook_id = $1`,
+                [notebookId]
+            );
+            content = sourcesResult.rows
+                .map(s => `${s.title}: ${s.content || ''}`)
+                .join('\n\n')
+                .substring(0, 15000);
+        }
 
         const summary = await generateSummary(content);
 

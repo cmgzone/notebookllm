@@ -85,20 +85,26 @@ class PayPalService {
           onSuccess: (Map params) async {
             developer.log('Payment successful: $params', name: 'PayPalService');
 
-            final paymentId = params["paymentId"] as String? ?? '';
+            final paymentId = params["paymentId"] as String? ??
+                'paypal_${DateTime.now().millisecondsSinceEpoch}';
 
             try {
               // Add credits via the subscription service
-              await _subscriptionService.addCredits(
+              final success = await _subscriptionService.addCredits(
                 userId: userId,
                 amount: package.credits,
                 packageId: package.id,
                 transactionId: paymentId,
+                paymentMethod: 'paypal',
               );
 
               if (ctx.mounted) {
                 Navigator.pop(ctx);
-                onSuccess(paymentId);
+                if (success) {
+                  onSuccess(paymentId);
+                } else {
+                  onError('Failed to add credits after payment');
+                }
               }
             } catch (e) {
               developer.log('Error completing purchase: $e',

@@ -385,7 +385,11 @@ class CustomAuthService {
     String? deviceInfo,
   }) async {
     try {
-      final response = await _api.login(email: email, password: password);
+      final response = await _api.login(
+        email: email,
+        password: password,
+        rememberMe: rememberMe,
+      );
 
       if (response['success'] == true && response['user'] != null) {
         final user = AppUser.fromMap(response['user']);

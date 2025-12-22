@@ -6,9 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 const router = express.Router();
 router.use(authenticateToken);
 
-// ===========================================
-// TUTOR SESSIONS
-// ===========================================
+// ==================== TUTOR SESSIONS ====================
 
 router.get('/tutor/sessions', async (req: AuthRequest, res: Response) => {
     try {
@@ -57,7 +55,7 @@ router.put('/tutor/sessions/:id', async (req: AuthRequest, res: Response) => {
                 exchange_count = COALESCE($6, exchange_count),
                 updated_at = NOW()
              WHERE id = $1 AND user_id = $2 RETURNING *`,
-            [id, req.userId, JSON.stringify(exchanges), summary, totalScore, exchangeCount]
+            [id, req.userId, exchanges ? JSON.stringify(exchanges) : null, summary, totalScore, exchangeCount]
         );
 
         if (result.rows.length === 0) {
@@ -80,9 +78,7 @@ router.delete('/tutor/sessions/:id', async (req: AuthRequest, res: Response) => 
     }
 });
 
-// ===========================================
-// LANGUAGE LEARNING SESSIONS
-// ===========================================
+// ==================== LANGUAGE LEARNING SESSIONS ====================
 
 router.get('/language/sessions', async (req: AuthRequest, res: Response) => {
     try {
@@ -147,9 +143,7 @@ router.delete('/language/sessions/:id', async (req: AuthRequest, res: Response) 
     }
 });
 
-// ===========================================
-// STORIES
-// ===========================================
+// ==================== STORIES ====================
 
 router.get('/stories', async (req: AuthRequest, res: Response) => {
     try {
@@ -195,9 +189,7 @@ router.delete('/stories/:id', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// ===========================================
-// MEAL PLANNER
-// ===========================================
+// ==================== MEAL PLANNER ====================
 
 router.get('/meals/plans', async (req: AuthRequest, res: Response) => {
     try {
@@ -273,9 +265,7 @@ router.delete('/meals/saved/:id', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// ===========================================
-// AUDIO OVERVIEWS
-// ===========================================
+// ==================== AUDIO OVERVIEWS ====================
 
 router.get('/audio/overviews', async (req: AuthRequest, res: Response) => {
     try {

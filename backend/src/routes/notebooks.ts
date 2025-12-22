@@ -4,15 +4,17 @@ import pool from '../config/database.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 
 const router = express.Router();
-
-// All routes are protected
 router.use(authenticateToken);
 
 // Get all notebooks for the authenticated user
 router.get('/', async (req: AuthRequest, res: Response) => {
     try {
         const result = await pool.query(
-            'SELECT * FROM notebooks WHERE user_id = $1 ORDER BY updated_at DESC',
+            `SELECT n.*, 
+                    (SELECT COUNT(*) FROM sources WHERE notebook_id = n.id) as source_count
+             FROM notebooks n 
+             WHERE n.user_id = $1 
+             ORDER BY n.updated_at DESC`,
             [req.userId]
         );
         res.json({ success: true, notebooks: result.rows });
@@ -27,7 +29,10 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
         const result = await pool.query(
-            'SELECT * FROM notebooks WHERE id = $1 AND user_id = $2',
+            `SELECT n.*, 
+                    (SELECT COUNT(*) FROM sources WHERE notebook_id = n.id) as source_count
+             FROM notebooks n 
+             WHERE n.id = $1 AND n.user_id = $2`,
             [id, req.userId]
         );
 
@@ -54,9 +59,18 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         const id = uuidv4();
         const result = await pool.query(
             `INSERT INTO notebooks (id, user_id, title, description, cover_image, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-       RETURNING *`,
+             VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+             RETURNING *`,
             [id, req.userId, title, description || null, coverImage || null]
+        );
+
+        // Update user stats
+        await pool.query(
+            `INSERT INTO user_stats (user_id, notebooks_created) 
+             VALUES ($1, 1)
+             ON CONFLICT (user_id) 
+             DO UPDATE SET notebooks_created = user_stats.notebooks_created + 1, updated_at = NOW()`,
+            [req.userId]
         );
 
         res.status(201).json({ success: true, notebook: result.rows[0] });
@@ -98,8 +112,8 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
 
         const result = await pool.query(
             `UPDATE notebooks SET ${updates.join(', ')} 
-       WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}
-       RETURNING *`,
+             WHERE id = $${paramIndex++} AND user_id = $${paramIndex}
+             RETURNING *`,
             values
         );
 

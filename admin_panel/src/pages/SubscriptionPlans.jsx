@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { neon } from '../lib/neon';
+import api from '../lib/api';
 import { Plus, Edit2, Trash2, Check, X, Loader2, DollarSign, Calendar } from 'lucide-react';
 
 export default function SubscriptionPlans() {
@@ -24,8 +24,8 @@ export default function SubscriptionPlans() {
     const fetchPlans = async () => {
         setLoading(true);
         try {
-            const data = await neon.query('SELECT * FROM subscription_plans ORDER BY price ASC', []);
-            setPlans(data);
+            const data = await api.getPlans();
+            setPlans(data.plans || []);
         } catch (error) {
             console.error('Error fetching plans:', error);
             alert('Failed to fetch subscription plans');
@@ -38,18 +38,23 @@ export default function SubscriptionPlans() {
         e.preventDefault();
         try {
             if (editingPlan) {
-                await neon.execute(
-                    `UPDATE subscription_plans 
-                     SET name = $1, description = $2, credits_per_month = $3, price = $4, is_active = $5, is_free_plan = $6, updated_at = CURRENT_TIMESTAMP
-                     WHERE id = $7`,
-                    [formData.name, formData.description, formData.credits_per_month, formData.price, formData.is_active, formData.is_free_plan, editingPlan.id]
-                );
+                await api.updatePlan(editingPlan.id, {
+                    name: formData.name,
+                    description: formData.description,
+                    creditsPerMonth: formData.credits_per_month,
+                    price: formData.price,
+                    isActive: formData.is_active,
+                    isFreePlan: formData.is_free_plan
+                });
             } else {
-                await neon.execute(
-                    `INSERT INTO subscription_plans (name, description, credits_per_month, price, is_active, is_free_plan)
-                     VALUES ($1, $2, $3, $4, $5, $6)`,
-                    [formData.name, formData.description, formData.credits_per_month, formData.price, formData.is_active, formData.is_free_plan]
-                );
+                await api.createPlan({
+                    name: formData.name,
+                    description: formData.description,
+                    creditsPerMonth: formData.credits_per_month,
+                    price: formData.price,
+                    isActive: formData.is_active,
+                    isFreePlan: formData.is_free_plan
+                });
             }
 
             resetForm();
@@ -65,7 +70,7 @@ export default function SubscriptionPlans() {
         if (!confirm('Are you sure you want to delete this plan?')) return;
 
         try {
-            await neon.execute('DELETE FROM subscription_plans WHERE id = $1', [id]);
+            await api.deletePlan(id);
             fetchPlans();
             alert('Plan deleted successfully!');
         } catch (error) {
@@ -102,10 +107,7 @@ export default function SubscriptionPlans() {
 
     const toggleActive = async (plan) => {
         try {
-            await neon.execute(
-                'UPDATE subscription_plans SET is_active = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-                [!plan.is_active, plan.id]
-            );
+            await api.updatePlan(plan.id, { isActive: !plan.is_active });
             fetchPlans();
         } catch (error) {
             console.error('Error toggling active status:', error);

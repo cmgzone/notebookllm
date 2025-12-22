@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { neon } from '../lib/neon';
+import api from '../lib/api';
 import { Plus, Edit2, Trash2, Loader2, DollarSign, Coins, Check, X } from 'lucide-react';
 
 export default function CreditPackages() {
@@ -23,8 +23,8 @@ export default function CreditPackages() {
     const fetchPackages = async () => {
         setLoading(true);
         try {
-            const data = await neon.query('SELECT * FROM credit_packages ORDER BY price ASC', []);
-            setPackages(data);
+            const data = await api.getCreditPackages();
+            setPackages(data.packages || []);
         } catch (error) {
             console.error('Error fetching packages:', error);
             alert('Failed to fetch credit packages');
@@ -37,18 +37,21 @@ export default function CreditPackages() {
         e.preventDefault();
         try {
             if (editingPackage) {
-                await neon.execute(
-                    `UPDATE credit_packages 
-                     SET name = $1, description = $2, credits = $3, price = $4, is_active = $5
-                     WHERE id = $6`,
-                    [formData.name, formData.description, formData.credits, formData.price, formData.is_active, editingPackage.id]
-                );
+                await api.updateCreditPackage(editingPackage.id, {
+                    name: formData.name,
+                    description: formData.description,
+                    credits: formData.credits,
+                    price: formData.price,
+                    isActive: formData.is_active
+                });
             } else {
-                await neon.execute(
-                    `INSERT INTO credit_packages (name, description, credits, price, is_active)
-                     VALUES ($1, $2, $3, $4, $5)`,
-                    [formData.name, formData.description, formData.credits, formData.price, formData.is_active]
-                );
+                await api.createCreditPackage({
+                    name: formData.name,
+                    description: formData.description,
+                    credits: formData.credits,
+                    price: formData.price,
+                    isActive: formData.is_active
+                });
             }
 
             resetForm();
@@ -64,7 +67,7 @@ export default function CreditPackages() {
         if (!confirm('Are you sure you want to delete this package?')) return;
 
         try {
-            await neon.execute('DELETE FROM credit_packages WHERE id = $1', [id]);
+            await api.deleteCreditPackage(id);
             fetchPackages();
             alert('Package deleted successfully!');
         } catch (error) {
@@ -99,10 +102,12 @@ export default function CreditPackages() {
 
     const toggleActive = async (pkg) => {
         try {
-            await neon.execute(
-                'UPDATE credit_packages SET is_active = $1 WHERE id = $2',
-                [!pkg.is_active, pkg.id]
-            );
+            await api.updateCreditPackage(pkg.id, { 
+                name: pkg.name,
+                credits: pkg.credits,
+                price: pkg.price,
+                isActive: !pkg.is_active 
+            });
             fetchPackages();
         } catch (error) {
             console.error('Error toggling active status:', error);

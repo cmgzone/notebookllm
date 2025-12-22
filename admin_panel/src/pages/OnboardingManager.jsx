@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { neon } from '../lib/neon';
-import { Plus, Trash2, Edit2, MoveUp, MoveDown, Save } from 'lucide-react';
+import api from '../lib/api';
+import { Plus, Trash2, Edit2, Save } from 'lucide-react';
 
 export default function OnboardingManager() {
     const [screens, setScreens] = useState([]);
@@ -15,8 +15,8 @@ export default function OnboardingManager() {
     const fetchScreens = async () => {
         setLoading(true);
         try {
-            const data = await neon.query('SELECT * FROM onboarding_screens ORDER BY sort_order ASC');
-            setScreens(data);
+            const data = await api.getOnboardingScreens();
+            setScreens(data.screens || []);
         } catch (error) {
             console.error(error);
             alert('Error fetching screens');
@@ -37,20 +37,23 @@ export default function OnboardingManager() {
 
     const handleSave = async () => {
         try {
+            // Build updated screens array
+            let updatedScreens;
             if (editingId === 'new') {
-                await neon.execute(
-                    `INSERT INTO onboarding_screens (title, description, image_url, icon_name, sort_order)
-                     VALUES ($1, $2, $3, $4, $5)`,
-                    [editForm.title, editForm.description, editForm.image_url, editForm.icon_name, screens.length]
-                );
+                updatedScreens = [...screens, {
+                    title: editForm.title,
+                    description: editForm.description,
+                    imageUrl: editForm.image_url,
+                    iconName: editForm.icon_name
+                }];
             } else {
-                await neon.execute(
-                    `UPDATE onboarding_screens 
-                     SET title = $1, description = $2, image_url = $3, icon_name = $4
-                     WHERE id = $5`,
-                    [editForm.title, editForm.description, editForm.image_url, editForm.icon_name, editingId]
+                updatedScreens = screens.map(s => 
+                    s.id === editingId 
+                        ? { ...s, title: editForm.title, description: editForm.description, imageUrl: editForm.image_url, iconName: editForm.icon_name }
+                        : s
                 );
             }
+            await api.updateOnboardingScreens(updatedScreens);
             await fetchScreens();
             handleCancel();
         } catch (error) {
@@ -62,7 +65,8 @@ export default function OnboardingManager() {
     const handleDelete = async (id) => {
         if (!confirm('Are you sure?')) return;
         try {
-            await neon.execute('DELETE FROM onboarding_screens WHERE id = $1', [id]);
+            const updatedScreens = screens.filter(s => s.id !== id);
+            await api.updateOnboardingScreens(updatedScreens);
             fetchScreens();
         } catch (error) {
             console.error(error);
@@ -133,7 +137,7 @@ export default function OnboardingManager() {
                                 <p className="mt-2 text-sm text-gray-500 line-clamp-2">{screen.description}</p>
 
                                 <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-4">
-                                    <span className="text-xs text-gray-400">Order: {screen.sort_order}</span>
+                                    <span className="text-xs text-gray-400">Order: {screen.order_index}</span>
                                     <div className="flex space-x-2">
                                         <button
                                             onClick={() => handleEdit(screen)}

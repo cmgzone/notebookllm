@@ -142,14 +142,19 @@ class StripeService {
       // Payment successful - add credits
       final paymentIntentId = paymentIntent['id'] as String;
 
-      await _subscriptionService.addCredits(
+      final success = await _subscriptionService.addCredits(
         userId: userId,
         amount: package.credits,
         packageId: package.id,
         transactionId: paymentIntentId,
+        paymentMethod: 'stripe',
       );
 
-      onSuccess(paymentIntentId);
+      if (success) {
+        onSuccess(paymentIntentId);
+      } else {
+        onError('Payment succeeded but failed to add credits');
+      }
     } on StripeException catch (e) {
       developer.log('Stripe error: ${e.error.message}', name: 'StripeService');
 

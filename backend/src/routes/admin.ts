@@ -1,18 +1,15 @@
-import express, { type Request, type Response, type Router } from 'express';
+import express, { type Response } from 'express';
 import pool from '../config/database.js';
 import { authenticateToken, requireAdmin, type AuthRequest } from '../middleware/auth.js';
 
-const router: Router = express.Router();
+const router = express.Router();
 
 // All admin routes require authentication AND admin role
 router.use(authenticateToken);
 router.use(requireAdmin);
 
-// ============================================================================
-// AI MODELS
-// ============================================================================
+// ==================== AI MODELS ====================
 
-// List all AI models
 router.get('/models', async (req: AuthRequest, res: Response) => {
     try {
         const result = await pool.query(
@@ -25,19 +22,18 @@ router.get('/models', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Add new AI model
 router.post('/models', async (req: AuthRequest, res: Response) => {
     try {
         const { name, modelId, provider, description, costInput, costOutput, contextWindow, isActive, isPremium } = req.body;
 
         const result = await pool.query(`
-      INSERT INTO ai_models (
-        name, model_id, provider, description, 
-        cost_input, cost_output, context_window, 
-        is_active, is_premium
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING *
-    `, [name, modelId, provider, description, costInput || 0, costOutput || 0, contextWindow || 0, isActive ?? true, isPremium ?? false]);
+            INSERT INTO ai_models (
+                name, model_id, provider, description, 
+                cost_input, cost_output, context_window, 
+                is_active, is_premium
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING *
+        `, [name, modelId, provider, description, costInput || 0, costOutput || 0, contextWindow || 0, isActive ?? true, isPremium ?? false]);
 
         res.json({ model: result.rows[0] });
     } catch (error) {
@@ -46,27 +42,19 @@ router.post('/models', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Update AI model
 router.put('/models/:id', async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
         const { name, modelId, provider, description, costInput, costOutput, contextWindow, isActive, isPremium } = req.body;
 
         const result = await pool.query(`
-      UPDATE ai_models SET
-        name = $1,
-        model_id = $2,
-        provider = $3,
-        description = $4,
-        cost_input = $5,
-        cost_output = $6,
-        context_window = $7,
-        is_active = $8,
-        is_premium = $9,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $10
-      RETURNING *
-    `, [name, modelId, provider, description, costInput, costOutput, contextWindow, isActive, isPremium, id]);
+            UPDATE ai_models SET
+                name = $1, model_id = $2, provider = $3, description = $4,
+                cost_input = $5, cost_output = $6, context_window = $7,
+                is_active = $8, is_premium = $9, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $10
+            RETURNING *
+        `, [name, modelId, provider, description, costInput, costOutput, contextWindow, isActive, isPremium, id]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Model not found' });
@@ -79,14 +67,11 @@ router.put('/models/:id', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Delete AI model
 router.delete('/models/:id', async (req: AuthRequest, res: Response) => {
     try {
-        const { id } = req.params;
-
         const result = await pool.query(
             'DELETE FROM ai_models WHERE id = $1 RETURNING id',
-            [id]
+            [req.params.id]
         );
 
         if (result.rows.length === 0) {
@@ -100,11 +85,8 @@ router.delete('/models/:id', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// ============================================================================
-// API KEYS / CREDENTIALS
-// ============================================================================
+// ==================== API KEYS ====================
 
-// List all API keys (names only, not values)
 router.get('/api-keys', async (req: AuthRequest, res: Response) => {
     try {
         const result = await pool.query(
@@ -117,17 +99,16 @@ router.get('/api-keys', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Set/update API key
 router.post('/api-keys', async (req: AuthRequest, res: Response) => {
     try {
         const { service, apiKey, description } = req.body;
 
         await pool.query(`
-      INSERT INTO api_keys (service_name, encrypted_value, description, updated_at)
-      VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-      ON CONFLICT (service_name) 
-      DO UPDATE SET encrypted_value = $2, description = $3, updated_at = CURRENT_TIMESTAMP
-    `, [service, apiKey, description]);
+            INSERT INTO api_keys (service_name, encrypted_value, description, updated_at)
+            VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+            ON CONFLICT (service_name) 
+            DO UPDATE SET encrypted_value = $2, description = $3, updated_at = CURRENT_TIMESTAMP
+        `, [service, apiKey, description]);
 
         res.json({ message: 'API key saved' });
     } catch (error) {
@@ -136,13 +117,9 @@ router.post('/api-keys', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Delete API key
 router.delete('/api-keys/:service', async (req: AuthRequest, res: Response) => {
     try {
-        const { service } = req.params;
-
-        await pool.query('DELETE FROM api_keys WHERE service_name = $1', [service]);
-
+        await pool.query('DELETE FROM api_keys WHERE service_name = $1', [req.params.service]);
         res.json({ message: 'API key deleted' });
     } catch (error) {
         console.error('Error deleting API key:', error);
@@ -150,22 +127,17 @@ router.delete('/api-keys/:service', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// ============================================================================
-// SUBSCRIPTION PLANS (Admin management)
-// ============================================================================
+// ==================== SUBSCRIPTION PLANS ====================
 
-// List all plans with subscriber counts
 router.get('/plans', async (req: AuthRequest, res: Response) => {
     try {
         const result = await pool.query(`
-      SELECT 
-        sp.*,
-        COUNT(us.id) as subscriber_count
-      FROM subscription_plans sp
-      LEFT JOIN user_subscriptions us ON sp.id = us.plan_id
-      GROUP BY sp.id
-      ORDER BY sp.price ASC
-    `);
+            SELECT sp.*, COUNT(us.id) as subscriber_count
+            FROM subscription_plans sp
+            LEFT JOIN user_subscriptions us ON sp.id = us.plan_id
+            GROUP BY sp.id
+            ORDER BY sp.price ASC
+        `);
         res.json({ plans: result.rows });
     } catch (error) {
         console.error('Error listing plans:', error);
@@ -173,36 +145,21 @@ router.get('/plans', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Update plan
 router.put('/plans/:id', async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { name, description, creditsPerMonth, price, isActive } = req.body;
+        const { name, description, creditsPerMonth, price, isActive, features } = req.body;
 
         const updates: string[] = [];
         const values: any[] = [];
         let paramIndex = 1;
 
-        if (name !== undefined) {
-            updates.push(`name = $${paramIndex++}`);
-            values.push(name);
-        }
-        if (description !== undefined) {
-            updates.push(`description = $${paramIndex++}`);
-            values.push(description);
-        }
-        if (creditsPerMonth !== undefined) {
-            updates.push(`credits_per_month = $${paramIndex++}`);
-            values.push(creditsPerMonth);
-        }
-        if (price !== undefined) {
-            updates.push(`price = $${paramIndex++}`);
-            values.push(price);
-        }
-        if (isActive !== undefined) {
-            updates.push(`is_active = $${paramIndex++}`);
-            values.push(isActive);
-        }
+        if (name !== undefined) { updates.push(`name = $${paramIndex++}`); values.push(name); }
+        if (description !== undefined) { updates.push(`description = $${paramIndex++}`); values.push(description); }
+        if (creditsPerMonth !== undefined) { updates.push(`credits_per_month = $${paramIndex++}`); values.push(creditsPerMonth); }
+        if (price !== undefined) { updates.push(`price = $${paramIndex++}`); values.push(price); }
+        if (isActive !== undefined) { updates.push(`is_active = $${paramIndex++}`); values.push(isActive); }
+        if (features !== undefined) { updates.push(`features = $${paramIndex++}`); values.push(JSON.stringify(features)); }
 
         if (updates.length === 0) {
             return res.status(400).json({ error: 'No updates provided' });
@@ -227,15 +184,56 @@ router.put('/plans/:id', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// ============================================================================
-// CONTENT MANAGEMENT
-// ============================================================================
+router.post('/plans', async (req: AuthRequest, res: Response) => {
+    try {
+        const { name, description, creditsPerMonth, price, isActive, isFreePlan } = req.body;
 
-// Get onboarding screens
+        const result = await pool.query(`
+            INSERT INTO subscription_plans (name, description, credits_per_month, price, is_active, is_free_plan)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING *
+        `, [name, description, creditsPerMonth || 30, price || 0, isActive ?? true, isFreePlan ?? false]);
+
+        res.json({ success: true, plan: result.rows[0] });
+    } catch (error) {
+        console.error('Error creating plan:', error);
+        res.status(500).json({ error: 'Failed to create plan' });
+    }
+});
+
+router.delete('/plans/:id', async (req: AuthRequest, res: Response) => {
+    try {
+        const checkResult = await pool.query(
+            'SELECT COUNT(*) FROM user_subscriptions WHERE plan_id = $1',
+            [req.params.id]
+        );
+
+        if (parseInt(checkResult.rows[0].count) > 0) {
+            return res.status(400).json({ error: 'Cannot delete plan with active subscribers' });
+        }
+
+        const result = await pool.query(
+            'DELETE FROM subscription_plans WHERE id = $1 RETURNING id',
+            [req.params.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Plan not found' });
+        }
+
+        res.json({ success: true, message: 'Plan deleted' });
+    } catch (error) {
+        console.error('Error deleting plan:', error);
+        res.status(500).json({ error: 'Failed to delete plan' });
+    }
+});
+
+// ==================== ONBOARDING ====================
+
 router.get('/onboarding', async (req: AuthRequest, res: Response) => {
     try {
         const result = await pool.query(
-            'SELECT * FROM onboarding_screens ORDER BY order_index ASC'
+            'SELECT * FROM onboarding_screens ORDER BY sort_order ASC'
         );
         res.json({ screens: result.rows });
     } catch (error) {
@@ -244,20 +242,18 @@ router.get('/onboarding', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Update onboarding screens
 router.put('/onboarding', async (req: AuthRequest, res: Response) => {
     try {
         const { screens } = req.body;
 
-        // Clear existing and insert new
         await pool.query('DELETE FROM onboarding_screens');
 
         for (let i = 0; i < screens.length; i++) {
             const screen = screens[i];
             await pool.query(`
-        INSERT INTO onboarding_screens (title, description, image_url, order_index)
-        VALUES ($1, $2, $3, $4)
-      `, [screen.title, screen.description, screen.imageUrl, i]);
+                INSERT INTO onboarding_screens (title, description, image_url, icon_name, sort_order)
+                VALUES ($1, $2, $3, $4, $5)
+            `, [screen.title, screen.description, screen.imageUrl || screen.image_url, screen.iconName || screen.icon_name, i]);
         }
 
         res.json({ message: 'Onboarding screens updated' });
@@ -267,36 +263,312 @@ router.put('/onboarding', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Get privacy policy
+// ==================== PRIVACY POLICY ====================
+
 router.get('/privacy-policy', async (req: AuthRequest, res: Response) => {
     try {
         const result = await pool.query(
-            'SELECT content FROM app_settings WHERE key = $1',
-            ['privacy_policy']
+            "SELECT value FROM app_settings WHERE key = 'privacy_policy'"
         );
-        res.json({ content: result.rows[0]?.content || null });
+        res.json({ content: result.rows[0]?.value || null });
     } catch (error) {
         console.error('Error fetching privacy policy:', error);
         res.status(500).json({ error: 'Failed to fetch privacy policy' });
     }
 });
 
-// Update privacy policy
 router.put('/privacy-policy', async (req: AuthRequest, res: Response) => {
     try {
         const { content } = req.body;
 
         await pool.query(`
-      INSERT INTO app_settings (key, content, updated_at)
-      VALUES ('privacy_policy', $1, CURRENT_TIMESTAMP)
-      ON CONFLICT (key) 
-      DO UPDATE SET content = $1, updated_at = CURRENT_TIMESTAMP
-    `, [content]);
+            INSERT INTO app_settings (key, value, updated_at)
+            VALUES ('privacy_policy', $1, CURRENT_TIMESTAMP)
+            ON CONFLICT (key) 
+            DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
+        `, [content]);
 
         res.json({ message: 'Privacy policy updated' });
     } catch (error) {
         console.error('Error updating privacy policy:', error);
         res.status(500).json({ error: 'Failed to update privacy policy' });
+    }
+});
+
+// ==================== USER MANAGEMENT ====================
+
+router.get('/users', async (req: AuthRequest, res: Response) => {
+    try {
+        const limit = parseInt(req.query.limit as string) || 50;
+        const offset = parseInt(req.query.offset as string) || 0;
+
+        const result = await pool.query(`
+            SELECT u.id, u.email, u.display_name, u.role, u.email_verified, u.is_active, u.created_at,
+                   us.current_credits, sp.name as plan_name
+            FROM users u
+            LEFT JOIN user_subscriptions us ON u.id = us.user_id
+            LEFT JOIN subscription_plans sp ON us.plan_id = sp.id
+            ORDER BY u.created_at DESC
+            LIMIT $1 OFFSET $2
+        `, [limit, offset]);
+
+        const countResult = await pool.query('SELECT COUNT(*) FROM users');
+
+        res.json({ 
+            users: result.rows,
+            total: parseInt(countResult.rows[0].count)
+        });
+    } catch (error) {
+        console.error('Error listing users:', error);
+        res.status(500).json({ error: 'Failed to list users' });
+    }
+});
+
+router.put('/users/:id/role', async (req: AuthRequest, res: Response) => {
+    try {
+        const { role } = req.body;
+        
+        if (!['user', 'admin'].includes(role)) {
+            return res.status(400).json({ error: 'Invalid role' });
+        }
+
+        const result = await pool.query(
+            'UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, role',
+            [role, req.params.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json({ success: true, user: result.rows[0] });
+    } catch (error) {
+        console.error('Error updating user role:', error);
+        res.status(500).json({ error: 'Failed to update user role' });
+    }
+});
+
+router.put('/users/:id/status', async (req: AuthRequest, res: Response) => {
+    try {
+        const { isActive } = req.body;
+
+        const result = await pool.query(
+            'UPDATE users SET is_active = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, is_active',
+            [isActive, req.params.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json({ success: true, user: result.rows[0] });
+    } catch (error) {
+        console.error('Error updating user status:', error);
+        res.status(500).json({ error: 'Failed to update user status' });
+    }
+});
+
+// ==================== DASHBOARD STATS ====================
+
+router.get('/stats', async (req: AuthRequest, res: Response) => {
+    try {
+        // Get user stats
+        const usersResult = await pool.query(`
+            SELECT 
+                COUNT(*) as total_users,
+                COUNT(*) FILTER (WHERE role = 'admin') as admin_users,
+                COUNT(*) FILTER (WHERE is_active = true) as active_users
+            FROM users
+        `);
+
+        // Get recent users
+        const recentUsersResult = await pool.query(`
+            SELECT id, email, display_name, role, is_active, created_at
+            FROM users
+            ORDER BY created_at DESC
+            LIMIT 5
+        `);
+
+        // Get AI models count
+        const modelsResult = await pool.query('SELECT COUNT(*) FROM ai_models WHERE is_active = true');
+
+        // Get plans count
+        const plansResult = await pool.query('SELECT COUNT(*) FROM subscription_plans WHERE is_active = true');
+
+        // Get transactions count
+        const transactionsResult = await pool.query('SELECT COUNT(*) FROM credit_transactions');
+
+        const stats = usersResult.rows[0];
+
+        res.json({
+            success: true,
+            stats: {
+                totalUsers: parseInt(stats.total_users) || 0,
+                adminUsers: parseInt(stats.admin_users) || 0,
+                activeUsers: parseInt(stats.active_users) || 0,
+                totalModels: parseInt(modelsResult.rows[0]?.count) || 0,
+                totalPlans: parseInt(plansResult.rows[0]?.count) || 0,
+                totalTransactions: parseInt(transactionsResult.rows[0]?.count) || 0,
+                recentUsers: recentUsersResult.rows
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching stats:', error);
+        res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+});
+
+// ==================== CREDIT PACKAGES ====================
+
+router.get('/packages', async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await pool.query('SELECT * FROM credit_packages ORDER BY price ASC');
+        res.json({ success: true, packages: result.rows });
+    } catch (error) {
+        console.error('Error listing packages:', error);
+        res.status(500).json({ error: 'Failed to list packages' });
+    }
+});
+
+router.post('/packages', async (req: AuthRequest, res: Response) => {
+    try {
+        const { name, credits, price, isActive } = req.body;
+
+        const result = await pool.query(`
+            INSERT INTO credit_packages (name, credits, price, is_active)
+            VALUES ($1, $2, $3, $4)
+            RETURNING *
+        `, [name, credits, price, isActive ?? true]);
+
+        res.json({ success: true, package: result.rows[0] });
+    } catch (error) {
+        console.error('Error creating package:', error);
+        res.status(500).json({ error: 'Failed to create package' });
+    }
+});
+
+router.put('/packages/:id', async (req: AuthRequest, res: Response) => {
+    try {
+        const { name, credits, price, isActive } = req.body;
+
+        const result = await pool.query(`
+            UPDATE credit_packages 
+            SET name = $1, credits = $2, price = $3, is_active = $4
+            WHERE id = $5
+            RETURNING *
+        `, [name, credits, price, isActive, req.params.id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Package not found' });
+        }
+
+        res.json({ success: true, package: result.rows[0] });
+    } catch (error) {
+        console.error('Error updating package:', error);
+        res.status(500).json({ error: 'Failed to update package' });
+    }
+});
+
+router.delete('/packages/:id', async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await pool.query(
+            'DELETE FROM credit_packages WHERE id = $1 RETURNING id',
+            [req.params.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Package not found' });
+        }
+
+        res.json({ success: true, message: 'Package deleted' });
+    } catch (error) {
+        console.error('Error deleting package:', error);
+        res.status(500).json({ error: 'Failed to delete package' });
+    }
+});
+
+// ==================== TRANSACTIONS ====================
+
+router.get('/transactions', async (req: AuthRequest, res: Response) => {
+    try {
+        const limit = parseInt(req.query.limit as string) || 100;
+
+        const result = await pool.query(`
+            SELECT ct.*, u.email as user_email
+            FROM credit_transactions ct
+            LEFT JOIN users u ON ct.user_id = u.id
+            ORDER BY ct.created_at DESC
+            LIMIT $1
+        `, [limit]);
+
+        res.json({ success: true, transactions: result.rows });
+    } catch (error) {
+        console.error('Error listing transactions:', error);
+        res.status(500).json({ error: 'Failed to list transactions' });
+    }
+});
+
+// ==================== CDN / MEDIA STORAGE ====================
+
+router.get('/storage-stats', async (_req: AuthRequest, res: Response) => {
+    try {
+        // Get overall storage statistics
+        const result = await pool.query(`
+            SELECT 
+                COALESCE(SUM(LENGTH(s.media_data)), 0) as total_db_size,
+                COALESCE(SUM(s.media_size), 0) as total_cdn_size,
+                COUNT(CASE WHEN s.media_data IS NOT NULL THEN 1 END) as db_file_count,
+                COUNT(CASE WHEN s.media_url IS NOT NULL THEN 1 END) as cdn_file_count,
+                COUNT(DISTINCT n.user_id) as users_with_media
+            FROM sources s
+            INNER JOIN notebooks n ON s.notebook_id = n.id
+            WHERE s.media_data IS NOT NULL OR s.media_url IS NOT NULL
+        `);
+
+        // Get per-user breakdown (top 10)
+        const userStats = await pool.query(`
+            SELECT 
+                u.email,
+                COALESCE(SUM(LENGTH(s.media_data)), 0) as db_size,
+                COALESCE(SUM(s.media_size), 0) as cdn_size,
+                COUNT(CASE WHEN s.media_data IS NOT NULL THEN 1 END) as db_count,
+                COUNT(CASE WHEN s.media_url IS NOT NULL THEN 1 END) as cdn_count
+            FROM users u
+            INNER JOIN notebooks n ON u.id = n.user_id
+            INNER JOIN sources s ON n.id = s.notebook_id
+            WHERE s.media_data IS NOT NULL OR s.media_url IS NOT NULL
+            GROUP BY u.id, u.email
+            ORDER BY (COALESCE(SUM(LENGTH(s.media_data)), 0) + COALESCE(SUM(s.media_size), 0)) DESC
+            LIMIT 10
+        `);
+
+        const stats = result.rows[0];
+        const cdnConfigured = !!(process.env.BUNNY_STORAGE_ZONE && process.env.BUNNY_STORAGE_API_KEY);
+
+        res.json({
+            success: true,
+            cdnConfigured,
+            cdnHostname: process.env.BUNNY_CDN_HOSTNAME || null,
+            stats: {
+                totalDbSize: parseInt(stats.total_db_size) || 0,
+                totalCdnSize: parseInt(stats.total_cdn_size) || 0,
+                totalSize: (parseInt(stats.total_db_size) || 0) + (parseInt(stats.total_cdn_size) || 0),
+                dbFileCount: parseInt(stats.db_file_count) || 0,
+                cdnFileCount: parseInt(stats.cdn_file_count) || 0,
+                usersWithMedia: parseInt(stats.users_with_media) || 0
+            },
+            topUsers: userStats.rows.map(u => ({
+                email: u.email,
+                dbSize: parseInt(u.db_size) || 0,
+                cdnSize: parseInt(u.cdn_size) || 0,
+                totalSize: (parseInt(u.db_size) || 0) + (parseInt(u.cdn_size) || 0),
+                dbCount: parseInt(u.db_count) || 0,
+                cdnCount: parseInt(u.cdn_count) || 0
+            }))
+        });
+    } catch (error) {
+        console.error('Error fetching storage stats:', error);
+        res.status(500).json({ error: 'Failed to fetch storage stats' });
     }
 });
 

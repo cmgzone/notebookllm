@@ -14,8 +14,8 @@ router.get('/source/:sourceId', async (req: AuthRequest, res: Response) => {
         // Verify source belongs to user's notebook
         const sourceResult = await pool.query(
             `SELECT s.id FROM sources s
-       INNER JOIN notebooks n ON s.notebook_id = n.id
-       WHERE s.id = $1 AND n.user_id = $2`,
+             INNER JOIN notebooks n ON s.notebook_id = n.id
+             WHERE s.id = $1 AND n.user_id = $2`,
             [sourceId, req.userId]
         );
 
@@ -47,8 +47,8 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
         // Verify source belongs to user's notebook
         const sourceResult = await pool.query(
             `SELECT s.id FROM sources s
-       INNER JOIN notebooks n ON s.notebook_id = n.id
-       WHERE s.id = $1 AND n.user_id = $2`,
+             INNER JOIN notebooks n ON s.notebook_id = n.id
+             WHERE s.id = $1 AND n.user_id = $2`,
             [sourceId, req.userId]
         );
 
@@ -67,9 +67,9 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
 
             const result = await pool.query(
                 `INSERT INTO chunks (id, source_id, content_text, chunk_index, created_at)
-         VALUES ($1, $2, $3, $4, NOW())
-         RETURNING id, content_text, chunk_index, created_at`,
-                [id, sourceId, chunk.content_text || chunk.text, i]
+                 VALUES ($1, $2, $3, $4, NOW())
+                 RETURNING id, content_text, chunk_index, created_at`,
+                [id, sourceId, chunk.content_text || chunk.text || chunk.content, i]
             );
 
             insertedChunks.push(result.rows[0]);
@@ -90,8 +90,8 @@ router.delete('/source/:sourceId', async (req: AuthRequest, res: Response) => {
         // Verify source belongs to user's notebook
         const sourceResult = await pool.query(
             `SELECT s.id FROM sources s
-       INNER JOIN notebooks n ON s.notebook_id = n.id
-       WHERE s.id = $1 AND n.user_id = $2`,
+             INNER JOIN notebooks n ON s.notebook_id = n.id
+             WHERE s.id = $1 AND n.user_id = $2`,
             [sourceId, req.userId]
         );
 
@@ -127,14 +127,14 @@ router.post('/search', async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ error: 'Notebook not found' });
         }
 
-        // Simple text search (can be enhanced with vector similarity later)
+        // Text search
         const result = await pool.query(
             `SELECT c.id, c.content_text, c.chunk_index, c.source_id, s.title as source_title
-       FROM chunks c
-       INNER JOIN sources s ON c.source_id = s.id
-       WHERE s.notebook_id = $1 AND c.content_text ILIKE $2
-       ORDER BY c.chunk_index ASC
-       LIMIT $3`,
+             FROM chunks c
+             INNER JOIN sources s ON c.source_id = s.id
+             WHERE s.notebook_id = $1 AND c.content_text ILIKE $2
+             ORDER BY c.chunk_index ASC
+             LIMIT $3`,
             [notebookId, `%${query}%`, limit]
         );
 

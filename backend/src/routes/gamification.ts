@@ -17,7 +17,10 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
         if (result.rows.length === 0) {
             // Initialize stats for new user
             const initResult = await pool.query(
-                'INSERT INTO user_stats (user_id) VALUES ($1) RETURNING *',
+                `INSERT INTO user_stats (user_id, total_xp, level, current_streak, longest_streak, 
+                    notebooks_created, sources_added, quizzes_completed, flashcards_reviewed, study_time_minutes)
+                 VALUES ($1, 0, 1, 0, 0, 0, 0, 0, 0, 0) 
+                 RETURNING *`,
                 [req.userId]
             );
             return res.json({ success: true, stats: initResult.rows[0] });
@@ -30,19 +33,40 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Update stats (generic increment/set)
+// Track activity (generic increment/set)
 router.post('/track', async (req: AuthRequest, res: Response) => {
     try {
         const { field, increment, value } = req.body;
 
-        let query = '';
-        if (increment !== undefined) {
-            query = `UPDATE user_stats SET ${field} = ${field} + $2, updated_at = NOW() WHERE user_id = $1 RETURNING *`;
-        } else {
-            query = `UPDATE user_stats SET ${field} = $2, updated_at = NOW() WHERE user_id = $1 RETURNING *`;
+        // Validate field name to prevent SQL injection
+        const allowedFields = [
+            'total_xp', 'level', 'current_streak', 'longest_streak',
+            'notebooks_created', 'sources_added', 'quizzes_completed',
+            'flashcards_reviewed', 'study_time_minutes'
+        ];
+
+        if (!allowedFields.includes(field)) {
+            return res.status(400).json({ error: 'Invalid field' });
         }
 
-        const result = await pool.query(query, [req.userId, increment ?? value]);
+        // Ensure user has stats record
+        await pool.query(
+            `INSERT INTO user_stats (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`,
+            [req.userId]
+        );
+
+        let query: string;
+        let params: any[];
+
+        if (increment !== undefined) {
+            query = `UPDATE user_stats SET ${field} = ${field} + $2, updated_at = NOW() WHERE user_id = $1 RETURNING *`;
+            params = [req.userId, increment];
+        } else {
+            query = `UPDATE user_stats SET ${field} = $2, updated_at = NOW() WHERE user_id = $1 RETURNING *`;
+            params = [req.userId, value];
+        }
+
+        const result = await pool.query(query, params);
         res.json({ success: true, stats: result.rows[0] });
     } catch (error) {
         console.error('Track activity error:', error);
@@ -50,11 +74,11 @@ router.post('/track', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Achievements
+// Get achievements
 router.get('/achievements', async (req: AuthRequest, res: Response) => {
     try {
         const result = await pool.query(
-            'SELECT * FROM achievements WHERE user_id = $1',
+            'SELECT * FROM achievements WHERE user_id = $1 ORDER BY created_at DESC',
             [req.userId]
         );
         res.json({ success: true, achievements: result.rows });
@@ -64,6 +88,7 @@ router.get('/achievements', async (req: AuthRequest, res: Response) => {
     }
 });
 
+// Update achievement progress
 router.post('/achievements/progress', async (req: AuthRequest, res: Response) => {
     try {
         const { achievementId, value, isUnlocked } = req.body;
@@ -88,7 +113,7 @@ router.post('/achievements/progress', async (req: AuthRequest, res: Response) =>
     }
 });
 
-// Daily Challenges
+// Get daily challenges
 router.get('/challenges', async (req: AuthRequest, res: Response) => {
     try {
         const today = new Date().toISOString().split('T')[0];
@@ -98,25 +123,34 @@ router.get('/challenges', async (req: AuthRequest, res: Response) => {
         );
         res.json({ success: true, challenges: result.rows });
     } catch (error) {
+        console.error('Get challenges error:', error);
         res.status(500).json({ error: 'Failed to fetch challenges' });
     }
 });
 
+// Batch update challenges
 router.post('/challenges/batch', async (req: AuthRequest, res: Response) => {
     try {
-        const { challenges } = req.body; // Array of challenge objects
+        const { challenges } = req.body;
+        
+        if (!challenges || !Array.isArray(challenges)) {
+            return res.status(400).json({ error: 'challenges array required' });
+        }
+
         const results = [];
 
         for (const ch of challenges) {
             const id = uuidv4();
-            const res = await pool.query(
+            const result = await pool.query(
                 `INSERT INTO daily_challenges (id, user_id, type, title, description, target_value, current_value, is_completed, xp_reward, date)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                 ON CONFLICT (user_id, type, date) DO UPDATE SET current_value = $7, is_completed = $8
+                 ON CONFLICT (user_id, type, date) DO UPDATE SET 
+                    current_value = $7, 
+                    is_completed = $8
                  RETURNING *`,
                 [id, req.userId, ch.type, ch.title, ch.description, ch.targetValue, ch.currentValue, ch.isCompleted, ch.xpReward, ch.date]
             );
-            results.push(res.rows[0]);
+            results.push(result.rows[0]);
         }
 
         res.json({ success: true, challenges: results });

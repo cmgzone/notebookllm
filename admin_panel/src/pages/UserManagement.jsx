@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { neon } from '../lib/neon';
-import { Users, Shield, Ban, Check, Search } from 'lucide-react';
+import api from '../lib/api';
+import { Users, Shield, Ban, Check, Search, Loader2 } from 'lucide-react';
 
 export default function UserManagement() {
     const [users, setUsers] = useState([]);
@@ -15,8 +15,8 @@ export default function UserManagement() {
     const loadUsers = async () => {
         try {
             setLoading(true);
-            const result = await neon.query('SELECT id, email, display_name, role, is_active, created_at FROM users ORDER BY created_at DESC');
-            setUsers(result);
+            const response = await api.getUsers();
+            setUsers(response.users || []);
         } catch (err) {
             setError(err.message);
         } finally {
@@ -27,10 +27,7 @@ export default function UserManagement() {
     const toggleUserRole = async (userId, currentRole) => {
         try {
             const newRole = currentRole === 'admin' ? 'user' : 'admin';
-            await neon.query(
-                'UPDATE users SET role = $1 WHERE id = $2',
-                [newRole, userId]
-            );
+            await api.updateUserRole(userId, newRole);
             await loadUsers();
         } catch (err) {
             alert('Failed to update role: ' + err.message);
@@ -39,10 +36,7 @@ export default function UserManagement() {
 
     const toggleUserStatus = async (userId, currentStatus) => {
         try {
-            await neon.query(
-                'UPDATE users SET is_active = $1 WHERE id = $2',
-                [!currentStatus, userId]
-            );
+            await api.updateUserStatus(userId, !currentStatus);
             await loadUsers();
         } catch (err) {
             alert('Failed to update status: ' + err.message);
@@ -57,7 +51,7 @@ export default function UserManagement() {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
             </div>
         );
     }
@@ -155,8 +149,8 @@ export default function UserManagement() {
                                     <button
                                         onClick={() => toggleUserRole(user.id, user.role)}
                                         className={`px-3 py-1 rounded-full text-xs font-medium ${user.role === 'admin'
-                                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                             }`}
                                     >
                                         {user.role === 'admin' ? (
@@ -173,8 +167,8 @@ export default function UserManagement() {
                                     <button
                                         onClick={() => toggleUserStatus(user.id, user.is_active)}
                                         className={`px-3 py-1 rounded-full text-xs font-medium ${user.is_active
-                                                ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                                                : 'bg-red-100 text-red-700 hover:bg-red-200'
+                                            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                            : 'bg-red-100 text-red-700 hover:bg-red-200'
                                             }`}
                                     >
                                         {user.is_active ? (

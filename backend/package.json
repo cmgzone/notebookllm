@@ -1,18 +1,26 @@
 {
-  "name": "backend",
-  "version": "1.0.0",
+  "name": "notebook-llm-backend",
+  "version": "2.0.0",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "nodemon --watch 'src/**/*.ts' --exec ts-node src/index.ts",
+    "dev": "tsx src/index.ts",
+    "dev:watch": "tsx watch src/index.ts",
+    "lint": "eslint src/**/*.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "notebook",
+    "llm",
+    "ai",
+    "backend",
+    "api"
+  ],
   "author": "",
   "license": "ISC",
-  "description": "Custom backend for Notebook LLM app",
+  "description": "Complete backend API for Notebook LLM Flutter app with all features",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "axios": "^1.13.2",
@@ -34,6 +42,10 @@
     "@types/uuid": "^10.0.0",
     "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

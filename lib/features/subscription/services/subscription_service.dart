@@ -65,15 +65,20 @@ class SubscriptionService {
   }
 
   /// Add credits after purchase
-  Future<void> addCredits({
+  Future<bool> addCredits({
     required String userId,
     required int amount,
     required String packageId,
     required String transactionId,
+    String paymentMethod = 'paypal',
   }) async {
-    // This would be handled by the backend payment webhook
-    // For now, just refresh the subscription
-    await getUserSubscription(userId);
+    final result = await _api.addCredits(
+      amount: amount,
+      packageId: packageId,
+      transactionId: transactionId,
+      paymentMethod: paymentMethod,
+    );
+    return result['success'] == true;
   }
 
   /// Check and renew subscription if needed

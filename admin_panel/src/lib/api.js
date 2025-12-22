@@ -1,0 +1,224 @@
+// API Service for Admin Panel
+// Uses the backend API instead of direct database access
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+
+class ApiService {
+    constructor() {
+        this.token = localStorage.getItem('admin_token');
+    }
+
+    setToken(token) {
+        this.token = token;
+        if (token) {
+            localStorage.setItem('admin_token', token);
+        } else {
+            localStorage.removeItem('admin_token');
+        }
+    }
+
+    getToken() {
+        return this.token || localStorage.getItem('admin_token');
+    }
+
+    clearToken() {
+        this.token = null;
+        localStorage.removeItem('admin_token');
+    }
+
+    async request(endpoint, options = {}) {
+        const url = `${API_BASE_URL}${endpoint}`;
+        const headers = {
+            'Content-Type': 'application/json',
+            ...options.headers,
+        };
+
+        const token = this.getToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        try {
+            const response = await fetch(url, {
+                ...options,
+                headers,
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    this.clearToken();
+                    window.location.href = '/login';
+                }
+                throw new Error(data.error || `Request failed: ${response.status}`);
+            }
+
+            return data;
+        } catch (error) {
+            console.error(`API Error [${endpoint}]:`, error);
+            throw error;
+        }
+    }
+
+    // GET request
+    async get(endpoint) {
+        return this.request(endpoint, { method: 'GET' });
+    }
+
+    // POST request
+    async post(endpoint, body) {
+        return this.request(endpoint, {
+            method: 'POST',
+            body: JSON.stringify(body),
+        });
+    }
+
+    // PUT request
+    async put(endpoint, body) {
+        return this.request(endpoint, {
+            method: 'PUT',
+            body: JSON.stringify(body),
+        });
+    }
+
+    // DELETE request
+    async delete(endpoint) {
+        return this.request(endpoint, { method: 'DELETE' });
+    }
+
+    // ============ AUTH ============
+    async login(email, password) {
+        const data = await this.post('/auth/login', { email, password });
+        if (data.token) {
+            this.setToken(data.token);
+        }
+        return data;
+    }
+
+    async getCurrentUser() {
+        return this.get('/auth/me');
+    }
+
+    // ============ ADMIN - USERS ============
+    async getUsers() {
+        return this.get('/admin/users');
+    }
+
+    async updateUserRole(userId, role) {
+        return this.put(`/admin/users/${userId}/role`, { role });
+    }
+
+    async updateUserStatus(userId, isActive) {
+        return this.put(`/admin/users/${userId}/status`, { isActive });
+    }
+
+    // ============ ADMIN - AI MODELS ============
+    async getAIModels() {
+        return this.get('/admin/models');
+    }
+
+    async createAIModel(model) {
+        return this.post('/admin/models', model);
+    }
+
+    async updateAIModel(id, model) {
+        return this.put(`/admin/models/${id}`, model);
+    }
+
+    async deleteAIModel(id) {
+        return this.delete(`/admin/models/${id}`);
+    }
+
+    // ============ ADMIN - API KEYS ============
+    async getApiKeys() {
+        return this.get('/admin/api-keys');
+    }
+
+    async setApiKey(service, apiKey, description) {
+        return this.post('/admin/api-keys', { service, apiKey, description });
+    }
+
+    async deleteApiKey(service) {
+        return this.delete(`/admin/api-keys/${service}`);
+    }
+
+    // ============ ADMIN - SUBSCRIPTION PLANS ============
+    async getPlans() {
+        return this.get('/admin/plans');
+    }
+
+    async updatePlan(id, updates) {
+        return this.put(`/admin/plans/${id}`, updates);
+    }
+
+    async createPlan(plan) {
+        return this.post('/admin/plans', plan);
+    }
+
+    async deletePlan(id) {
+        return this.delete(`/admin/plans/${id}`);
+    }
+
+    // ============ ADMIN - CREDIT PACKAGES ============
+    async getCreditPackages() {
+        return this.get('/admin/packages');
+    }
+
+    async createCreditPackage(pkg) {
+        return this.post('/admin/packages', pkg);
+    }
+
+    async updateCreditPackage(id, pkg) {
+        return this.put(`/admin/packages/${id}`, pkg);
+    }
+
+    async deleteCreditPackage(id) {
+        return this.delete(`/admin/packages/${id}`);
+    }
+
+    // ============ ADMIN - TRANSACTIONS ============
+    async getTransactions(limit = 100) {
+        return this.get(`/admin/transactions?limit=${limit}`);
+    }
+
+    // ============ ADMIN - SETTINGS ============
+    async getSettings() {
+        return this.get('/admin/settings');
+    }
+
+    async updateSetting(key, value) {
+        return this.put('/admin/settings', { key, value });
+    }
+
+    // ============ ADMIN - ONBOARDING ============
+    async getOnboardingScreens() {
+        return this.get('/admin/onboarding');
+    }
+
+    async updateOnboardingScreens(screens) {
+        return this.put('/admin/onboarding', { screens });
+    }
+
+    // ============ ADMIN - PRIVACY POLICY ============
+    async getPrivacyPolicy() {
+        return this.get('/admin/privacy-policy');
+    }
+
+    async updatePrivacyPolicy(content) {
+        return this.put('/admin/privacy-policy', { content });
+    }
+
+    // ============ ADMIN - STATS ============
+    async getDashboardStats() {
+        return this.get('/admin/stats');
+    }
+
+    // ============ ADMIN - STORAGE / CDN ============
+    async getStorageStats() {
+        return this.get('/admin/storage-stats');
+    }
+}
+
+export const api = new ApiService();
+export default api;

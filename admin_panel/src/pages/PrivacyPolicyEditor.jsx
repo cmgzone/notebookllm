@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { neon } from '../lib/neon';
+import api from '../lib/api';
 import { Save, Loader2, CheckCircle } from 'lucide-react';
 
 export default function PrivacyPolicyEditor() {
@@ -15,10 +15,9 @@ export default function PrivacyPolicyEditor() {
     const fetchPolicy = async () => {
         setLoading(true);
         try {
-            // Get the active policy or the latest one
-            const data = await neon.query('SELECT * FROM privacy_policies WHERE is_active = true ORDER BY published_at DESC LIMIT 1');
-            if (data.length > 0) {
-                setPolicy(data[0]);
+            const data = await api.getPrivacyPolicy();
+            if (data.content) {
+                setPolicy({ content: data.content, version: data.version || '1.0.0' });
             } else {
                 setPolicy({ content: '', version: '1.0.0' });
             }
@@ -33,22 +32,7 @@ export default function PrivacyPolicyEditor() {
         setSaving(true);
         setSaved(false);
         try {
-            // We always insert a new version for history, or we could update if it's the same version
-            // For simplicity, let's just insert a new one if it's "modified" logic, but here simple UPDATE/INSERT based on ID is fine.
-            // Actually, inserting new row is safer for "version history" but simpler to just UPSERT if we treat it as single DOC.
-            // Let's UPDATE current if ID exists, else INSERT.
-
-            // Wait, schema has `id` and `is_active`.
-            // Let's deactivate old ones and insert new one for proper versioning.
-
-            await neon.execute('UPDATE privacy_policies SET is_active = false');
-
-            await neon.execute(
-                `INSERT INTO privacy_policies (content, version, is_active, published_at)
-                 VALUES ($1, $2, true, CURRENT_TIMESTAMP)`,
-                [policy.content, policy.version || '1.0']
-            );
-
+            await api.updatePrivacyPolicy(policy.content);
             setSaved(true);
             setTimeout(() => setSaved(false), 3000);
         } catch (error) {

@@ -25,7 +25,6 @@ router.get('/notebook/:notebookId', async (req: AuthRequest, res: Response) => {
     try {
         const { notebookId } = req.params;
 
-        // Verify notebook belongs to user
         const notebookResult = await pool.query(
             'SELECT id FROM notebooks WHERE id = $1 AND user_id = $2',
             [notebookId, req.userId]
@@ -37,9 +36,9 @@ router.get('/notebook/:notebookId', async (req: AuthRequest, res: Response) => {
 
         const result = await pool.query(
             `SELECT t.* FROM tags t
-       INNER JOIN notebook_tags nt ON t.id = nt.tag_id
-       WHERE nt.notebook_id = $1
-       ORDER BY t.name ASC`,
+             INNER JOIN notebook_tags nt ON t.id = nt.tag_id
+             WHERE nt.notebook_id = $1
+             ORDER BY t.name ASC`,
             [notebookId]
         );
 
@@ -47,6 +46,28 @@ router.get('/notebook/:notebookId', async (req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error('Get notebook tags error:', error);
         res.status(500).json({ error: 'Failed to fetch tags' });
+    }
+});
+
+// Get popular tags
+router.get('/popular', async (req: AuthRequest, res: Response) => {
+    try {
+        const limit = parseInt(req.query.limit as string) || 10;
+        
+        const result = await pool.query(
+            `SELECT t.*, 
+                    (SELECT COUNT(*) FROM source_tags st WHERE st.tag_id = t.id) as usage_count
+             FROM tags t
+             WHERE t.user_id = $1
+             ORDER BY usage_count DESC, t.name ASC
+             LIMIT $2`,
+            [req.userId, limit]
+        );
+
+        res.json({ success: true, tags: result.rows });
+    } catch (error) {
+        console.error('Get popular tags error:', error);
+        res.status(500).json({ error: 'Failed to fetch popular tags' });
     }
 });
 
@@ -62,8 +83,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         const id = uuidv4();
         const result = await pool.query(
             `INSERT INTO tags (id, user_id, name, color, created_at)
-       VALUES ($1, $2, $3, $4, NOW())
-       RETURNING *`,
+             VALUES ($1, $2, $3, $4, NOW())
+             RETURNING *`,
             [id, req.userId, name, color]
         );
 
@@ -101,8 +122,8 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
 
         const result = await pool.query(
             `UPDATE tags SET ${updates.join(', ')}
-       WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}
-       RETURNING *`,
+             WHERE id = $${paramIndex++} AND user_id = $${paramIndex}
+             RETURNING *`,
             values
         );
 
@@ -142,7 +163,6 @@ router.post('/notebook/:notebookId/tag/:tagId', async (req: AuthRequest, res: Re
     try {
         const { notebookId, tagId } = req.params;
 
-        // Verify notebook belongs to user
         const notebookResult = await pool.query(
             'SELECT id FROM notebooks WHERE id = $1 AND user_id = $2',
             [notebookId, req.userId]
@@ -152,7 +172,6 @@ router.post('/notebook/:notebookId/tag/:tagId', async (req: AuthRequest, res: Re
             return res.status(404).json({ error: 'Notebook not found' });
         }
 
-        // Verify tag belongs to user
         const tagResult = await pool.query(
             'SELECT id FROM tags WHERE id = $1 AND user_id = $2',
             [tagId, req.userId]
@@ -162,7 +181,6 @@ router.post('/notebook/:notebookId/tag/:tagId', async (req: AuthRequest, res: Re
             return res.status(404).json({ error: 'Tag not found' });
         }
 
-        // Add tag to notebook (ignore if already exists)
         await pool.query(
             'INSERT INTO notebook_tags (notebook_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
             [notebookId, tagId]
@@ -180,16 +198,6 @@ router.delete('/notebook/:notebookId/tag/:tagId', async (req: AuthRequest, res: 
     try {
         const { notebookId, tagId } = req.params;
 
-        // Verify notebook belongs to user
-        const notebookResult = await pool.query(
-            'SELECT id FROM notebooks WHERE id = $1 AND user_id = $2',
-            [notebookId, req.userId]
-        );
-
-        if (notebookResult.rows.length === 0) {
-            return res.status(404).json({ error: 'Notebook not found' });
-        }
-
         await pool.query(
             'DELETE FROM notebook_tags WHERE notebook_id = $1 AND tag_id = $2',
             [notebookId, tagId]
@@ -206,8 +214,13 @@ router.delete('/notebook/:notebookId/tag/:tagId', async (req: AuthRequest, res: 
 router.post('/source/:sourceId/tag/:tagId', async (req: AuthRequest, res: Response) => {
     try {
         const { sourceId, tagId } = req.params;
-        const result = await pool.query('SELECT add_tag_to_source($1, $2) as success', [sourceId, tagId]);
-        res.json({ success: true, added: result.rows[0].success });
+
+        await pool.query(
+            'INSERT INTO source_tags (source_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [sourceId, tagId]
+        );
+
+        res.json({ success: true, added: true });
     } catch (error) {
         console.error('Add tag to source error:', error);
         res.status(500).json({ error: 'Failed to add tag to source' });
@@ -218,23 +231,16 @@ router.post('/source/:sourceId/tag/:tagId', async (req: AuthRequest, res: Respon
 router.delete('/source/:sourceId/tag/:tagId', async (req: AuthRequest, res: Response) => {
     try {
         const { sourceId, tagId } = req.params;
-        const result = await pool.query('SELECT remove_tag_from_source($1, $2) as success', [sourceId, tagId]);
-        res.json({ success: true, removed: result.rows[0].success });
+
+        await pool.query(
+            'DELETE FROM source_tags WHERE source_id = $1 AND tag_id = $2',
+            [sourceId, tagId]
+        );
+
+        res.json({ success: true, removed: true });
     } catch (error) {
         console.error('Remove tag from source error:', error);
         res.status(500).json({ error: 'Failed to remove tag from source' });
-    }
-});
-
-// Get popular tags
-router.get('/popular', async (req: AuthRequest, res: Response) => {
-    try {
-        const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
-        const result = await pool.query('SELECT * FROM get_popular_tags($1, $2)', [req.userId, limit]);
-        res.json({ success: true, tags: result.rows });
-    } catch (error) {
-        console.error('Get popular tags error:', error);
-        res.status(500).json({ error: 'Failed to fetch popular tags' });
     }
 });
 

@@ -151,10 +151,12 @@ class ApiService {
   Future<Map<String, dynamic>> login({
     required String email,
     required String password,
+    bool rememberMe = false,
   }) async {
     final response = await post('/auth/login', {
       'email': email,
       'password': password,
+      'rememberMe': rememberMe,
     });
 
     // Store token
@@ -608,6 +610,20 @@ class ApiService {
     });
   }
 
+  Future<Map<String, dynamic>> addCredits({
+    required int amount,
+    required String packageId,
+    required String transactionId,
+    String paymentMethod = 'paypal',
+  }) async {
+    return await post('/subscriptions/add-credits', {
+      'amount': amount,
+      'packageId': packageId,
+      'transactionId': transactionId,
+      'paymentMethod': paymentMethod,
+    });
+  }
+
   Future<void> createSubscription() async {
     await post('/subscriptions/create', {});
   }
@@ -624,11 +640,13 @@ class ApiService {
 
   // ============ ADMIN ============
 
+  // Public endpoint for listing AI models (available to all authenticated users)
   Future<List<Map<String, dynamic>>> getAIModels() async {
-    final response = await get('/admin/models');
+    final response = await get('/ai/models');
     return List<Map<String, dynamic>>.from(response['models'] ?? []);
   }
 
+  // Admin-only endpoints for managing AI models
   Future<Map<String, dynamic>> addAIModel(Map<String, dynamic> model) async {
     final response = await post('/admin/models', model);
     return response['model'];
@@ -1094,5 +1112,18 @@ class ApiService {
 
   Future<void> deleteAudioOverview(String id) async {
     await delete('/features/audio/overviews/$id');
+  }
+
+  // ============ VOICE MODELS ============
+
+  Future<List<Map<String, dynamic>>> getVoiceModels() async {
+    final response = await get('/voice/models');
+    return List<Map<String, dynamic>>.from(response['voices'] ?? []);
+  }
+
+  Future<List<Map<String, dynamic>>> getVoiceModelsByProvider(
+      String provider) async {
+    final response = await get('/voice/models/$provider');
+    return List<Map<String, dynamic>>.from(response['voices'] ?? []);
   }
 }

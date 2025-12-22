@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/audio/elevenlabs_service.dart';
 import '../../core/audio/google_tts_service.dart';
 import '../../core/audio/google_cloud_tts_service.dart';
+import '../../core/audio/voice_models_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/motion.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -305,36 +306,113 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
               ),
               const SizedBox(height: 16),
               if (_ttsProvider == 'google')
-                _DropdownConfiguration(
-                  label: 'Voice Selection',
-                  value: selectedGoogleTTSVoice,
-                  items: GoogleTtsService.voices.entries
-                      .map((e) => DropdownMenuItem(
-                          value: e.key,
-                          child: Text(e.value,
-                              style: const TextStyle(fontSize: 13))))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      ref.read(selectedGoogleTTSVoiceProvider.notifier).state =
-                          val;
-                    }
+                Consumer(
+                  builder: (context, ref, _) {
+                    final voicesAsync = ref.watch(availableVoiceModelsProvider);
+                    return voicesAsync.when(
+                      data: (voices) {
+                        final googleVoices = voices['google'] ?? [];
+                        return _DropdownConfiguration(
+                          label: 'Voice Selection',
+                          value: googleVoices.any(
+                                  (v) => v.voiceId == selectedGoogleTTSVoice)
+                              ? selectedGoogleTTSVoice
+                              : googleVoices.isNotEmpty
+                                  ? googleVoices.first.voiceId
+                                  : null,
+                          items: googleVoices
+                              .map((v) => DropdownMenuItem(
+                                    value: v.voiceId,
+                                    child: Text(
+                                        '${v.name}${v.isPremium ? ' (Premium)' : ''}',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color: v.isPremium
+                                                ? Colors.amber[800]
+                                                : null)),
+                                  ))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              ref
+                                  .read(selectedGoogleTTSVoiceProvider.notifier)
+                                  .state = val;
+                            }
+                          },
+                        );
+                      },
+                      loading: () =>
+                          const LinearProgressIndicator(minHeight: 2),
+                      error: (_, __) => _DropdownConfiguration(
+                        label: 'Voice Selection',
+                        value: selectedGoogleTTSVoice,
+                        items: GoogleTtsService.voices.entries
+                            .map((e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(e.value,
+                                    style: const TextStyle(fontSize: 13))))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            ref
+                                .read(selectedGoogleTTSVoiceProvider.notifier)
+                                .state = val;
+                          }
+                        },
+                      ),
+                    );
                   },
                 ),
               if (_ttsProvider == 'elevenlabs') ...[
-                _DropdownConfiguration(
-                  label: 'Voice Selection',
-                  value: selectedTTSVoice,
-                  items: ElevenLabsService.voices.entries
-                      .map((e) => DropdownMenuItem(
-                          value: e.key,
-                          child: Text(e.value,
-                              style: const TextStyle(fontSize: 13))))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      ref.read(selectedTTSVoiceProvider.notifier).state = val;
-                    }
+                Consumer(
+                  builder: (context, ref, _) {
+                    final voicesAsync = ref.watch(availableVoiceModelsProvider);
+                    return voicesAsync.when(
+                      data: (voices) {
+                        final elevenVoices = voices['elevenlabs'] ?? [];
+                        return _DropdownConfiguration(
+                          label: 'Voice Selection',
+                          value: elevenVoices
+                                  .any((v) => v.voiceId == selectedTTSVoice)
+                              ? selectedTTSVoice
+                              : elevenVoices.isNotEmpty
+                                  ? elevenVoices.first.voiceId
+                                  : null,
+                          items: elevenVoices
+                              .map((v) => DropdownMenuItem(
+                                    value: v.voiceId,
+                                    child: Text('${v.name} (${v.gender})',
+                                        style: const TextStyle(fontSize: 13)),
+                                  ))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              ref
+                                  .read(selectedTTSVoiceProvider.notifier)
+                                  .state = val;
+                            }
+                          },
+                        );
+                      },
+                      loading: () =>
+                          const LinearProgressIndicator(minHeight: 2),
+                      error: (_, __) => _DropdownConfiguration(
+                        label: 'Voice Selection',
+                        value: selectedTTSVoice,
+                        items: ElevenLabsService.voices.entries
+                            .map((e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(e.value,
+                                    style: const TextStyle(fontSize: 13))))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            ref.read(selectedTTSVoiceProvider.notifier).state =
+                                val;
+                          }
+                        },
+                      ),
+                    );
                   },
                 ),
                 const SizedBox(height: 12),
@@ -355,37 +433,115 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
                 ),
               ],
               if (_ttsProvider == 'google_cloud')
-                _DropdownConfiguration(
-                  label: 'Voice Selection',
-                  value: selectedGoogleCloudTTSVoice,
-                  items: GoogleCloudTtsService.voices.entries
-                      .map((e) => DropdownMenuItem(
-                          value: e.key,
-                          child: Text(e.value,
-                              style: const TextStyle(fontSize: 13))))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      ref
-                          .read(selectedGoogleCloudTTSVoiceProvider.notifier)
-                          .state = val;
-                    }
+                Consumer(
+                  builder: (context, ref, _) {
+                    final voicesAsync = ref.watch(availableVoiceModelsProvider);
+                    return voicesAsync.when(
+                      data: (voices) {
+                        final cloudVoices = voices['google_cloud'] ?? [];
+                        return _DropdownConfiguration(
+                          label: 'Voice Selection',
+                          value: cloudVoices.any((v) =>
+                                  v.voiceId == selectedGoogleCloudTTSVoice)
+                              ? selectedGoogleCloudTTSVoice
+                              : cloudVoices.isNotEmpty
+                                  ? cloudVoices.first.voiceId
+                                  : null,
+                          items: cloudVoices
+                              .map((v) => DropdownMenuItem(
+                                    value: v.voiceId,
+                                    child: Text(
+                                        '${v.name}${v.isPremium ? ' (Premium)' : ''}',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color: v.isPremium
+                                                ? Colors.amber[800]
+                                                : null)),
+                                  ))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              ref
+                                  .read(selectedGoogleCloudTTSVoiceProvider
+                                      .notifier)
+                                  .state = val;
+                            }
+                          },
+                        );
+                      },
+                      loading: () =>
+                          const LinearProgressIndicator(minHeight: 2),
+                      error: (_, __) => _DropdownConfiguration(
+                        label: 'Voice Selection',
+                        value: selectedGoogleCloudTTSVoice,
+                        items: GoogleCloudTtsService.voices.entries
+                            .map((e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(e.value,
+                                    style: const TextStyle(fontSize: 13))))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            ref
+                                .read(selectedGoogleCloudTTSVoiceProvider
+                                    .notifier)
+                                .state = val;
+                          }
+                        },
+                      ),
+                    );
                   },
                 ),
               if (_ttsProvider == 'murf')
-                _DropdownConfiguration(
-                  label: 'Voice Selection',
-                  value: selectedMurfVoice,
-                  items: MurfService.voices.entries
-                      .map((e) => DropdownMenuItem(
-                          value: e.key,
-                          child: Text(e.value,
-                              style: const TextStyle(fontSize: 13))))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      ref.read(selectedMurfVoiceProvider.notifier).state = val;
-                    }
+                Consumer(
+                  builder: (context, ref, _) {
+                    final voicesAsync = ref.watch(availableVoiceModelsProvider);
+                    return voicesAsync.when(
+                      data: (voices) {
+                        final murfVoices = voices['murf'] ?? [];
+                        return _DropdownConfiguration(
+                          label: 'Voice Selection',
+                          value: murfVoices
+                                  .any((v) => v.voiceId == selectedMurfVoice)
+                              ? selectedMurfVoice
+                              : murfVoices.isNotEmpty
+                                  ? murfVoices.first.voiceId
+                                  : null,
+                          items: murfVoices
+                              .map((v) => DropdownMenuItem(
+                                    value: v.voiceId,
+                                    child: Text('${v.name} (${v.gender})',
+                                        style: const TextStyle(fontSize: 13)),
+                                  ))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              ref
+                                  .read(selectedMurfVoiceProvider.notifier)
+                                  .state = val;
+                            }
+                          },
+                        );
+                      },
+                      loading: () =>
+                          const LinearProgressIndicator(minHeight: 2),
+                      error: (_, __) => _DropdownConfiguration(
+                        label: 'Voice Selection',
+                        value: selectedMurfVoice,
+                        items: MurfService.voices.entries
+                            .map((e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(e.value,
+                                    style: const TextStyle(fontSize: 13))))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            ref.read(selectedMurfVoiceProvider.notifier).state =
+                                val;
+                          }
+                        },
+                      ),
+                    );
                   },
                 ),
             ],

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { neon } from '../lib/neon';
-import { Users, FileText, Shield, Settings2, Calendar, TrendingUp } from 'lucide-react';
+import api from '../lib/api';
+import { Users, FileText, Shield, Settings2, Calendar, TrendingUp, CreditCard, Bot } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Dashboard() {
@@ -9,8 +9,9 @@ export default function Dashboard() {
         totalUsers: 0,
         adminUsers: 0,
         activeUsers: 0,
-        onboardingScreens: 0,
-        appSettings: 0,
+        totalModels: 0,
+        totalPlans: 0,
+        totalTransactions: 0,
         recentUsers: []
     });
     const [loading, setLoading] = useState(true);
@@ -22,30 +23,10 @@ export default function Dashboard() {
     const loadStats = async () => {
         try {
             setLoading(true);
-
-            // Get user stats
-            const users = await neon.query('SELECT role, is_active, created_at FROM users ORDER BY created_at DESC', []);
-            const totalUsers = users.length;
-            const adminUsers = users.filter(u => u.role === 'admin').length;
-            const activeUsers = users.filter(u => u.is_active).length;
-            const recentUsers = users.slice(0, 5);
-
-            // Get onboarding screens count
-            const onboarding = await neon.query('SELECT COUNT(*) as count FROM onboarding_screens', []);
-            const onboardingScreens = parseInt(onboarding[0]?.count || 0);
-
-            // Get app settings count
-            const settings = await neon.query('SELECT COUNT(*) as count FROM app_settings', []);
-            const appSettings = parseInt(settings[0]?.count || 0);
-
-            setStats({
-                totalUsers,
-                adminUsers,
-                activeUsers,
-                onboardingScreens,
-                appSettings,
-                recentUsers
-            });
+            const response = await api.getDashboardStats();
+            if (response.success) {
+                setStats(response.stats);
+            }
         } catch (error) {
             console.error('Error loading stats:', error);
         } finally {
@@ -66,7 +47,7 @@ export default function Dashboard() {
             {/* Header */}
             <div className="mb-8">
                 <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
-                <p className="text-muted-foreground">Welcome back, {user?.name || user?.email}!</p>
+                <p className="text-muted-foreground">Welcome back, {user?.displayName || user?.email}!</p>
             </div>
 
             {/* Stats Grid */}
@@ -76,7 +57,6 @@ export default function Dashboard() {
                     value={stats.totalUsers}
                     icon={Users}
                     color="bg-blue-500"
-                    trend="+12% from last month"
                 />
                 <StatCard
                     title="Admin Users"
@@ -85,15 +65,15 @@ export default function Dashboard() {
                     color="bg-green-500"
                 />
                 <StatCard
-                    title="Active Users"
-                    value={stats.activeUsers}
-                    icon={TrendingUp}
+                    title="AI Models"
+                    value={stats.totalModels}
+                    icon={Bot}
                     color="bg-purple-500"
                 />
                 <StatCard
-                    title="Onboarding Screens"
-                    value={stats.onboardingScreens}
-                    icon={FileText}
+                    title="Transactions"
+                    value={stats.totalTransactions}
+                    icon={CreditCard}
                     color="bg-orange-500"
                 />
             </div>
@@ -109,10 +89,10 @@ export default function Dashboard() {
                         href="/users"
                     />
                     <QuickActionCard
-                        title="Onboarding"
-                        description="Edit onboarding screens"
-                        icon={FileText}
-                        href="/onboarding"
+                        title="AI Models"
+                        description="Configure AI models"
+                        icon={Bot}
+                        href="/ai-models"
                     />
                     <QuickActionCard
                         title="Settings"
@@ -121,10 +101,10 @@ export default function Dashboard() {
                         href="/settings"
                     />
                     <QuickActionCard
-                        title="Privacy Policy"
-                        description="Update privacy policy"
-                        icon={Shield}
-                        href="/privacy"
+                        title="Subscriptions"
+                        description="Manage subscription plans"
+                        icon={CreditCard}
+                        href="/subscription-plans"
                     />
                 </div>
             </div>
@@ -133,23 +113,22 @@ export default function Dashboard() {
             <div className="bg-card border border-border rounded-lg p-6">
                 <h2 className="text-xl font-semibold mb-4">Recent User Registrations</h2>
                 <div className="space-y-3">
-                    {stats.recentUsers.length === 0 ? (
+                    {!stats.recentUsers || stats.recentUsers.length === 0 ? (
                         <p className="text-muted-foreground text-sm">No recent users</p>
                     ) : (
-                        stats.recentUsers.map((user, index) => (
+                        stats.recentUsers.map((recentUser, index) => (
                             <div key={index} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                                 <div className="flex items-center gap-3">
                                     <Calendar className="h-4 w-4 text-muted-foreground" />
                                     <div>
-                                        <p className="text-sm font-medium">New user registered</p>
+                                        <p className="text-sm font-medium">{recentUser.email}</p>
                                         <p className="text-xs text-muted-foreground">
-                                            {new Date(user.created_at).toLocaleDateString()} - {user.role === 'admin' ? 'Admin' : 'User'}
+                                            {new Date(recentUser.created_at).toLocaleDateString()} - {recentUser.role === 'admin' ? 'Admin' : 'User'}
                                         </p>
                                     </div>
                                 </div>
-                                <span className={`px-2 py-1 rounded-full text-xs ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                                    }`}>
-                                    {user.is_active ? 'Active' : 'Inactive'}
+                                <span className={`px-2 py-1 rounded-full text-xs ${recentUser.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                                    {recentUser.is_active ? 'Active' : 'Inactive'}
                                 </span>
                             </div>
                         ))
@@ -163,15 +142,15 @@ export default function Dashboard() {
                     <h3 className="font-semibold mb-3">System Configuration</h3>
                     <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">App Settings:</span>
-                            <span className="font-medium">{stats.appSettings} configured</span>
+                            <span className="text-muted-foreground">Subscription Plans:</span>
+                            <span className="font-medium">{stats.totalPlans} plans</span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">Onboarding Screens:</span>
-                            <span className="font-medium">{stats.onboardingScreens} screens</span>
+                            <span className="text-muted-foreground">AI Models:</span>
+                            <span className="font-medium">{stats.totalModels} models</span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">Database:</span>
+                            <span className="text-muted-foreground">Backend:</span>
                             <span className="font-medium text-green-600">Connected</span>
                         </div>
                     </div>
@@ -182,8 +161,8 @@ export default function Dashboard() {
                     <ul className="space-y-2 text-sm text-muted-foreground">
                         <li>• Use the User Management page to promote users to admin</li>
                         <li>• Keep your API keys secure in the Settings page</li>
-                        <li>• Update onboarding screens to improve user experience</li>
-                        <li>• Review and update the privacy policy regularly</li>
+                        <li>• Configure AI models for different providers</li>
+                        <li>• Monitor transactions in the Transactions page</li>
                     </ul>
                 </div>
             </div>
@@ -191,7 +170,7 @@ export default function Dashboard() {
     );
 }
 
-function StatCard({ title, value, icon: Icon, color, trend }) {
+function StatCard({ title, value, icon: Icon, color }) {
     return (
         <div className="bg-card border border-border rounded-lg p-6">
             <div className="flex items-center justify-between mb-4">
@@ -202,9 +181,6 @@ function StatCard({ title, value, icon: Icon, color, trend }) {
             <div>
                 <p className="text-sm text-muted-foreground mb-1">{title}</p>
                 <p className="text-3xl font-bold">{value}</p>
-                {trend && (
-                    <p className="text-xs text-green-600 mt-2">{trend}</p>
-                )}
             </div>
         </div>
     );

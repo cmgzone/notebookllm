@@ -22,7 +22,11 @@ router.get('/notebook/:notebookId', async (req: AuthRequest, res: Response) => {
         }
 
         const result = await pool.query(
-            'SELECT * FROM sources WHERE notebook_id = $1 ORDER BY created_at DESC',
+            `SELECT s.*, 
+                    (SELECT COUNT(*) FROM chunks WHERE source_id = s.id) as chunk_count
+             FROM sources s 
+             WHERE s.notebook_id = $1 
+             ORDER BY s.created_at DESC`,
             [notebookId]
         );
 
@@ -39,8 +43,8 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         const { id } = req.params;
         const result = await pool.query(
             `SELECT s.* FROM sources s
-       INNER JOIN notebooks n ON s.notebook_id = n.id
-       WHERE s.id = $1 AND n.user_id = $2`,
+             INNER JOIN notebooks n ON s.notebook_id = n.id
+             WHERE s.id = $1 AND n.user_id = $2`,
             [id, req.userId]
         );
 
@@ -77,8 +81,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         const id = uuidv4();
         const result = await pool.query(
             `INSERT INTO sources (id, notebook_id, type, title, content, url, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-       RETURNING *`,
+             VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+             RETURNING *`,
             [id, notebookId, type, title, content || null, url || null]
         );
 
@@ -86,6 +90,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         await pool.query(
             'UPDATE notebooks SET updated_at = NOW() WHERE id = $1',
             [notebookId]
+        );
+
+        // Update user stats
+        await pool.query(
+            `INSERT INTO user_stats (user_id, sources_added) 
+             VALUES ($1, 1)
+             ON CONFLICT (user_id) 
+             DO UPDATE SET sources_added = user_stats.sources_added + 1, updated_at = NOW()`,
+            [req.userId]
         );
 
         res.status(201).json({ success: true, source: result.rows[0] });
@@ -127,9 +140,9 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
 
         const result = await pool.query(
             `UPDATE sources s SET ${updates.join(', ')}
-       FROM notebooks n
-       WHERE s.id = $${paramIndex++} AND s.notebook_id = n.id AND n.user_id = $${paramIndex++}
-       RETURNING s.*`,
+             FROM notebooks n
+             WHERE s.id = $${paramIndex++} AND s.notebook_id = n.id AND n.user_id = $${paramIndex}
+             RETURNING s.*`,
             values
         );
 
@@ -150,9 +163,9 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
         const { id } = req.params;
         const result = await pool.query(
             `DELETE FROM sources s
-       USING notebooks n
-       WHERE s.id = $1 AND s.notebook_id = n.id AND n.user_id = $2
-       RETURNING s.id`,
+             USING notebooks n
+             WHERE s.id = $1 AND s.notebook_id = n.id AND n.user_id = $2
+             RETURNING s.id`,
             [id, req.userId]
         );
 
@@ -167,47 +180,108 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Bulk operations
+// Bulk delete sources
 router.post('/bulk/delete', async (req: AuthRequest, res: Response) => {
     try {
         const { ids } = req.body;
-        if (!ids || !ids.length) return res.status(400).json({ error: 'IDs required' });
-        const result = await pool.query('SELECT bulk_delete_sources($1) as count', [ids]);
-        res.json({ success: true, count: result.rows[0].count });
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ error: 'IDs array required' });
+        }
+
+        const result = await pool.query(
+            `DELETE FROM sources s
+             USING notebooks n
+             WHERE s.id = ANY($1) AND s.notebook_id = n.id AND n.user_id = $2
+             RETURNING s.id`,
+            [ids, req.userId]
+        );
+
+        res.json({ success: true, count: result.rowCount });
     } catch (error) {
         console.error('Bulk delete error:', error);
         res.status(500).json({ error: 'Failed to delete sources' });
     }
 });
 
+// Bulk move sources
 router.post('/bulk/move', async (req: AuthRequest, res: Response) => {
     try {
         const { ids, targetNotebookId } = req.body;
-        if (!ids || !targetNotebookId) return res.status(400).json({ error: 'Missing parameters' });
-        const result = await pool.query('SELECT bulk_move_sources($1, $2) as count', [ids, targetNotebookId]);
-        res.json({ success: true, count: result.rows[0].count });
+        if (!ids || !targetNotebookId) {
+            return res.status(400).json({ error: 'Missing parameters' });
+        }
+
+        // Verify target notebook belongs to user
+        const notebookResult = await pool.query(
+            'SELECT id FROM notebooks WHERE id = $1 AND user_id = $2',
+            [targetNotebookId, req.userId]
+        );
+
+        if (notebookResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Target notebook not found' });
+        }
+
+        const result = await pool.query(
+            `UPDATE sources s SET notebook_id = $1, updated_at = NOW()
+             FROM notebooks n
+             WHERE s.id = ANY($2) AND s.notebook_id = n.id AND n.user_id = $3
+             RETURNING s.id`,
+            [targetNotebookId, ids, req.userId]
+        );
+
+        res.json({ success: true, count: result.rowCount });
     } catch (error) {
         console.error('Bulk move error:', error);
         res.status(500).json({ error: 'Failed to move sources' });
     }
 });
 
+// Bulk add tags
 router.post('/bulk/tags/add', async (req: AuthRequest, res: Response) => {
     try {
         const { sourceIds, tagIds } = req.body;
-        const result = await pool.query('SELECT bulk_add_tags($1, $2) as count', [sourceIds, tagIds]);
-        res.json({ success: true, count: result.rows[0].count });
+        if (!sourceIds || !tagIds) {
+            return res.status(400).json({ error: 'Missing parameters' });
+        }
+
+        let count = 0;
+        for (const sourceId of sourceIds) {
+            for (const tagId of tagIds) {
+                try {
+                    await pool.query(
+                        `INSERT INTO source_tags (source_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                        [sourceId, tagId]
+                    );
+                    count++;
+                } catch (e) {
+                    // Ignore individual failures
+                }
+            }
+        }
+
+        res.json({ success: true, count });
     } catch (error) {
+        console.error('Bulk add tags error:', error);
         res.status(500).json({ error: 'Failed to add tags' });
     }
 });
 
+// Bulk remove tags
 router.post('/bulk/tags/remove', async (req: AuthRequest, res: Response) => {
     try {
         const { sourceIds, tagIds } = req.body;
-        const result = await pool.query('SELECT bulk_remove_tags($1, $2) as count', [sourceIds, tagIds]);
-        res.json({ success: true, count: result.rows[0].count });
+        if (!sourceIds || !tagIds) {
+            return res.status(400).json({ error: 'Missing parameters' });
+        }
+
+        const result = await pool.query(
+            `DELETE FROM source_tags WHERE source_id = ANY($1) AND tag_id = ANY($2)`,
+            [sourceIds, tagIds]
+        );
+
+        res.json({ success: true, count: result.rowCount });
     } catch (error) {
+        console.error('Bulk remove tags error:', error);
         res.status(500).json({ error: 'Failed to remove tags' });
     }
 });
@@ -215,8 +289,22 @@ router.post('/bulk/tags/remove', async (req: AuthRequest, res: Response) => {
 // Search sources
 router.post('/search', async (req: AuthRequest, res: Response) => {
     try {
-        const { query, limit } = req.body;
-        const result = await pool.query('SELECT * FROM search_sources($1, $2, $3)', [req.userId, query, limit || 20]);
+        const { query, limit = 20 } = req.body;
+        
+        if (!query) {
+            return res.status(400).json({ error: 'Query required' });
+        }
+
+        const result = await pool.query(
+            `SELECT s.* FROM sources s
+             INNER JOIN notebooks n ON s.notebook_id = n.id
+             WHERE n.user_id = $1 
+               AND (s.title ILIKE $2 OR s.content ILIKE $2)
+             ORDER BY s.updated_at DESC
+             LIMIT $3`,
+            [req.userId, `%${query}%`, limit]
+        );
+
         res.json({ success: true, sources: result.rows });
     } catch (error) {
         console.error('Search sources error:', error);
