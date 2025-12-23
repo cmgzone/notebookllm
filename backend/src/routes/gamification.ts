@@ -137,7 +137,7 @@ router.post('/challenges/batch', async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'challenges array required' });
         }
 
-        const results = [];
+        const results: any[] = [];
 
         for (const ch of challenges) {
             const id = uuidv4();

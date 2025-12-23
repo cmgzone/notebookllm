@@ -104,7 +104,7 @@ router.post('/:projectId/chapters/batch', async (req: AuthRequest, res: Response
             return res.status(400).json({ error: 'chapters array required' });
         }
 
-        const results = [];
+        const results: any[] = [];
 
         await pool.query('BEGIN');
         for (const ch of chapters) {

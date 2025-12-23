@@ -60,7 +60,7 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
         await pool.query('DELETE FROM chunks WHERE source_id = $1', [sourceId]);
 
         // Insert new chunks
-        const insertedChunks = [];
+        const insertedChunks: any[] = [];
         for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i];
             const id = uuidv4();
