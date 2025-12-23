@@ -135,7 +135,7 @@ router.delete('/revoke/:notebookId/:token', authenticateToken, async (req: AuthR
             [notebookId, token]
         );
 
-        res.json({ success: true, revoked: result.rowCount > 0 });
+        res.json({ success: true, revoked: (result.rowCount ?? 0) > 0 });
     } catch (error) {
         console.error('Revoke share error:', error);
         res.status(500).json({ error: 'Failed to revoke share' });

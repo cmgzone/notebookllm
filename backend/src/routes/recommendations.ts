@@ -96,7 +96,12 @@ router.get('/notebooks/suggested', async (req: AuthRequest, res: Response) => {
 // Get study recommendations
 router.get('/study/next', async (req: AuthRequest, res: Response) => {
     try {
-        const recommendations = [];
+        const recommendations: Array<{
+            type: string;
+            title: string;
+            count: number;
+            items: any[];
+        }> = [];
 
         // Check for flashcards due for review
         const flashcardsResult = await pool.query(

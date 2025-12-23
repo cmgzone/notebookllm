@@ -70,7 +70,7 @@ router.post('/flashcards/batch', async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'deckId and flashcards required' });
         }
 
-        const results = [];
+        const results: any[] = [];
         for (const fc of flashcards) {
             const id = fc.id || uuidv4();
             const result = await pool.query(
