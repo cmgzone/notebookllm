@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 class SubscriptionModel {
   final String id;
   final String userId;
@@ -28,21 +30,39 @@ class SubscriptionModel {
   });
 
   factory SubscriptionModel.fromJson(Map<String, dynamic> json) {
-    return SubscriptionModel(
-      id: json['id'] as String,
-      userId: json['user_id'] as String,
-      planId: json['plan_id'] as String,
-      planName: json['plan_name'] as String? ?? 'Free Plan',
-      currentCredits: _parseInt(json['current_credits']) ?? 0,
-      creditsConsumedThisMonth:
-          _parseInt(json['credits_consumed_this_month']) ?? 0,
-      lastRenewalDate: _parseDate(json['last_renewal_date']),
-      nextRenewalDate: _parseDate(json['next_renewal_date']),
-      status: json['status'] as String? ?? 'active',
-      creditsPerMonth: _parseInt(json['credits_per_month']) ?? 30,
-      planPrice: _parseDouble(json['plan_price']) ?? 0.0,
-      isFreePlan: json['is_free_plan'] as bool? ?? false,
-    );
+    developer.log('[SUB_MODEL] Parsing JSON: $json', name: 'SubscriptionModel');
+
+    try {
+      final model = SubscriptionModel(
+        id: _parseString(json['id']) ?? '',
+        userId: _parseString(json['user_id']) ?? '',
+        planId: _parseString(json['plan_id']) ?? '',
+        planName: _parseString(json['plan_name']) ?? 'Free Plan',
+        currentCredits: _parseInt(json['current_credits']) ?? 0,
+        creditsConsumedThisMonth:
+            _parseInt(json['credits_consumed_this_month']) ?? 0,
+        lastRenewalDate: _parseDate(json['last_renewal_date']),
+        nextRenewalDate: _parseDate(json['next_renewal_date']),
+        status: _parseString(json['status']) ?? 'active',
+        creditsPerMonth: _parseInt(json['credits_per_month']) ?? 30,
+        planPrice: _parseDouble(json['plan_price']) ?? 0.0,
+        isFreePlan: _parseBool(json['is_free_plan']) ?? false,
+      );
+
+      developer.log(
+          '[SUB_MODEL] Parsed successfully: ${model.planName}, credits: ${model.currentCredits}',
+          name: 'SubscriptionModel');
+      return model;
+    } catch (e, stack) {
+      developer.log('[SUB_MODEL] Error parsing: $e',
+          name: 'SubscriptionModel', error: e, stackTrace: stack);
+      rethrow;
+    }
+  }
+
+  static String? _parseString(dynamic value) {
+    if (value == null) return null;
+    return value.toString();
   }
 
   static int? _parseInt(dynamic value) {
@@ -58,6 +78,14 @@ class SubscriptionModel {
     if (value is double) return value;
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  static bool? _parseBool(dynamic value) {
+    if (value == null) return null;
+    if (value is bool) return value;
+    if (value is String) return value.toLowerCase() == 'true';
+    if (value is int) return value != 0;
     return null;
   }
 

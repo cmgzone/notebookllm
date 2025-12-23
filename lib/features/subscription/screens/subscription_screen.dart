@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/auth/auth_service.dart';
+import '../../../core/auth/custom_auth_service.dart';
 import '../../../core/security/global_credentials_service.dart';
 
 import '../providers/subscription_provider.dart';
@@ -60,7 +60,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   Widget build(BuildContext context) {
     final subscription = ref.watch(userSubscriptionProvider);
     final packages = ref.watch(creditPackagesProvider);
-    final user = ref.watch(currentUserProvider);
+    final authState = ref.watch(customAuthStateProvider);
+    final user = authState.user;
 
     return Scaffold(
       appBar: AppBar(
@@ -77,7 +78,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             // Try to create subscription for user
             return _NoSubscriptionView(
               onRetry: () async {
-                final userId = user?['id'];
+                final userId = user?.uid;
                 if (userId != null) {
                   final service = ref.read(subscriptionServiceProvider);
                   await service.createSubscriptionForUser(userId);
@@ -123,7 +124,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   // Available Plans Section
                   _AvailablePlansSection(
                     currentPlanId: subscriptionData.planId,
-                    userId: user?['id'],
+                    userId: user?.uid,
                   ),
 
                   const SizedBox(height: 32),
@@ -178,7 +179,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                                     onPurchase: () {
                                       if (user != null) {
                                         _purchasePackage(
-                                            context, pkg, user['id']);
+                                            context, pkg, user.uid);
                                       }
                                     },
                                   ))
@@ -196,7 +197,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () {
                         if (user != null) {
-                          _showTransactionHistory(context, ref, user['id']);
+                          _showTransactionHistory(context, ref, user.uid);
                         }
                       },
                       icon: const Icon(Icons.history),
