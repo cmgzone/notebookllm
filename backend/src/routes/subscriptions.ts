@@ -295,12 +295,16 @@ router.post('/consume', async (req: AuthRequest, res: Response) => {
 // Create subscription for user
 router.post('/create', async (req: AuthRequest, res: Response) => {
     try {
+        const userId = req.userId!;
+        console.log(`[SUB] Creating subscription for user: ${userId}`);
+
         const existing = await pool.query(
             'SELECT id FROM user_subscriptions WHERE user_id = $1',
-            [req.userId]
+            [userId]
         );
 
         if (existing.rows.length > 0) {
+            console.log(`[SUB] Subscription already exists for user ${userId}`);
             return res.json({ message: 'Subscription already exists' });
         }
 
@@ -310,11 +314,15 @@ router.post('/create', async (req: AuthRequest, res: Response) => {
             LIMIT 1
         `);
 
+        console.log(`[SUB] Free plan query result:`, planResult.rows);
+
         if (planResult.rows.length === 0) {
+            console.log(`[SUB] No free plan found!`);
             return res.status(404).json({ error: 'No free plan available' });
         }
 
         const freePlan = planResult.rows[0];
+        console.log(`[SUB] Using free plan: ${freePlan.id} with ${freePlan.credits_per_month} credits`);
 
         await pool.query(`
             INSERT INTO user_subscriptions (
@@ -325,8 +333,9 @@ router.post('/create', async (req: AuthRequest, res: Response) => {
                 $1, $2, $3,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 month'
             )
-        `, [req.userId, freePlan.id, freePlan.credits_per_month]);
+        `, [userId, freePlan.id, freePlan.credits_per_month]);
 
+        console.log(`[SUB] Successfully created subscription for user ${userId}`);
         res.json({ message: 'Subscription created', planId: freePlan.id });
     } catch (error) {
         console.error('Error creating subscription:', error);
