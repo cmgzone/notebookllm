@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_service.dart';
 import '../models/subscription_model.dart';
@@ -17,9 +18,26 @@ class SubscriptionService {
 
   /// Fetch user's current subscription
   Future<SubscriptionModel?> getUserSubscription(String userId) async {
-    final result = await _api.getSubscription();
-    if (result == null) return null;
-    return SubscriptionModel.fromJson(result);
+    try {
+      developer.log('[SUB_SVC] Calling getSubscription API...',
+          name: 'SubscriptionService');
+      final result = await _api.getSubscription();
+      developer.log('[SUB_SVC] API response: $result',
+          name: 'SubscriptionService');
+      if (result == null) {
+        developer.log('[SUB_SVC] Result is null', name: 'SubscriptionService');
+        return null;
+      }
+      final model = SubscriptionModel.fromJson(result);
+      developer.log(
+          '[SUB_SVC] Parsed model: ${model.planName}, credits: ${model.currentCredits}',
+          name: 'SubscriptionService');
+      return model;
+    } catch (e, stack) {
+      developer.log('[SUB_SVC] Error: $e',
+          name: 'SubscriptionService', error: e, stackTrace: stack);
+      rethrow;
+    }
   }
 
   /// Get all active credit packages

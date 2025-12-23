@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/auth_service.dart';
 import '../services/subscription_service.dart';
@@ -10,21 +11,38 @@ final userSubscriptionProvider =
     StreamProvider<SubscriptionModel?>((ref) async* {
   final user = ref.watch(currentUserProvider);
   if (user == null) {
+    developer.log('[SUB] No user logged in', name: 'SubscriptionProvider');
     yield null;
     return;
   }
 
   final service = ref.watch(subscriptionServiceProvider);
   final userId = user['id'] as String;
+  developer.log('[SUB] Fetching subscription for user: $userId',
+      name: 'SubscriptionProvider');
 
   // Initial fetch
-  yield await service.getUserSubscription(userId);
+  try {
+    final subscription = await service.getUserSubscription(userId);
+    developer.log('[SUB] Got subscription: ${subscription?.planName ?? "null"}',
+        name: 'SubscriptionProvider');
+    yield subscription;
+  } catch (e) {
+    developer.log('[SUB] Error fetching subscription: $e',
+        name: 'SubscriptionProvider');
+    yield null;
+  }
 
   // Refresh every 30 seconds
   await for (final _ in Stream.periodic(const Duration(seconds: 30))) {
     final currentUser = ref.read(currentUserProvider);
     if (currentUser == null) return;
-    yield await service.getUserSubscription(currentUser['id'] as String);
+    try {
+      yield await service.getUserSubscription(currentUser['id'] as String);
+    } catch (e) {
+      developer.log('[SUB] Error refreshing subscription: $e',
+          name: 'SubscriptionProvider');
+    }
   }
 });
 
