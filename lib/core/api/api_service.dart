@@ -22,18 +22,31 @@ class ApiService {
 
   // Get stored token
   Future<String?> getToken() async {
-    _token ??= await _storage.read(key: _tokenKey);
+    if (_token != null) {
+      developer.log('[API] Using cached token', name: 'ApiService');
+      return _token;
+    }
+
+    final storedToken = await _storage.read(key: _tokenKey);
+    developer.log(
+        '[API] Read token from storage: ${storedToken != null ? "exists (${storedToken.length} chars)" : "null"}',
+        name: 'ApiService');
+    _token = storedToken;
     return _token;
   }
 
   // Store token
   Future<void> setToken(String token) async {
+    developer.log('[API] Storing token (${token.length} chars)',
+        name: 'ApiService');
     _token = token;
     await _storage.write(key: _tokenKey, value: token);
+    developer.log('[API] Token stored successfully', name: 'ApiService');
   }
 
   // Clear token
   Future<void> clearToken() async {
+    developer.log('[API] Clearing token', name: 'ApiService');
     _token = null;
     await _storage.delete(key: _tokenKey);
   }
@@ -112,14 +125,19 @@ class ApiService {
   }
 
   // Handle HTTP response
-  Map<String, dynamic> _handleResponse(http.Response response) {
+  Map<String, dynamic> _handleResponse(http.Response response,
+      {bool clearTokenOn401 = true}) {
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return body;
     } else if (response.statusCode == 401) {
-      // Clear invalid token
-      clearToken();
+      developer.log('[API] Got 401 response, clearTokenOn401=$clearTokenOn401',
+          name: 'ApiService');
+      if (clearTokenOn401) {
+        // Clear invalid token
+        clearToken();
+      }
       throw Exception('Unauthorized - please login again');
     } else {
       throw Exception(
@@ -167,8 +185,17 @@ class ApiService {
     return response;
   }
 
-  Future<Map<String, dynamic>> getCurrentUser() async {
-    return await get('/auth/me');
+  Future<Map<String, dynamic>> getCurrentUser(
+      {bool clearTokenOn401 = true}) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/auth/me'),
+        headers: await _getHeaders(),
+      );
+      return _handleResponse(response, clearTokenOn401: clearTokenOn401);
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
   }
 
   Future<void> requestPasswordReset(String email) async {

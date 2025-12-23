@@ -545,7 +545,7 @@ class CustomAuthService {
     await _secureStorage.delete(key: _userDataKey);
   }
 
-  Future<AppUser?> getCurrentUser() async {
+  Future<AppUser?> getCurrentUser({bool clearTokenOn401 = true}) async {
     String? userData;
     try {
       // First try to read from cache
@@ -553,8 +553,9 @@ class CustomAuthService {
       developer.log('getCurrentUser: cached data exists=${userData != null}',
           name: 'CustomAuthService');
 
-      // Try to refresh from API
-      final response = await _api.getCurrentUser();
+      // Try to refresh from API (pass clearTokenOn401 flag)
+      final response =
+          await _api.getCurrentUser(clearTokenOn401: clearTokenOn401);
       developer.log(
           'getCurrentUser: API response success=${response['success']}',
           name: 'CustomAuthService');
@@ -704,7 +705,8 @@ class CustomAuthNotifier extends StateNotifier<AuthState> {
 
       if (hasToken) {
         // Try to get user from API first, fall back to cache
-        final user = await _authService.getCurrentUser();
+        // Don't clear token on 401 during session restore
+        final user = await _authService.getCurrentUser(clearTokenOn401: false);
         developer.log('Auth init: user=${user?.email}',
             name: 'CustomAuthNotifier');
 
@@ -724,7 +726,8 @@ class CustomAuthNotifier extends StateNotifier<AuthState> {
       developer.log('Auth init error: $e', name: 'CustomAuthNotifier');
       // On error, try to use cached user if available
       try {
-        final cachedUser = await _authService.getCurrentUser();
+        final cachedUser =
+            await _authService.getCurrentUser(clearTokenOn401: false);
         if (cachedUser != null) {
           developer.log('Auth init: using cached user ${cachedUser.email}',
               name: 'CustomAuthNotifier');
