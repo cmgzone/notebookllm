@@ -14,11 +14,11 @@ router.get('/seed-defaults', async (req: Request, res: Response) => {
             CREATE TABLE IF NOT EXISTS subscription_plans (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 name TEXT NOT NULL,
+                description TEXT,
                 credits_per_month INTEGER NOT NULL,
                 price DECIMAL NOT NULL,
                 is_free_plan BOOLEAN DEFAULT false,
                 is_active BOOLEAN DEFAULT true,
-                features JSONB DEFAULT '[]',
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
@@ -61,10 +61,10 @@ router.get('/seed-defaults', async (req: Request, res: Response) => {
         const plans = await pool.query('SELECT COUNT(*) FROM subscription_plans');
         if (parseInt(plans.rows[0].count) === 0) {
             await pool.query(`
-                INSERT INTO subscription_plans (name, credits_per_month, price, is_free_plan, features) VALUES
-                ('Free', 50, 0, true, '["Basic features", "50 credits/month", "5 notebooks"]'),
-                ('Pro', 1000, 9.99, false, '["Advanced features", "1000 credits/month", "Unlimited notebooks", "Priority support"]'),
-                ('Ultra', 5000, 29.99, false, '["All features", "5000 credits/month", "Unlimited everything", "VIP support", "Early access"]')
+                INSERT INTO subscription_plans (name, credits_per_month, price, is_free_plan, description) VALUES
+                ('Free', 50, 0, true, 'Basic features, 50 credits/month, 5 notebooks'),
+                ('Pro', 1000, 9.99, false, 'Advanced features, 1000 credits/month, Unlimited notebooks, Priority support'),
+                ('Ultra', 5000, 29.99, false, 'All features, 5000 credits/month, Unlimited everything, VIP support, Early access')
             `);
         }
 
@@ -101,8 +101,7 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
                 sp.name as plan_name,
                 sp.credits_per_month,
                 sp.price as plan_price,
-                sp.is_free_plan,
-                sp.features
+                sp.is_free_plan
             FROM user_subscriptions us
             JOIN subscription_plans sp ON us.plan_id = sp.id
             WHERE us.user_id = $1
@@ -119,8 +118,8 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
             if (freePlanResult.rows.length === 0) {
                 // Create free plan if it doesn't exist
                 freePlanResult = await pool.query(`
-                    INSERT INTO subscription_plans (name, credits_per_month, price, is_free_plan, features, is_active) 
-                    VALUES ('Free', 50, 0, true, '["Basic features", "50 credits/month"]', true)
+                    INSERT INTO subscription_plans (name, credits_per_month, price, is_free_plan, is_active) 
+                    VALUES ('Free', 50, 0, true, true)
                     RETURNING id, credits_per_month
                 `);
             }
@@ -143,8 +142,7 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
                     sp.name as plan_name,
                     sp.credits_per_month,
                     sp.price as plan_price,
-                    sp.is_free_plan,
-                    sp.features
+                    sp.is_free_plan
                 FROM user_subscriptions us
                 JOIN subscription_plans sp ON us.plan_id = sp.id
                 WHERE us.user_id = $1
