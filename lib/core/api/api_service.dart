@@ -574,8 +574,13 @@ class ApiService {
   // ============ SUBSCRIPTIONS ============
 
   Future<Map<String, dynamic>?> getSubscription() async {
+    developer.log('[API] Calling /subscriptions/me', name: 'ApiService');
     final response = await get('/subscriptions/me');
-    return response['subscription'];
+    developer.log('[API] /subscriptions/me response: $response',
+        name: 'ApiService');
+    final subscription = response['subscription'];
+    developer.log('[API] Subscription data: $subscription', name: 'ApiService');
+    return subscription;
   }
 
   Future<List<Map<String, dynamic>>> getSubscriptionPlans() async {
