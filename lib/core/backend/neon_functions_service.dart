@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_service.dart';
-import '../auth/auth_service.dart';
+import '../auth/custom_auth_service.dart';
 
 final neonFunctionsServiceProvider = Provider<NeonFunctionsService>((ref) {
   return NeonFunctionsService(ref);
@@ -13,7 +13,7 @@ class NeonFunctionsService {
   NeonFunctionsService(this.ref);
 
   ApiService get _api => ref.read(apiServiceProvider);
-  String? get _userId => ref.read(currentUserProvider)?['id'];
+  String? get _userId => ref.read(customAuthStateProvider).user?.uid;
 
   // ============================================
   // ANALYTICS

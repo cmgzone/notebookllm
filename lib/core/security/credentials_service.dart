@@ -4,7 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../auth/auth_service.dart';
+import '../auth/custom_auth_service.dart';
 
 final credentialsServiceProvider = Provider<CredentialsService>((ref) {
   return CredentialsService(ref);
@@ -57,20 +57,22 @@ class CredentialsService {
     required String service,
     required String apiKey,
   }) async {
-    final user = ref.read(currentUserProvider);
+    final authState = ref.read(customAuthStateProvider);
+    final user = authState.user;
     if (user == null) throw Exception('User not logged in');
 
-    final userId = user['id'] as String;
+    final userId = user.uid;
     final encryptedKey = _encryptValue(apiKey, userId);
     await _storage.write(key: 'user_${userId}_$service', value: encryptedKey);
   }
 
   // Retrieve and decrypt API key from secure storage
   Future<String?> getApiKey(String service) async {
-    final user = ref.read(currentUserProvider);
+    final authState = ref.read(customAuthStateProvider);
+    final user = authState.user;
     if (user == null) return null;
 
-    final userId = user['id'] as String;
+    final userId = user.uid;
     final stored = await _storage.read(key: 'user_${userId}_$service');
     if (stored == null || stored.isEmpty) return null;
 
@@ -79,16 +81,18 @@ class CredentialsService {
 
   // Delete API key
   Future<void> deleteApiKey(String service) async {
-    final user = ref.read(currentUserProvider);
+    final authState = ref.read(customAuthStateProvider);
+    final user = authState.user;
     if (user == null) return;
 
-    final userId = user['id'] as String;
+    final userId = user.uid;
     await _storage.delete(key: 'user_${userId}_$service');
   }
 
   // List all stored services for user
   Future<List<String>> listServices() async {
-    final user = ref.read(currentUserProvider);
+    final authState = ref.read(customAuthStateProvider);
+    final user = authState.user;
     if (user == null) return [];
 
     // FlutterSecureStorage doesn't have a list method, so we check known services
@@ -101,7 +105,7 @@ class CredentialsService {
       'murf'
     ];
 
-    final userId = user['id'] as String;
+    final userId = user.uid;
     for (final service in knownServices) {
       final stored = await _storage.read(key: 'user_${userId}_$service');
       if (stored != null && stored.isNotEmpty) {

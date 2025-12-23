@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
-import '../../core/auth/auth_service.dart';
+import '../../core/auth/custom_auth_service.dart';
 import '../../core/api/api_service.dart';
 import '../../core/rag/smart_ingestion_provider.dart';
 import '../gamification/gamification_provider.dart';
@@ -19,14 +19,15 @@ class SourceNotifier extends StateNotifier<List<Source>> {
 
   Future<void> loadSources() async {
     try {
-      final user = ref.read(currentUserProvider);
+      final authState = ref.read(customAuthStateProvider);
+      final user = authState.user;
       if (user == null) {
         debugPrint('⚠️ Source loadSources: No user logged in');
         state = [];
         return;
       }
 
-      debugPrint('✅ Source loadSources: user=${user['id']}');
+      debugPrint('✅ Source loadSources: user=${user.uid}');
 
       final apiService = ref.read(apiServiceProvider);
 
@@ -136,7 +137,8 @@ class SourceNotifier extends StateNotifier<List<Source>> {
     String? notebookId,
   }) async {
     try {
-      final user = ref.read(currentUserProvider);
+      final authState = ref.read(customAuthStateProvider);
+      final user = authState.user;
       if (user == null) {
         debugPrint('⚠️ Error: No user logged in - cannot add source');
         throw Exception('User must be logged in to add sources');
@@ -145,7 +147,7 @@ class SourceNotifier extends StateNotifier<List<Source>> {
       final apiService = ref.read(apiServiceProvider);
 
       debugPrint(
-          'SourceNotifier addSource: title=$title, type=$type, user=${user['id']}');
+          'SourceNotifier addSource: title=$title, type=$type, user=${user.uid}');
 
       // Get or use notebook
       String finalNotebookId;
@@ -225,7 +227,7 @@ class SourceNotifier extends StateNotifier<List<Source>> {
 final sourceProvider = StateNotifierProvider<SourceNotifier, List<Source>>(
   (ref) {
     // Watch auth state to trigger rebuild on login/logout
-    ref.watch(currentUserProvider);
+    ref.watch(customAuthStateProvider);
     return SourceNotifier(ref);
   },
 );

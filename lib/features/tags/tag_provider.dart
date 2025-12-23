@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
-import '../../core/auth/auth_service.dart';
+import '../../core/auth/custom_auth_service.dart';
 import '../../core/api/api_service.dart';
 import 'tag.dart';
 
@@ -17,7 +17,8 @@ class TagNotifier extends StateNotifier<List<Tag>> {
 
   Future<void> loadTags() async {
     try {
-      final user = ref.read(currentUserProvider);
+      final authState = ref.read(customAuthStateProvider);
+      final user = authState.user;
       if (user == null) return;
 
       final apiService = ref.read(apiServiceProvider);
@@ -38,7 +39,8 @@ class TagNotifier extends StateNotifier<List<Tag>> {
 
   Future<String?> createTag(String name, String color) async {
     try {
-      final user = ref.read(currentUserProvider);
+      final authState = ref.read(customAuthStateProvider);
+      final user = authState.user;
       if (user == null) return null;
 
       final apiService = ref.read(apiServiceProvider);
@@ -65,7 +67,7 @@ class TagNotifier extends StateNotifier<List<Tag>> {
 
 final tagProvider = StateNotifierProvider<TagNotifier, List<Tag>>(
   (ref) {
-    ref.watch(currentUserProvider);
+    ref.watch(customAuthStateProvider);
     return TagNotifier(ref);
   },
 );

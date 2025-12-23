@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'notebook.dart';
 import '../gamification/gamification_provider.dart';
-import '../../core/auth/auth_service.dart';
+import '../../core/auth/custom_auth_service.dart';
 import '../../core/api/api_service.dart';
 
 class NotebookNotifier extends StateNotifier<List<Notebook>> {
@@ -18,7 +18,8 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
 
   Future<void> loadNotebooks() async {
     try {
-      final user = ref.read(currentUserProvider);
+      final authState = ref.read(customAuthStateProvider);
+      final user = authState.user;
       if (user == null) {
         debugPrint('⚠️ NotebookNotifier: No user logged in');
         state = [];
@@ -26,7 +27,7 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
       }
 
       final apiService = ref.read(apiServiceProvider);
-      debugPrint('Notebook loadNotebooks: user=${user['id']}');
+      debugPrint('Notebook loadNotebooks: user=${user.uid}');
 
       final notebooks = await apiService.getNotebooks();
 
@@ -52,13 +53,14 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
 
   Future<void> addNotebook(String title) async {
     try {
-      final user = ref.read(currentUserProvider);
+      final authState = ref.read(customAuthStateProvider);
+      final user = authState.user;
       if (user == null) return;
 
       final apiService = ref.read(apiServiceProvider);
 
       debugPrint(
-          'NotebookNotifier addNotebook: title=$title, user=${user['id']}');
+          'NotebookNotifier addNotebook: title=$title, user=${user.uid}');
 
       final notebookData = await apiService.createNotebook(
         title: title,
@@ -157,7 +159,7 @@ final notebookProvider =
     StateNotifierProvider<NotebookNotifier, List<Notebook>>(
   (ref) {
     // Watch auth state to trigger rebuild on login/logout
-    ref.watch(currentUserProvider);
+    ref.watch(customAuthStateProvider);
     return NotebookNotifier(ref);
   },
 );
