@@ -548,29 +548,56 @@ class CustomAuthService {
   Future<AppUser?> getCurrentUser() async {
     String? userData;
     try {
+      // First try to read from cache
       userData = await _secureStorage.read(key: _userDataKey);
-      if (userData != null) {
-        try {
-          final map = jsonDecode(userData);
-          return AppUser.fromMap(map);
-        } catch (e) {
-          // ignore bad cache
-        }
-      }
+      developer.log('getCurrentUser: cached data exists=${userData != null}',
+          name: 'CustomAuthService');
 
+      // Try to refresh from API
       final response = await _api.getCurrentUser();
+      developer.log(
+          'getCurrentUser: API response success=${response['success']}',
+          name: 'CustomAuthService');
+
       if (response['success'] == true && response['user'] != null) {
         final user = AppUser.fromMap(response['user']);
         await _cacheUser(user);
+        developer.log('getCurrentUser: refreshed user from API: ${user.email}',
+            name: 'CustomAuthService');
         return user;
       }
-      return null;
-    } catch (e) {
+
+      // API didn't return user, try cache
       if (userData != null) {
         try {
           final map = jsonDecode(userData);
-          return AppUser.fromMap(map);
-        } catch (e) {/* ignore */}
+          final user = AppUser.fromMap(map);
+          developer.log('getCurrentUser: using cached user: ${user.email}',
+              name: 'CustomAuthService');
+          return user;
+        } catch (e) {
+          developer.log('getCurrentUser: failed to parse cached user: $e',
+              name: 'CustomAuthService');
+        }
+      }
+
+      return null;
+    } catch (e) {
+      developer.log('getCurrentUser: API error: $e', name: 'CustomAuthService');
+      // On API error, fall back to cached user
+      if (userData != null) {
+        try {
+          final map = jsonDecode(userData);
+          final user = AppUser.fromMap(map);
+          developer.log(
+              'getCurrentUser: using cached user after error: ${user.email}',
+              name: 'CustomAuthService');
+          return user;
+        } catch (parseError) {
+          developer.log(
+              'getCurrentUser: failed to parse cached user: $parseError',
+              name: 'CustomAuthService');
+        }
       }
       return null;
     }
@@ -582,7 +609,10 @@ class CustomAuthService {
   }
 
   Future<bool> isSessionValid() async {
-    return await _api.getToken() != null;
+    final token = await _api.getToken();
+    developer.log('isSessionValid: token exists=${token != null}',
+        name: 'CustomAuthService');
+    return token != null;
   }
 
   Future<void> updateProfile({
@@ -667,19 +697,41 @@ class CustomAuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(status: AuthStatus.loading);
 
     try {
-      final isValid = await _authService.isSessionValid();
+      // First check if we have a stored token
+      final hasToken = await _authService.isSessionValid();
+      developer.log('Auth init: hasToken=$hasToken',
+          name: 'CustomAuthNotifier');
 
-      if (isValid) {
+      if (hasToken) {
+        // Try to get user from API first, fall back to cache
         final user = await _authService.getCurrentUser();
+        developer.log('Auth init: user=${user?.email}',
+            name: 'CustomAuthNotifier');
+
         if (user != null) {
           state = AuthState(status: AuthStatus.authenticated, user: user);
+          developer.log('Auth init: authenticated as ${user.email}',
+              name: 'CustomAuthNotifier');
           return;
         }
       }
 
+      // No valid session
+      developer.log('Auth init: no valid session, unauthenticated',
+          name: 'CustomAuthNotifier');
       state = const AuthState(status: AuthStatus.unauthenticated);
     } catch (e) {
       developer.log('Auth init error: $e', name: 'CustomAuthNotifier');
+      // On error, try to use cached user if available
+      try {
+        final cachedUser = await _authService.getCurrentUser();
+        if (cachedUser != null) {
+          developer.log('Auth init: using cached user ${cachedUser.email}',
+              name: 'CustomAuthNotifier');
+          state = AuthState(status: AuthStatus.authenticated, user: cachedUser);
+          return;
+        }
+      } catch (_) {}
       state = const AuthState(status: AuthStatus.unauthenticated);
     }
   }
