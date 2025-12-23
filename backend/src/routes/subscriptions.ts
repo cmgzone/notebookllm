@@ -94,6 +94,7 @@ router.use(authenticateToken);
 router.get('/me', async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.userId!;
+        console.log(`[SUB] Fetching subscription for user: ${userId}`);
 
         const result = await pool.query(`
             SELECT 
@@ -109,31 +110,50 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
 
         if (result.rows.length === 0) {
             // Auto-provision free subscription
-            console.log(`[SUB] Auto-provisioning subscription for user ${userId}`);
+            console.log(`[SUB] No subscription found, auto-provisioning for user ${userId}`);
+
+            // First check all available plans
+            const allPlans = await pool.query(`SELECT id, name, is_free_plan, credits_per_month FROM subscription_plans`);
+            console.log(`[SUB] Available plans:`, allPlans.rows);
 
             let freePlanResult = await pool.query(
                 `SELECT id, credits_per_month FROM subscription_plans WHERE is_free_plan = TRUE LIMIT 1`
             );
 
             if (freePlanResult.rows.length === 0) {
+                console.log(`[SUB] No free plan found, creating one...`);
                 // Create free plan if it doesn't exist
                 freePlanResult = await pool.query(`
                     INSERT INTO subscription_plans (name, credits_per_month, price, is_free_plan, is_active) 
                     VALUES ('Free', 50, 0, true, true)
                     RETURNING id, credits_per_month
                 `);
+                console.log(`[SUB] Created free plan:`, freePlanResult.rows[0]);
             }
 
-            await pool.query(`
-                INSERT INTO user_subscriptions (
-                    user_id, plan_id, current_credits, 
-                    last_renewal_date, next_renewal_date
-                )
-                VALUES (
-                    $1, $2, $3,
-                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 month'
-                )
-            `, [userId, freePlanResult.rows[0].id, freePlanResult.rows[0].credits_per_month]);
+            console.log(`[SUB] Using free plan: ${freePlanResult.rows[0].id} with ${freePlanResult.rows[0].credits_per_month} credits`);
+
+            try {
+                await pool.query(`
+                    INSERT INTO user_subscriptions (
+                        user_id, plan_id, current_credits, 
+                        last_renewal_date, next_renewal_date
+                    )
+                    VALUES (
+                        $1, $2, $3,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 month'
+                    )
+                `, [userId, freePlanResult.rows[0].id, freePlanResult.rows[0].credits_per_month]);
+                console.log(`[SUB] Successfully created subscription for user ${userId}`);
+            } catch (insertError: any) {
+                console.error(`[SUB] Error inserting subscription:`, insertError.message);
+                // Check if it's a duplicate key error (subscription already exists)
+                if (insertError.code === '23505') {
+                    console.log(`[SUB] Subscription already exists, fetching it...`);
+                } else {
+                    throw insertError;
+                }
+            }
 
             // Fetch the newly created subscription
             const newResult = await pool.query(`
@@ -148,13 +168,15 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
                 WHERE us.user_id = $1
             `, [userId]);
 
+            console.log(`[SUB] Returning subscription:`, newResult.rows[0]);
             return res.json({ subscription: newResult.rows[0] });
         }
 
+        console.log(`[SUB] Found existing subscription for user ${userId}:`, result.rows[0]);
         res.json({ subscription: result.rows[0] });
-    } catch (error) {
-        console.error('Error fetching subscription:', error);
-        res.status(500).json({ error: 'Failed to fetch subscription' });
+    } catch (error: any) {
+        console.error('Error fetching subscription:', error.message, error.stack);
+        res.status(500).json({ error: 'Failed to fetch subscription: ' + error.message });
     }
 });
 
