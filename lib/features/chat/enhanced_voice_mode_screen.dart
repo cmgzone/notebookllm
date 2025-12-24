@@ -259,6 +259,7 @@ class _EnhancedVoiceModeScreenState
   final ScrollController _scrollController = ScrollController();
   double _audioLevel = 0.0;
   String? _lastActionType;
+  String? _lastProcessedText; // Prevent duplicate processing
 
   @override
   void initState() {
@@ -278,6 +279,8 @@ class _EnhancedVoiceModeScreenState
   }
 
   void _startListening() async {
+    // Reset duplicate prevention when starting new listening session
+    _lastProcessedText = null;
     final settings = ref.read(voiceSettingsProvider);
 
     setState(() {
@@ -325,6 +328,13 @@ class _EnhancedVoiceModeScreenState
       setState(() => _state = VoiceState.idle);
       return;
     }
+
+    // Prevent duplicate processing of the same text
+    if (_lastProcessedText == text) {
+      debugPrint('Voice: Skipping duplicate text: $text');
+      return;
+    }
+    _lastProcessedText = text;
 
     // Check and consume credits for voice mode
     final hasCredits = await ref.tryUseCredits(

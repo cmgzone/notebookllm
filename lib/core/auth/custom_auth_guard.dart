@@ -83,10 +83,13 @@ String? Function(BuildContext?, GoRouterState) createCustomAuthRedirect(
     final authState = container.read(customAuthStateProvider);
     final isAuthenticated = authState.isAuthenticated;
     final isLoading = authState.isLoading;
+    final status = authState.status;
     final path = state.uri.path;
 
-    // Don't redirect while loading
-    if (isLoading) return null;
+    // Don't redirect while loading or in initial state - wait for auth to complete
+    if (isLoading || status == AuthStatus.initial) {
+      return null;
+    }
 
     // Allow public routes
     if (publicRoutes.contains(path)) {
@@ -123,6 +126,8 @@ class SessionValidityMiddleware {
   final ProviderContainer _container;
   DateTime? _lastCheck;
   static const _checkInterval = Duration(minutes: 5);
+  int _consecutiveFailures = 0;
+  static const _maxConsecutiveFailures = 3;
 
   SessionValidityMiddleware(this._container);
 
@@ -141,14 +146,28 @@ class SessionValidityMiddleware {
       final isValid = await authService.isSessionValid();
 
       if (!isValid) {
-        // Session expired, sign out
+        // No token at all - definitely not authenticated
+        _consecutiveFailures = 0;
         await _container.read(customAuthStateProvider.notifier).signOut();
         return false;
       }
 
+      // Token exists, reset failure counter
+      _consecutiveFailures = 0;
       return true;
     } catch (e) {
-      return false;
+      // Network error or other failure - don't immediately sign out
+      _consecutiveFailures++;
+
+      // Only sign out after multiple consecutive failures
+      if (_consecutiveFailures >= _maxConsecutiveFailures) {
+        _consecutiveFailures = 0;
+        await _container.read(customAuthStateProvider.notifier).signOut();
+        return false;
+      }
+
+      // Temporary failure - keep user logged in
+      return true;
     }
   }
 }

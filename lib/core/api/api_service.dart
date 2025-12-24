@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'package:http/http.dart' as http;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 final apiServiceProvider = Provider<ApiService>((ref) {
   return ApiService(ref);
@@ -16,39 +17,109 @@ class ApiService {
   // static const String _baseUrl = 'http://localhost:3000/api';
   static const String _baseUrl = 'https://notebookllm-ufj7.onrender.com/api';
   static const String _tokenKey = 'auth_token';
-  static const _storage = FlutterSecureStorage();
+  static const String _tokenBackupKey =
+      'auth_token_backup'; // Backup in SharedPreferences
+
+  // Use consistent secure storage configuration across the app
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
 
   String? _token;
 
-  // Get stored token
+  // Get stored token - tries secure storage first, then SharedPreferences as fallback
   Future<String?> getToken() async {
     if (_token != null) {
       developer.log('[API] Using cached token', name: 'ApiService');
       return _token;
     }
 
-    final storedToken = await _storage.read(key: _tokenKey);
-    developer.log(
-        '[API] Read token from storage: ${storedToken != null ? "exists (${storedToken.length} chars)" : "null"}',
-        name: 'ApiService');
-    _token = storedToken;
-    return _token;
+    // Try secure storage first
+    try {
+      final storedToken = await _storage.read(key: _tokenKey);
+      if (storedToken != null && storedToken.isNotEmpty) {
+        developer.log(
+            '[API] Read token from secure storage: exists (${storedToken.length} chars)',
+            name: 'ApiService');
+        _token = storedToken;
+        return _token;
+      }
+    } catch (e) {
+      developer.log('[API] Secure storage read error: $e', name: 'ApiService');
+    }
+
+    // Fallback to SharedPreferences
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final backupToken = prefs.getString(_tokenBackupKey);
+      if (backupToken != null && backupToken.isNotEmpty) {
+        developer.log(
+            '[API] Read token from SharedPreferences backup: exists (${backupToken.length} chars)',
+            name: 'ApiService');
+        _token = backupToken;
+        // Try to restore to secure storage
+        try {
+          await _storage.write(key: _tokenKey, value: backupToken);
+          developer.log('[API] Restored token to secure storage',
+              name: 'ApiService');
+        } catch (_) {}
+        return _token;
+      }
+    } catch (e) {
+      developer.log('[API] SharedPreferences read error: $e',
+          name: 'ApiService');
+    }
+
+    developer.log('[API] No token found in any storage', name: 'ApiService');
+    return null;
   }
 
-  // Store token
+  // Store token - saves to both secure storage and SharedPreferences
   Future<void> setToken(String token) async {
     developer.log('[API] Storing token (${token.length} chars)',
         name: 'ApiService');
     _token = token;
-    await _storage.write(key: _tokenKey, value: token);
-    developer.log('[API] Token stored successfully', name: 'ApiService');
+
+    // Save to secure storage
+    try {
+      await _storage.write(key: _tokenKey, value: token);
+      developer.log('[API] Token stored in secure storage', name: 'ApiService');
+    } catch (e) {
+      developer.log('[API] Secure storage write error: $e', name: 'ApiService');
+    }
+
+    // Also save to SharedPreferences as backup
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_tokenBackupKey, token);
+      developer.log('[API] Token stored in SharedPreferences backup',
+          name: 'ApiService');
+    } catch (e) {
+      developer.log('[API] SharedPreferences write error: $e',
+          name: 'ApiService');
+    }
   }
 
-  // Clear token
+  // Clear token - clears from both storages
   Future<void> clearToken() async {
     developer.log('[API] Clearing token', name: 'ApiService');
     _token = null;
-    await _storage.delete(key: _tokenKey);
+
+    try {
+      await _storage.delete(key: _tokenKey);
+    } catch (e) {
+      developer.log('[API] Secure storage delete error: $e',
+          name: 'ApiService');
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_tokenBackupKey);
+    } catch (e) {
+      developer.log('[API] SharedPreferences delete error: $e',
+          name: 'ApiService');
+    }
   }
 
   // Get headers with auth
@@ -126,19 +197,25 @@ class ApiService {
 
   // Handle HTTP response
   Map<String, dynamic> _handleResponse(http.Response response,
-      {bool clearTokenOn401 = true}) {
+      {bool clearTokenOn401 = false}) {
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return body;
     } else if (response.statusCode == 401) {
-      developer.log('[API] Got 401 response, clearTokenOn401=$clearTokenOn401',
+      developer.log(
+          '[API] Got 401 response (missing token), clearTokenOn401=$clearTokenOn401',
           name: 'ApiService');
       if (clearTokenOn401) {
-        // Clear invalid token
         clearToken();
       }
       throw Exception('Unauthorized - please login again');
+    } else if (response.statusCode == 403) {
+      developer.log(
+          '[API] Got 403 response (invalid/expired token), clearTokenOn401=$clearTokenOn401',
+          name: 'ApiService');
+      // 403 means token is invalid or expired - don't auto-clear, let auth system handle it
+      throw Exception('Session expired - please login again');
     } else {
       throw Exception(
           body['error'] ?? 'Request failed: ${response.statusCode}');
@@ -1023,6 +1100,56 @@ class ApiService {
       if (sources != null) 'sources': sources,
     });
     return response['session'];
+  }
+
+  // ============ CLOUD RESEARCH ============
+
+  /// Start cloud-based research (synchronous - waits for completion)
+  Future<Map<String, dynamic>> startCloudResearch({
+    required String query,
+    String depth = 'standard',
+    String template = 'general',
+    String? notebookId,
+  }) async {
+    final response = await post('/research/cloud', {
+      'query': query,
+      'depth': depth,
+      'template': template,
+      if (notebookId != null) 'notebookId': notebookId,
+    });
+    return response;
+  }
+
+  /// Start background research (async - returns job ID immediately)
+  Future<String> startBackgroundResearch({
+    required String query,
+    String depth = 'standard',
+    String template = 'general',
+    String? notebookId,
+  }) async {
+    final response = await post('/research/background', {
+      'query': query,
+      'depth': depth,
+      'template': template,
+      if (notebookId != null) 'notebookId': notebookId,
+    });
+    return response['jobId'];
+  }
+
+  /// Get background research job status
+  Future<Map<String, dynamic>?> getResearchJobStatus(String jobId) async {
+    try {
+      final response = await get('/research/jobs/$jobId');
+      return response['job'];
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Get all pending/running research jobs
+  Future<List<Map<String, dynamic>>> getResearchJobs() async {
+    final response = await get('/research/jobs');
+    return List<Map<String, dynamic>>.from(response['jobs'] ?? []);
   }
 
   // ============ SEARCH PROXY ============

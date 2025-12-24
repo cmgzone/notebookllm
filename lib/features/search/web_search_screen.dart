@@ -29,11 +29,34 @@ class _WebSearchScreenState extends ConsumerState<WebSearchScreen> {
   DeepResearchUpdate? _finalResult;
   SearchType _searchType = SearchType.web;
 
+  // New feature states
+  ResearchDepth _selectedDepth = ResearchDepth.standard;
+  ResearchTemplate _selectedTemplate = ResearchTemplate.general;
+
+  // Streaming state for live site icons (matching deep_research_screen)
+  final List<String> _searchedSites = [];
+  String? _currentSearchQuery;
+
   @override
   void dispose() {
     _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
+  }
+
+  // Helper methods for favicon display (matching deep_research_screen)
+  String? _extractDomain(String url) {
+    try {
+      final uri = Uri.parse(url);
+      return uri.host;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _getFaviconUrl(String domain) {
+    // Use Google's favicon service for reliable favicons
+    return 'https://www.google.com/s2/favicons?domain=$domain&sz=64';
   }
 
   Future<void> _performSearch() async {
@@ -56,10 +79,14 @@ class _WebSearchScreenState extends ConsumerState<WebSearchScreen> {
   }
 
   Future<void> _performDeepResearch(String query) async {
-    // Check and consume credits for deep research
+    // Check and consume credits for deep research (more for deep mode)
+    final creditAmount = _selectedDepth == ResearchDepth.deep
+        ? CreditCosts.deepResearch * 2
+        : CreditCosts.deepResearch;
+
     final hasCredits = await ref.tryUseCredits(
       context: context,
-      amount: CreditCosts.deepResearch,
+      amount: creditAmount,
       feature: 'deep_research',
     );
     if (!hasCredits) return;
@@ -68,18 +95,51 @@ class _WebSearchScreenState extends ConsumerState<WebSearchScreen> {
       _isResearching = true;
       _researchUpdates = [];
       _finalResult = null;
+      _searchedSites.clear();
+      _currentSearchQuery = null;
     });
 
     ref
         .read(deepResearchServiceProvider)
-        .research(query,
-            notebookId: '', useContextEngineering: _useContextEngineering)
+        .research(
+          query,
+          notebookId: '',
+          useContextEngineering: _useContextEngineering,
+          depth: _selectedDepth,
+          template: _selectedTemplate,
+        )
         .listen(
       (update) {
         if (!mounted) return;
         setState(() {
           _researchUpdates.add(update);
-          if (update.progress >= 1.0) {
+
+          // Extract current search query from status
+          if (update.status.contains('Searching:')) {
+            final match =
+                RegExp(r'Searching: "(.+?)"').firstMatch(update.status);
+            if (match != null) {
+              _currentSearchQuery = match.group(1);
+            }
+          }
+
+          // Track sources as they come in for live favicon display
+          if (update.sources != null) {
+            for (final source in update.sources!) {
+              final domain = _extractDomain(source.url);
+              if (domain != null && !_searchedSites.contains(domain)) {
+                _searchedSites.add(domain);
+              }
+            }
+          }
+
+          // Show streaming results as they come in
+          if (update.result != null) {
+            _finalResult = update;
+          }
+
+          // Mark complete when not streaming anymore
+          if (update.progress >= 1.0 && !update.isStreaming) {
             _finalResult = update;
             _isResearching = false;
           }
@@ -239,6 +299,93 @@ $content''',
               ],
             ),
           ).animate().slideY(begin: 0.2, delay: 100.ms).fadeIn(),
+
+          // Deep Research Options (depth and template)
+          if (_isDeepResearch)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Depth selector
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        Text('Depth: ', style: text.labelMedium),
+                        const SizedBox(width: 8),
+                        ...ResearchDepth.values.map((depth) {
+                          final isSelected = _selectedDepth == depth;
+                          final label = depth == ResearchDepth.quick
+                              ? 'Quick'
+                              : depth == ResearchDepth.standard
+                                  ? 'Standard'
+                                  : 'Deep';
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(label,
+                                  style: const TextStyle(fontSize: 12)),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setState(() => _selectedDepth = depth);
+                                }
+                              },
+                              selectedColor: scheme.primaryContainer,
+                              showCheckmark: false,
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Template selector
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        Text('Template: ', style: text.labelMedium),
+                        const SizedBox(width: 8),
+                        ...ResearchTemplate.values.map((template) {
+                          final isSelected = _selectedTemplate == template;
+                          final label = template == ResearchTemplate.general
+                              ? 'General'
+                              : template == ResearchTemplate.academic
+                                  ? 'Academic'
+                                  : template ==
+                                          ResearchTemplate.productComparison
+                                      ? 'Compare'
+                                      : template ==
+                                              ResearchTemplate.marketAnalysis
+                                          ? 'Market'
+                                          : template ==
+                                                  ResearchTemplate.howToGuide
+                                              ? 'How-To'
+                                              : 'Pros/Cons';
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(label,
+                                  style: const TextStyle(fontSize: 12)),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setState(() => _selectedTemplate = template);
+                                }
+                              },
+                              selectedColor: scheme.primaryContainer,
+                              showCheckmark: false,
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ).animate().slideY(begin: 0.2, delay: 120.ms).fadeIn(),
 
           // Search type selector (when not in deep research mode)
           if (!_isDeepResearch)
@@ -707,6 +854,106 @@ $content''',
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Progress section with live favicons (shown during research)
+          if (_isResearching) ...[
+            // Progress bar
+            LinearProgressIndicator(
+              value: _researchUpdates.isNotEmpty
+                  ? _researchUpdates.last.progress
+                  : 0,
+              borderRadius: BorderRadius.circular(4),
+              minHeight: 6,
+            ),
+            const SizedBox(height: 12),
+            // Status with current search query
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: scheme.secondaryContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(12),
+                border:
+                    Border.all(color: scheme.secondary.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: scheme.secondary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _researchUpdates.isNotEmpty
+                              ? _researchUpdates.last.status
+                              : 'Starting...',
+                          style: text.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        if (_currentSearchQuery != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Looking up: "$_currentSearchQuery"',
+                              style: text.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                                fontStyle: FontStyle.italic,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ).animate().fadeIn().slideX(),
+            // Live Favicons
+            if (_searchedSites.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 40,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _searchedSites.length,
+                  itemBuilder: (context, index) {
+                    final domain = _searchedSites[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Chip(
+                        avatar: CircleAvatar(
+                          backgroundColor: Colors.transparent,
+                          child: Image.network(
+                            _getFaviconUrl(domain),
+                            width: 16,
+                            height: 16,
+                            errorBuilder: (context, error, stackTrace) => Icon(
+                                Icons.language,
+                                size: 16,
+                                color: scheme.onSurfaceVariant),
+                          ),
+                        ),
+                        label:
+                            Text(domain, style: const TextStyle(fontSize: 11)),
+                        backgroundColor: scheme.surfaceContainerHighest,
+                        side: BorderSide.none,
+                        padding: const EdgeInsets.fromLTRB(4, 2, 8, 2),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ).animate().scale(curve: Curves.elasticOut);
+                  },
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+          ],
           if (_finalResult != null) ...[
             Card(
               color: scheme.surfaceContainer,
@@ -816,6 +1063,51 @@ $content''',
               dense: true,
             );
           }),
+          // Sources Referenced section with favicons
+          if (_finalResult != null &&
+              _researchUpdates.isNotEmpty &&
+              _researchUpdates.last.sources != null &&
+              _researchUpdates.last.sources!.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('Sources Referenced', style: text.titleSmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _researchUpdates.last.sources!.map((source) {
+                final domain = _extractDomain(source.url);
+                return ActionChip(
+                  avatar: CircleAvatar(
+                    backgroundColor: Colors.transparent,
+                    child: Image.network(
+                      _getFaviconUrl(domain ?? ''),
+                      width: 16,
+                      height: 16,
+                      errorBuilder: (context, error, stackTrace) => Icon(
+                          Icons.language,
+                          size: 16,
+                          color: scheme.onSurfaceVariant),
+                    ),
+                  ),
+                  label: Text(
+                    source.title.isEmpty ? 'Source' : source.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onPressed: () async {
+                    final uri = Uri.tryParse(source.url);
+                    if (uri != null) {
+                      // Import url_launcher if not already imported
+                      // For now, just show a snackbar with the URL
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Source: ${source.url}')),
+                      );
+                    }
+                  },
+                );
+              }).toList(),
+            ),
+          ],
         ],
       ),
     );

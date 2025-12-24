@@ -35,9 +35,10 @@ class AITranscriptionService {
   // Constants for audio processing
   static const int _sampleRate = 16000;
   static const int _bytesPerSample = 2;
-  static const int _overlapDurationMs = 300;
-  static const int _chunkIntervalMs = 1000; // Send every 1 second
-  static const int _minChunkBytes = 8000;
+  static const int _overlapDurationMs = 200; // Reduced for faster response
+  static const int _chunkIntervalMs =
+      500; // Send every 500ms for faster transcription
+  static const int _minChunkBytes = 4000; // Reduced minimum for faster response
 
   int get _overlapBytes =>
       (_sampleRate * _bytesPerSample * _overlapDurationMs) ~/ 1000;

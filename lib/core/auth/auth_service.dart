@@ -102,8 +102,8 @@ class AuthService {
 
       return await getCurrentUser();
     } catch (e) {
-      // Token might be invalid, clear it
-      await _apiService.clearToken();
+      // Don't clear token on error - could be temporary network issue
+      // Let the user stay logged in with cached data
       return null;
     }
   }

@@ -88,6 +88,7 @@ class VoiceService {
   }
 
   String _lastRecognizedText = '';
+  bool _hasProcessedFinalResult = false; // Prevent duplicate processing
 
   // Audio level from speech recognition (0.0 - 1.0)
   double _currentAudioLevel = 0.0;
@@ -102,6 +103,7 @@ class VoiceService {
 
     _lastRecognizedText = '';
     _currentAudioLevel = 0.0;
+    _hasProcessedFinalResult = false;
 
     if (_speechToText.isAvailable) {
       await _speechToText.listen(
@@ -112,7 +114,8 @@ class VoiceService {
             _lastRecognizedText = text;
           }
           onResult(text);
-          if (result.finalResult) {
+          if (result.finalResult && !_hasProcessedFinalResult) {
+            _hasProcessedFinalResult = true;
             // Use the stored text to ensure we don't lose it
             final finalText = text.isNotEmpty ? text : _lastRecognizedText;
             if (finalText.isNotEmpty) {
@@ -136,15 +139,18 @@ class VoiceService {
       );
 
       // Set up a listener for when speech stops (status changes)
+      // Only use this as a fallback if finalResult wasn't triggered
       _speechToText.statusListener = (status) {
         debugPrint('STT Status changed: $status');
-        if (status == 'done' || status == 'notListening') {
+        if ((status == 'done' || status == 'notListening') &&
+            !_hasProcessedFinalResult) {
           // If we have text that wasn't sent via finalResult, send it now
           if (_lastRecognizedText.isNotEmpty) {
+            _hasProcessedFinalResult = true;
             final textToSend = _lastRecognizedText;
             _lastRecognizedText = ''; // Clear to prevent duplicate sends
             // Small delay to ensure we don't conflict with finalResult callback
-            Future.delayed(const Duration(milliseconds: 100), () {
+            Future.delayed(const Duration(milliseconds: 200), () {
               if (textToSend.isNotEmpty && !_speechToText.isListening) {
                 onDone(textToSend);
               }
@@ -161,6 +167,7 @@ class VoiceService {
 
   Future<String> stopListening() async {
     final capturedText = _lastRecognizedText;
+    _hasProcessedFinalResult = true; // Prevent any pending callbacks
     await _speechToText.stop();
     _lastRecognizedText = ''; // Clear after stopping
     return capturedText; // Return the last recognized text

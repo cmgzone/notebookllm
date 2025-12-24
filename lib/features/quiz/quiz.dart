@@ -40,7 +40,7 @@ class QuizQuestion with _$QuizQuestion {
         'id': id,
         'question': question,
         'options': options,
-        'correct_option_index': correctOptionIndex,
+        'correctOptionIndex': correctOptionIndex,
         'explanation': explanation,
       };
 

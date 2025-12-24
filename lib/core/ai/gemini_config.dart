@@ -15,13 +15,15 @@ class GeminiConfig {
     'gemini-2.0-flash-lite': 'Gemini 2.0 Flash Lite (Fastest)',
 
     // Gemini 1.5 Models (Stable - Free Tier)
-    'gemini-1.5-pro': 'Gemini 1.5 Pro',
+    'gemini-1.5-pro': 'Gemini 1.5 Pro (Best for long reports)',
     'gemini-1.5-flash': 'Gemini 1.5 Flash',
     'gemini-1.5-flash-8b': 'Gemini 1.5 Flash 8B',
   };
   static const double defaultTemperature = 0.7;
-  static const int defaultMaxTokens =
-      8192; // Maximum for most Gemini models - no limit for long outputs
+  // Gemini 1.5 Flash supports up to 8192 output tokens
+  // Gemini 1.5 Pro supports up to 8192 output tokens
+  // For longer outputs, use streaming or multiple calls
+  static const int defaultMaxTokens = 8192;
   static const double defaultTopP = 0.8;
   static const int defaultTopK = 40;
   static const int requestsPerMinute = 60;

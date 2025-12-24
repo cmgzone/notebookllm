@@ -1,0 +1,422 @@
+import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
+import pool from '../config/database.js';
+import { generateWithGemini, generateWithOpenRouter, type ChatMessage } from './aiService.js';
+
+// Research depth configuration
+export type ResearchDepth = 'quick' | 'standard' | 'deep';
+export type ResearchTemplate = 'general' | 'academic' | 'productComparison' | 'marketAnalysis' | 'howToGuide' | 'prosAndCons';
+
+export interface ResearchConfig {
+    depth: ResearchDepth;
+    template: ResearchTemplate;
+    notebookId?: string;
+    useContextEngineering?: boolean;
+}
+
+export interface ResearchSource {
+    title: string;
+    url: string;
+    content: string;
+    snippet?: string;
+    credibility: string;
+    credibilityScore: number;
+}
+
+export interface ResearchProgress {
+    status: string;
+    progress: number;
+    sources?: ResearchSource[];
+    images?: string[];
+    videos?: string[];
+    result?: string;
+    isComplete: boolean;
+}
+
+// Domain credibility mappings
+const ACADEMIC_DOMAINS = ['.edu', '.ac.uk', '.ac.', 'scholar.google', 'researchgate', 'academia.edu', 'arxiv.org', 'pubmed', 'jstor'];
+const GOVERNMENT_DOMAINS = ['.gov', '.gov.uk', '.gov.au', '.mil'];
+const NEWS_DOMAINS = ['reuters.com', 'apnews.com', 'bbc.com', 'nytimes.com', 'wsj.com', 'theguardian.com', 'washingtonpost.com', 'bloomberg.com', 'forbes.com', 'techcrunch.com', 'wired.com'];
+const PROFESSIONAL_DOMAINS = ['microsoft.com', 'google.com', 'aws.amazon.com', 'developer.', 'docs.', 'stackoverflow.com', 'github.com', 'medium.com'];
+
+function getSourceCredibility(url: string): { credibility: string; score: number } {
+    const lowerUrl = url.toLowerCase();
+    
+    for (const domain of ACADEMIC_DOMAINS) {
+        if (lowerUrl.includes(domain)) return { credibility: 'academic', score: 95 };
+    }
+    for (const domain of GOVERNMENT_DOMAINS) {
+        if (lowerUrl.includes(domain)) return { credibility: 'government', score: 90 };
+    }
+    for (const domain of NEWS_DOMAINS) {
+        if (lowerUrl.includes(domain)) return { credibility: 'news', score: 80 };
+    }
+    for (const domain of PROFESSIONAL_DOMAINS) {
+        if (lowerUrl.includes(domain)) return { credibility: 'professional', score: 75 };
+    }
+    if (lowerUrl.includes('blog') || lowerUrl.includes('wordpress') || lowerUrl.includes('blogspot')) {
+        return { credibility: 'blog', score: 50 };
+    }
+    return { credibility: 'unknown', score: 60 };
+}
+
+function getDepthConfig(depth: ResearchDepth) {
+    switch (depth) {
+        case 'quick': return { maxSources: 3, subQueryCount: 3, sourcesPerQuery: 2 };
+        case 'standard': return { maxSources: 7, subQueryCount: 5, sourcesPerQuery: 3 };
+        case 'deep': return { maxSources: 15, subQueryCount: 8, sourcesPerQuery: 5 };
+    }
+}
+
+function getTemplatePrompt(template: ResearchTemplate): string {
+    switch (template) {
+        case 'academic':
+            return `Structure as academic paper: Abstract, Introduction, Literature Review, Methodology, Findings, Discussion, Conclusion, References (APA format).`;
+        case 'productComparison':
+            return `Structure as comparison: Executive Summary, Products Overview, Feature Comparison Table, Pricing, Pros/Cons, Recommendations.`;
+        case 'marketAnalysis':
+            return `Structure as market analysis: Executive Summary, Market Overview, Key Players, Trends, Challenges, Competitive Landscape, Future Outlook.`;
+        case 'howToGuide':
+            return `Structure as how-to guide: Overview, Prerequisites, Step-by-Step Instructions, Tips, Common Mistakes, Troubleshooting.`;
+        case 'prosAndCons':
+            return `Structure as balanced analysis: Overview, Advantages (with evidence), Disadvantages (with evidence), Who Should Consider, Alternatives, Final Assessment.`;
+        default:
+            return `Structure: Executive Summary, Introduction, Main Analysis, Key Findings, Practical Applications, Conclusion, Sources.`;
+    }
+}
+
+// Serper API for web search
+async function searchWeb(query: string, num: number = 5): Promise<any[]> {
+    const apiKey = process.env.SERPER_API_KEY;
+    if (!apiKey) {
+        throw new Error('Serper API key not configured');
+    }
+
+    try {
+        const response = await axios.post(
+            'https://google.serper.dev/search',
+            { q: query, num },
+            { headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' } }
+        );
+        return response.data.organic || [];
+    } catch (error: any) {
+        console.error('Serper search error:', error.message);
+        return [];
+    }
+}
+
+async function searchImages(query: string, num: number = 5): Promise<string[]> {
+    const apiKey = process.env.SERPER_API_KEY;
+    if (!apiKey) return [];
+
+    try {
+        const response = await axios.post(
+            'https://google.serper.dev/images',
+            { q: query, num },
+            { headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' } }
+        );
+        return (response.data.images || []).map((img: any) => img.imageUrl).filter(Boolean);
+    } catch (error) {
+        return [];
+    }
+}
+
+async function searchVideos(query: string, num: number = 3): Promise<string[]> {
+    const apiKey = process.env.SERPER_API_KEY;
+    if (!apiKey) return [];
+
+    try {
+        const response = await axios.post(
+            'https://google.serper.dev/videos',
+            { q: query, num },
+            { headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' } }
+        );
+        return (response.data.videos || []).map((v: any) => v.link).filter(Boolean);
+    } catch (error) {
+        return [];
+    }
+}
+
+async function fetchPageContent(url: string): Promise<string> {
+    try {
+        const response = await axios.get(url, {
+            timeout: 10000,
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ResearchBot/1.0)' }
+        });
+        
+        // Basic HTML to text extraction
+        let text = response.data;
+        if (typeof text === 'string') {
+            text = text
+                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .substring(0, 5000);
+        }
+        return text || '';
+    } catch (error) {
+        return '';
+    }
+}
+
+async function generateSubQueries(query: string, template: ResearchTemplate, count: number): Promise<string[]> {
+    const messages: ChatMessage[] = [{
+        role: 'user',
+        content: `Generate ${count} specific search queries to research: "${query}"
+Template focus: ${template}
+Return only queries, one per line, no bullets or numbers.`
+    }];
+
+    try {
+        const response = await generateWithGemini(messages);
+        return response.split('\n').map(l => l.trim()).filter(l => l.length > 0).slice(0, count);
+    } catch (error) {
+        // Fallback queries
+        return [query, `${query} explained`, `${query} examples`, `${query} benefits`, `${query} challenges`].slice(0, count);
+    }
+}
+
+async function synthesizeReport(
+    query: string,
+    sources: ResearchSource[],
+    images: string[],
+    videos: string[],
+    template: ResearchTemplate
+): Promise<string> {
+    const sourcesText = sources.slice(0, 12).map((s, i) => 
+        `Source ${i + 1} [${s.credibility.toUpperCase()} ${s.credibilityScore}%]: ${s.title}\nURL: ${s.url}\nContent: ${s.content.substring(0, 2000)}`
+    ).join('\n\n---\n\n');
+
+    const templatePrompt = getTemplatePrompt(template);
+
+    const messages: ChatMessage[] = [{
+        role: 'user',
+        content: `Create a comprehensive research report on: "${query}"
+
+${templatePrompt}
+
+Use markdown formatting. Cite sources with [Title](URL). Prioritize high-credibility sources.
+
+SOURCES:
+${sourcesText}
+
+IMAGES (embed relevant ones): ${images.slice(0, 6).join(', ')}
+VIDEOS (reference relevant ones): ${videos.slice(0, 3).join(', ')}
+
+Write the complete report:`
+    }];
+
+    try {
+        return await generateWithGemini(messages, 'gemini-1.5-pro');
+    } catch (error) {
+        // Fallback to OpenRouter
+        return await generateWithOpenRouter(messages);
+    }
+}
+
+// Main research function
+export async function performCloudResearch(
+    userId: string,
+    query: string,
+    config: ResearchConfig,
+    onProgress?: (progress: ResearchProgress) => void
+): Promise<{ sessionId: string; report: string; sources: ResearchSource[] }> {
+    const sessionId = uuidv4();
+    const depthConfig = getDepthConfig(config.depth);
+    const sources: ResearchSource[] = [];
+    const allImages: string[] = [];
+    const allVideos: string[] = [];
+
+    try {
+        // Update progress
+        onProgress?.({ status: `[${config.depth.toUpperCase()}] Starting research...`, progress: 0.1, isComplete: false });
+
+        // Generate sub-queries
+        onProgress?.({ status: 'Generating research angles...', progress: 0.15, isComplete: false });
+        const subQueries = await generateSubQueries(query, config.template, depthConfig.subQueryCount);
+
+        // Initial media search
+        const [images, videos] = await Promise.all([
+            searchImages(query),
+            searchVideos(query)
+        ]);
+        allImages.push(...images);
+        allVideos.push(...videos);
+
+        // Search and collect sources
+        let completed = 0;
+        for (const subQuery of subQueries) {
+            if (sources.length >= depthConfig.maxSources) break;
+
+            const progress = 0.2 + (0.5 * (completed / subQueries.length));
+            onProgress?.({ 
+                status: `Searching: "${subQuery}"...`, 
+                progress, 
+                sources: [...sources],
+                images: [...allImages],
+                videos: [...allVideos],
+                isComplete: false 
+            });
+
+            // Search web
+            const results = await searchWeb(subQuery, depthConfig.sourcesPerQuery);
+            
+            // Search media for sub-query
+            const [subImages, subVideos] = await Promise.all([
+                searchImages(subQuery, 3),
+                searchVideos(subQuery, 2)
+            ]);
+            allImages.push(...subImages);
+            allVideos.push(...subVideos);
+
+            // Process results
+            for (const result of results) {
+                if (sources.length >= depthConfig.maxSources) break;
+                if (sources.some(s => s.url === result.link)) continue;
+
+                const content = await fetchPageContent(result.link);
+                const { credibility, score } = getSourceCredibility(result.link);
+
+                sources.push({
+                    title: result.title || 'Untitled',
+                    url: result.link,
+                    content: content || result.snippet || '',
+                    snippet: result.snippet,
+                    credibility,
+                    credibilityScore: score
+                });
+            }
+
+            completed++;
+        }
+
+        // Multi-hop for deep research
+        if (config.depth === 'deep' && sources.length < depthConfig.maxSources) {
+            onProgress?.({ status: 'Multi-hop: Exploring deeper...', progress: 0.65, sources, isComplete: false });
+            
+            // Generate follow-up queries based on initial findings
+            const followUpMessages: ChatMessage[] = [{
+                role: 'user',
+                content: `Based on initial research on "${query}", generate 3 follow-up search queries to explore deeper. Sources found: ${sources.slice(0, 5).map(s => s.title).join(', ')}. Return only queries, one per line.`
+            }];
+            
+            try {
+                const followUpResponse = await generateWithGemini(followUpMessages);
+                const followUpQueries = followUpResponse.split('\n').filter(q => q.trim()).slice(0, 3);
+                
+                for (const fq of followUpQueries) {
+                    if (sources.length >= depthConfig.maxSources) break;
+                    const results = await searchWeb(fq, 3);
+                    for (const result of results) {
+                        if (sources.length >= depthConfig.maxSources) break;
+                        if (sources.some(s => s.url === result.link)) continue;
+                        
+                        const { credibility, score } = getSourceCredibility(result.link);
+                        sources.push({
+                            title: result.title,
+                            url: result.link,
+                            content: result.snippet || '',
+                            snippet: result.snippet,
+                            credibility,
+                            credibilityScore: score
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error('Multi-hop error:', e);
+            }
+        }
+
+        // Sort by credibility
+        sources.sort((a, b) => b.credibilityScore - a.credibilityScore);
+
+        // Deduplicate media
+        const uniqueImages = [...new Set(allImages)];
+        const uniqueVideos = [...new Set(allVideos)];
+
+        // Synthesize report
+        onProgress?.({ status: 'Synthesizing report...', progress: 0.8, sources, images: uniqueImages, videos: uniqueVideos, isComplete: false });
+        
+        const report = await synthesizeReport(query, sources, uniqueImages, uniqueVideos, config.template);
+
+        // Save to database
+        await pool.query('BEGIN');
+        
+        await pool.query(
+            `INSERT INTO research_sessions (id, user_id, notebook_id, query, report, depth, template, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed')`,
+            [sessionId, userId, config.notebookId || null, query, report, config.depth, config.template]
+        );
+
+        for (const source of sources) {
+            await pool.query(
+                `INSERT INTO research_sources (id, session_id, title, url, content, snippet, credibility, credibility_score)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                [uuidv4(), sessionId, source.title, source.url, source.content, source.snippet, source.credibility, source.credibilityScore]
+            );
+        }
+
+        await pool.query('COMMIT');
+
+        onProgress?.({ status: 'Research complete!', progress: 1.0, result: report, sources, images: uniqueImages, videos: uniqueVideos, isComplete: true });
+
+        return { sessionId, report, sources };
+    } catch (error: any) {
+        await pool.query('ROLLBACK').catch(() => {});
+        console.error('Cloud research error:', error);
+        throw error;
+    }
+}
+
+// Start background research job
+export async function startBackgroundResearch(
+    userId: string,
+    query: string,
+    config: ResearchConfig
+): Promise<string> {
+    const jobId = uuidv4();
+    
+    // Create job record
+    await pool.query(
+        `INSERT INTO research_jobs (id, user_id, query, config, status, created_at)
+         VALUES ($1, $2, $3, $4, 'pending', NOW())`,
+        [jobId, userId, query, JSON.stringify(config)]
+    );
+
+    // Start research in background (non-blocking)
+    setImmediate(async () => {
+        try {
+            await pool.query(`UPDATE research_jobs SET status = 'running' WHERE id = $1`, [jobId]);
+            
+            const result = await performCloudResearch(userId, query, config, async (progress) => {
+                await pool.query(
+                    `UPDATE research_jobs SET progress = $1, status_message = $2 WHERE id = $3`,
+                    [progress.progress, progress.status, jobId]
+                );
+            });
+
+            await pool.query(
+                `UPDATE research_jobs SET status = 'completed', session_id = $1, completed_at = NOW() WHERE id = $2`,
+                [result.sessionId, jobId]
+            );
+        } catch (error: any) {
+            await pool.query(
+                `UPDATE research_jobs SET status = 'failed', error = $1 WHERE id = $2`,
+                [error.message, jobId]
+            );
+        }
+    });
+
+    return jobId;
+}
+
+// Get job status
+export async function getResearchJobStatus(jobId: string, userId: string) {
+    const result = await pool.query(
+        `SELECT * FROM research_jobs WHERE id = $1 AND user_id = $2`,
+        [jobId, userId]
+    );
+    return result.rows[0] || null;
+}

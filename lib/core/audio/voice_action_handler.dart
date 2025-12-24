@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../ai/gemini_service.dart';
@@ -321,8 +322,17 @@ $context
         actionPerformed: false,
       );
     } catch (e) {
+      debugPrint('Voice conversation error: $e');
+      // Provide more helpful error message
+      String errorMessage = 'Sorry, I had trouble processing that.';
+      if (e.toString().contains('API key')) {
+        errorMessage = 'Please configure your Gemini API key in settings.';
+      } else if (e.toString().contains('network') ||
+          e.toString().contains('connection')) {
+        errorMessage = 'Please check your internet connection and try again.';
+      }
       return VoiceActionResult(
-        response: 'Sorry, I didn\'t catch that. Could you try again?',
+        response: errorMessage,
         actionPerformed: false,
       );
     }

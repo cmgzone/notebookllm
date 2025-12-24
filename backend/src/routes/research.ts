@@ -2,9 +2,110 @@ import express, { type Response } from 'express';
 import pool from '../config/database.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 import { v4 as uuidv4 } from 'uuid';
+import { 
+    performCloudResearch, 
+    startBackgroundResearch, 
+    getResearchJobStatus,
+    type ResearchConfig,
+    type ResearchDepth,
+    type ResearchTemplate
+} from '../services/researchService.js';
 
 const router = express.Router();
 router.use(authenticateToken);
+
+// Start cloud research (synchronous - waits for completion)
+router.post('/cloud', async (req: AuthRequest, res: Response) => {
+    try {
+        const { query, depth = 'standard', template = 'general', notebookId } = req.body;
+
+        if (!query) {
+            return res.status(400).json({ error: 'Query is required' });
+        }
+
+        const config: ResearchConfig = {
+            depth: depth as ResearchDepth,
+            template: template as ResearchTemplate,
+            notebookId
+        };
+
+        // Set longer timeout for research
+        req.setTimeout(300000); // 5 minutes
+
+        const result = await performCloudResearch(req.userId!, query, config);
+
+        res.json({
+            success: true,
+            sessionId: result.sessionId,
+            report: result.report,
+            sources: result.sources
+        });
+    } catch (error: any) {
+        console.error('Cloud research error:', error);
+        res.status(500).json({ error: error.message || 'Research failed' });
+    }
+});
+
+// Start background research (async - returns job ID immediately)
+router.post('/background', async (req: AuthRequest, res: Response) => {
+    try {
+        const { query, depth = 'standard', template = 'general', notebookId } = req.body;
+
+        if (!query) {
+            return res.status(400).json({ error: 'Query is required' });
+        }
+
+        const config: ResearchConfig = {
+            depth: depth as ResearchDepth,
+            template: template as ResearchTemplate,
+            notebookId
+        };
+
+        const jobId = await startBackgroundResearch(req.userId!, query, config);
+
+        res.json({
+            success: true,
+            jobId,
+            message: 'Research started in background'
+        });
+    } catch (error: any) {
+        console.error('Background research error:', error);
+        res.status(500).json({ error: error.message || 'Failed to start research' });
+    }
+});
+
+// Get background job status
+router.get('/jobs/:jobId', async (req: AuthRequest, res: Response) => {
+    try {
+        const job = await getResearchJobStatus(req.params.jobId, req.userId!);
+
+        if (!job) {
+            return res.status(404).json({ error: 'Job not found' });
+        }
+
+        res.json({ success: true, job });
+    } catch (error: any) {
+        console.error('Get job status error:', error);
+        res.status(500).json({ error: 'Failed to get job status' });
+    }
+});
+
+// Get all pending/running jobs for user
+router.get('/jobs', async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await pool.query(
+            `SELECT * FROM research_jobs 
+             WHERE user_id = $1 AND status IN ('pending', 'running')
+             ORDER BY created_at DESC`,
+            [req.userId]
+        );
+
+        res.json({ success: true, jobs: result.rows });
+    } catch (error: any) {
+        console.error('Get jobs error:', error);
+        res.status(500).json({ error: 'Failed to get jobs' });
+    }
+});
 
 // Get research history
 router.get('/sessions', async (req: AuthRequest, res: Response) => {
@@ -37,7 +138,7 @@ router.get('/sessions/:id', async (req: AuthRequest, res: Response) => {
         }
 
         const sources = await pool.query(
-            'SELECT * FROM research_sources WHERE session_id = $1 ORDER BY created_at ASC',
+            'SELECT * FROM research_sources WHERE session_id = $1 ORDER BY credibility_score DESC, created_at ASC',
             [req.params.id]
         );
 
@@ -52,7 +153,7 @@ router.get('/sessions/:id', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Save research session
+// Save research session (for client-side research)
 router.post('/sessions', async (req: AuthRequest, res: Response) => {
     try {
         const { id, notebookId, query, report, sources } = req.body;
@@ -76,9 +177,9 @@ router.post('/sessions', async (req: AuthRequest, res: Response) => {
             for (const s of sources) {
                 const sId = uuidv4();
                 await pool.query(
-                    `INSERT INTO research_sources (id, session_id, title, url, content, snippet)
-                     VALUES ($1, $2, $3, $4, $5, $6)`,
-                    [sId, sessionId, s.title, s.url, s.content, s.snippet]
+                    `INSERT INTO research_sources (id, session_id, title, url, content, snippet, credibility, credibility_score)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                    [sId, sessionId, s.title, s.url, s.content, s.snippet, s.credibility || 'unknown', s.credibilityScore || 60]
                 );
             }
         }

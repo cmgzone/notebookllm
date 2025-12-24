@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api/api_service.dart';
 
@@ -268,17 +269,15 @@ final legacyIsAuthenticatedProvider = Provider<bool>((ref) {
 class CustomAuthService {
   final Ref _ref;
 
-  // Secure storage instance - lazy initialized (kept for backward compatibility logic if needed)
-  static FlutterSecureStorage? _secureStorageInstance;
-  static FlutterSecureStorage get _secureStorage {
-    _secureStorageInstance ??= const FlutterSecureStorage(
-      aOptions: AndroidOptions(encryptedSharedPreferences: true),
-      iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
-    );
-    return _secureStorageInstance!;
-  }
+  // Secure storage instance - use consistent configuration across the app
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
 
   static const _userDataKey = 'auth_user_data';
+  static const _userDataBackupKey =
+      'auth_user_data_backup'; // Backup in SharedPreferences
 
   CustomAuthService(this._ref);
 
@@ -605,8 +604,73 @@ class CustomAuthService {
   }
 
   Future<void> _cacheUser(AppUser user) async {
-    await _secureStorage.write(
-        key: _userDataKey, value: jsonEncode(user.toMap()));
+    final userData = jsonEncode(user.toMap());
+
+    // Save to secure storage
+    try {
+      await _secureStorage.write(key: _userDataKey, value: userData);
+      developer.log('_cacheUser: cached user ${user.email} in secure storage',
+          name: 'CustomAuthService');
+    } catch (e) {
+      developer.log('_cacheUser: secure storage error: $e',
+          name: 'CustomAuthService');
+    }
+
+    // Also save to SharedPreferences as backup
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_userDataBackupKey, userData);
+      developer.log(
+          '_cacheUser: cached user ${user.email} in SharedPreferences backup',
+          name: 'CustomAuthService');
+    } catch (e) {
+      developer.log('_cacheUser: SharedPreferences error: $e',
+          name: 'CustomAuthService');
+    }
+  }
+
+  /// Get cached user without making API call - tries secure storage first, then SharedPreferences
+  Future<AppUser?> getCachedUser() async {
+    // Try secure storage first
+    try {
+      final userData = await _secureStorage.read(key: _userDataKey);
+      if (userData != null && userData.isNotEmpty) {
+        final map = jsonDecode(userData);
+        final user = AppUser.fromMap(map);
+        developer.log(
+            'getCachedUser: found user ${user.email} in secure storage',
+            name: 'CustomAuthService');
+        return user;
+      }
+    } catch (e) {
+      developer.log('getCachedUser: secure storage error: $e',
+          name: 'CustomAuthService');
+    }
+
+    // Fallback to SharedPreferences
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userData = prefs.getString(_userDataBackupKey);
+      if (userData != null && userData.isNotEmpty) {
+        final map = jsonDecode(userData);
+        final user = AppUser.fromMap(map);
+        developer.log(
+            'getCachedUser: found user ${user.email} in SharedPreferences backup',
+            name: 'CustomAuthService');
+        // Try to restore to secure storage
+        try {
+          await _secureStorage.write(key: _userDataKey, value: userData);
+        } catch (_) {}
+        return user;
+      }
+    } catch (e) {
+      developer.log('getCachedUser: SharedPreferences error: $e',
+          name: 'CustomAuthService');
+    }
+
+    developer.log('getCachedUser: no cached user found',
+        name: 'CustomAuthService');
+    return null;
   }
 
   Future<bool> isSessionValid() async {
@@ -693,21 +757,42 @@ class CustomAuthNotifier extends StateNotifier<AuthState> {
   }
 
   CustomAuthService get _authService => _ref.read(customAuthServiceProvider);
+  ApiService get _apiService => _ref.read(apiServiceProvider);
 
   Future<void> _init() async {
     state = state.copyWith(status: AuthStatus.loading);
 
     try {
-      // First check if we have a stored token
-      final hasToken = await _authService.isSessionValid();
-      developer.log('Auth init: hasToken=$hasToken',
+      // First check if we have a stored token - directly from API service
+      final token = await _apiService.getToken();
+      final hasToken = token != null && token.isNotEmpty;
+      developer.log(
+          'Auth init: hasToken=$hasToken, tokenLength=${token?.length ?? 0}',
           name: 'CustomAuthNotifier');
 
       if (hasToken) {
-        // Try to get user from API first, fall back to cache
-        // Don't clear token on 401 during session restore
+        // First try to get cached user (fast, offline-capable)
+        final cachedUser = await _authService.getCachedUser();
+        developer.log('Auth init: cachedUser=${cachedUser?.email}',
+            name: 'CustomAuthNotifier');
+
+        if (cachedUser != null) {
+          // Immediately authenticate with cached user
+          state = AuthState(status: AuthStatus.authenticated, user: cachedUser);
+          developer.log(
+              'Auth init: authenticated with cached user ${cachedUser.email}',
+              name: 'CustomAuthNotifier');
+
+          // Then try to refresh from API in background (don't await)
+          _refreshUserInBackground();
+          return;
+        }
+
+        // No cached user, try API
+        developer.log('Auth init: no cached user, trying API...',
+            name: 'CustomAuthNotifier');
         final user = await _authService.getCurrentUser(clearTokenOn401: false);
-        developer.log('Auth init: user=${user?.email}',
+        developer.log('Auth init: user from API=${user?.email}',
             name: 'CustomAuthNotifier');
 
         if (user != null) {
@@ -716,6 +801,11 @@ class CustomAuthNotifier extends StateNotifier<AuthState> {
               name: 'CustomAuthNotifier');
           return;
         }
+
+        // Token exists but couldn't get user - this is unusual
+        developer.log(
+            'Auth init: WARNING - token exists but no user data available',
+            name: 'CustomAuthNotifier');
       }
 
       // No valid session
@@ -726,16 +816,32 @@ class CustomAuthNotifier extends StateNotifier<AuthState> {
       developer.log('Auth init error: $e', name: 'CustomAuthNotifier');
       // On error, try to use cached user if available
       try {
-        final cachedUser =
-            await _authService.getCurrentUser(clearTokenOn401: false);
+        final cachedUser = await _authService.getCachedUser();
         if (cachedUser != null) {
-          developer.log('Auth init: using cached user ${cachedUser.email}',
+          developer.log(
+              'Auth init: using cached user after error ${cachedUser.email}',
               name: 'CustomAuthNotifier');
           state = AuthState(status: AuthStatus.authenticated, user: cachedUser);
           return;
         }
       } catch (_) {}
       state = const AuthState(status: AuthStatus.unauthenticated);
+    }
+  }
+
+  /// Refresh user data from API in background without affecting auth state
+  Future<void> _refreshUserInBackground() async {
+    try {
+      final user = await _authService.getCurrentUser(clearTokenOn401: false);
+      if (user != null && state.isAuthenticated) {
+        state = AuthState(status: AuthStatus.authenticated, user: user);
+        developer.log('Auth: refreshed user in background ${user.email}',
+            name: 'CustomAuthNotifier');
+      }
+    } catch (e) {
+      // Silently ignore background refresh errors - user stays logged in with cached data
+      developer.log('Auth: background refresh failed (ignored): $e',
+          name: 'CustomAuthNotifier');
     }
   }
 
