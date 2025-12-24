@@ -147,15 +147,26 @@ router.post('/flashcards/:id/progress', async (req: AuthRequest, res: Response) 
 // Get all quizzes
 router.get('/quizzes', async (req: AuthRequest, res: Response) => {
     try {
-        const result = await pool.query(
-            `SELECT q.*, 
-                    (SELECT COUNT(*) FROM quiz_questions WHERE quiz_id = q.id) as question_count
-             FROM quizzes q 
+        const quizzesResult = await pool.query(
+            `SELECT q.* FROM quizzes q 
              WHERE q.user_id = $1 
              ORDER BY q.updated_at DESC`,
             [req.userId]
         );
-        res.json({ success: true, quizzes: result.rows });
+        
+        // Fetch questions for each quiz
+        const quizzes = await Promise.all(quizzesResult.rows.map(async (quiz) => {
+            const questionsResult = await pool.query(
+                'SELECT * FROM quiz_questions WHERE quiz_id = $1 ORDER BY created_at ASC',
+                [quiz.id]
+            );
+            return {
+                ...quiz,
+                questions: questionsResult.rows
+            };
+        }));
+        
+        res.json({ success: true, quizzes });
     } catch (error) {
         console.error('Get quizzes error:', error);
         res.status(500).json({ error: 'Failed to fetch quizzes' });
