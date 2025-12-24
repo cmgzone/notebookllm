@@ -1,13 +1,16 @@
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter_paypal_payment/flutter_paypal_payment.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../models/credit_package_model.dart';
 import '../services/subscription_service.dart';
 
 class PayPalService {
   final SubscriptionService _subscriptionService;
-  static const _storage = FlutterSecureStorage();
+
+  // Backend API URL
+  static const String _baseUrl = 'https://notebookllm-ufj7.onrender.com/api';
 
   String? _clientId;
   String? _secretKey;
@@ -15,26 +18,47 @@ class PayPalService {
 
   PayPalService(this._subscriptionService);
 
-  /// Initialize PayPal with credentials from secure storage
+  /// Initialize PayPal with credentials from backend
   Future<void> initialize() async {
     try {
-      _clientId = await _storage.read(key: 'paypal_client_id');
-      _secretKey = await _storage.read(key: 'paypal_secret');
+      developer.log('PayPal: Fetching config from backend...',
+          name: 'PayPalService');
 
-      // Default to sandbox mode for safety
-      final sandboxModeStr = await _storage.read(key: 'paypal_sandbox_mode');
-      _sandboxMode = sandboxModeStr != 'false';
-
-      developer.log(
-        'PayPal initialized: clientId=${_clientId != null}, sandbox=$_sandboxMode',
-        name: 'PayPalService',
+      final response = await http.get(
+        Uri.parse('$_baseUrl/subscriptions/payment-config'),
+        headers: {'Content-Type': 'application/json'},
       );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final paypalConfig = data['config']?['paypal'];
+
+        if (paypalConfig != null) {
+          _clientId = paypalConfig['clientId'];
+          _secretKey = paypalConfig['secretKey'];
+          _sandboxMode = paypalConfig['sandboxMode'] ?? true;
+
+          developer.log(
+            'PayPal initialized from backend: clientId=${_clientId != null && _clientId!.isNotEmpty}, secretKey=${_secretKey != null && _secretKey!.isNotEmpty}, sandbox=$_sandboxMode',
+            name: 'PayPalService',
+          );
+        } else {
+          developer.log('PayPal: No config in response', name: 'PayPalService');
+        }
+      } else {
+        developer.log('PayPal: Failed to fetch config - ${response.statusCode}',
+            name: 'PayPalService');
+      }
     } catch (e) {
       developer.log('Failed to initialize PayPal: $e', name: 'PayPalService');
     }
   }
 
-  bool get isConfigured => _clientId != null && _secretKey != null;
+  bool get isConfigured =>
+      _clientId != null &&
+      _clientId!.isNotEmpty &&
+      _secretKey != null &&
+      _secretKey!.isNotEmpty;
 
   /// Process payment for a credit package
   Future<void> purchasePackage({

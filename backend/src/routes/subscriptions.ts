@@ -4,6 +4,34 @@ import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 
 const router: Router = express.Router();
 
+// Get payment configuration - PUBLIC endpoint for Flutter app
+// Returns PayPal/Stripe config from environment variables
+router.get('/payment-config', async (_req: Request, res: Response) => {
+    try {
+        const config: any = {
+            paypal: {
+                configured: !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_SECRET),
+                clientId: process.env.PAYPAL_CLIENT_ID || null,
+                secretKey: process.env.PAYPAL_SECRET || null,
+                sandboxMode: process.env.PAYPAL_SANDBOX_MODE !== 'false',
+            },
+            stripe: {
+                configured: !!(process.env.STRIPE_PUBLISHABLE_KEY && process.env.STRIPE_SECRET_KEY),
+                publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
+                secretKey: process.env.STRIPE_SECRET_KEY || null,
+                testMode: process.env.STRIPE_TEST_MODE !== 'false',
+            }
+        };
+
+        console.log('[PAYMENT] Config request - PayPal configured:', config.paypal.configured, ', Stripe configured:', config.stripe.configured);
+
+        res.json({ success: true, config });
+    } catch (error) {
+        console.error('Error fetching payment config:', error);
+        res.status(500).json({ error: 'Failed to fetch payment config' });
+    }
+});
+
 // Seed default plans - PUBLIC endpoint for initial setup
 router.get('/seed-defaults', async (req: Request, res: Response) => {
     try {

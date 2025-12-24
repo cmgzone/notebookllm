@@ -3,47 +3,67 @@ import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../../../core/security/global_credentials_service.dart';
 import '../models/credit_package_model.dart';
 import 'subscription_service.dart';
 
 class StripeService {
   final SubscriptionService _subscriptionService;
-  final GlobalCredentialsService _credentialsService;
+
+  // Backend API URL
+  static const String _baseUrl = 'https://notebookllm-ufj7.onrender.com/api';
 
   String? _publishableKey;
   String? _secretKey;
-  final bool _testMode = true;
+  bool _testMode = true;
   bool _initialized = false;
 
-  StripeService(this._subscriptionService, this._credentialsService);
+  StripeService(this._subscriptionService, dynamic _);
 
-  /// Initialize Stripe with credentials from secure storage
+  /// Initialize Stripe with credentials from backend
   Future<void> initialize() async {
     try {
-      // Fetch decrypted keys using GlobalCredentialsService
-      _publishableKey =
-          await _credentialsService.getApiKey('stripe_publishable_key');
-      _secretKey = await _credentialsService.getApiKey('stripe_secret_key');
+      developer.log('Stripe: Fetching config from backend...',
+          name: 'StripeService');
 
-      // Initialize Stripe SDK if we have a key
-      if (_publishableKey != null) {
-        Stripe.publishableKey = _publishableKey!;
-        await Stripe.instance.applySettings();
-        _initialized = true;
-      }
-
-      developer.log(
-        'Stripe initialized: publishableKey=${_publishableKey != null}, testMode=$_testMode',
-        name: 'StripeService',
+      final response = await http.get(
+        Uri.parse('$_baseUrl/subscriptions/payment-config'),
+        headers: {'Content-Type': 'application/json'},
       );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final stripeConfig = data['config']?['stripe'];
+
+        if (stripeConfig != null) {
+          _publishableKey = stripeConfig['publishableKey'];
+          _secretKey = stripeConfig['secretKey'];
+          _testMode = stripeConfig['testMode'] ?? true;
+
+          // Initialize Stripe SDK if we have a key
+          if (_publishableKey != null && _publishableKey!.isNotEmpty) {
+            Stripe.publishableKey = _publishableKey!;
+            await Stripe.instance.applySettings();
+            _initialized = true;
+          }
+
+          developer.log(
+            'Stripe initialized from backend: publishableKey=${_publishableKey != null && _publishableKey!.isNotEmpty}, secretKey=${_secretKey != null && _secretKey!.isNotEmpty}, testMode=$_testMode',
+            name: 'StripeService',
+          );
+        } else {
+          developer.log('Stripe: No config in response', name: 'StripeService');
+        }
+      } else {
+        developer.log('Stripe: Failed to fetch config - ${response.statusCode}',
+            name: 'StripeService');
+      }
     } catch (e) {
       developer.log('Failed to initialize Stripe: $e', name: 'StripeService');
     }
   }
 
   bool get isConfigured =>
-      _initialized; // Relaxed check: if SDK initialized, it's configured
+      _initialized && _secretKey != null && _secretKey!.isNotEmpty;
 
   /// Create a payment intent on the server
   Future<Map<String, dynamic>?> _createPaymentIntent({
