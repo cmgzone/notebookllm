@@ -29,8 +29,10 @@ router.get('/flashcards/decks', async (req: AuthRequest, res: Response) => {
 // Create flashcard deck
 router.post('/flashcards/decks', async (req: AuthRequest, res: Response) => {
     try {
-        const { id, notebookId, sourceId, title } = req.body;
+        const { id, notebookId, sourceId, title, cards } = req.body;
         const deckId = id || uuidv4();
+        
+        await pool.query('BEGIN');
         
         const result = await pool.query(
             `INSERT INTO flashcard_decks (id, user_id, notebook_id, source_id, title)
@@ -39,8 +41,23 @@ router.post('/flashcards/decks', async (req: AuthRequest, res: Response) => {
             [deckId, req.userId, notebookId, sourceId, title]
         );
         
+        // Save cards if provided
+        if (cards && Array.isArray(cards) && cards.length > 0) {
+            for (const card of cards) {
+                const cardId = card.id || uuidv4();
+                await pool.query(
+                    `INSERT INTO flashcards (id, deck_id, question, answer, difficulty)
+                     VALUES ($1, $2, $3, $4, $5)`,
+                    [cardId, deckId, card.question, card.answer, card.difficulty || 1]
+                );
+            }
+        }
+        
+        await pool.query('COMMIT');
+        
         res.status(201).json({ success: true, deck: result.rows[0] });
     } catch (error) {
+        await pool.query('ROLLBACK');
         console.error('Create flashcard deck error:', error);
         res.status(500).json({ error: 'Failed to create deck' });
     }
