@@ -45,10 +45,17 @@ router.post('/flashcards/decks', async (req: AuthRequest, res: Response) => {
         if (cards && Array.isArray(cards) && cards.length > 0) {
             for (const card of cards) {
                 const cardId = card.id || uuidv4();
+                // Convert numeric difficulty to text
+                let difficulty = card.difficulty;
+                if (typeof difficulty === 'number') {
+                    difficulty = difficulty === 1 ? 'easy' : difficulty === 2 ? 'medium' : 'hard';
+                }
+                difficulty = difficulty || 'medium';
+                
                 await pool.query(
                     `INSERT INTO flashcards (id, deck_id, question, answer, difficulty)
                      VALUES ($1, $2, $3, $4, $5)`,
-                    [cardId, deckId, card.question, card.answer, card.difficulty || 1]
+                    [cardId, deckId, card.question, card.answer, difficulty]
                 );
             }
         }
@@ -90,12 +97,19 @@ router.post('/flashcards/batch', async (req: AuthRequest, res: Response) => {
         const results: any[] = [];
         for (const fc of flashcards) {
             const id = fc.id || uuidv4();
+            // Convert numeric difficulty to text
+            let difficulty = fc.difficulty;
+            if (typeof difficulty === 'number') {
+                difficulty = difficulty === 1 ? 'easy' : difficulty === 2 ? 'medium' : 'hard';
+            }
+            difficulty = difficulty || 'medium';
+            
             const result = await pool.query(
                 `INSERT INTO flashcards (id, deck_id, question, answer, difficulty)
                  VALUES ($1, $2, $3, $4, $5)
                  ON CONFLICT (id) DO UPDATE SET question = $3, answer = $4, difficulty = $5
                  RETURNING *`,
-                [id, deckId, fc.question, fc.answer, fc.difficulty || 'medium']
+                [id, deckId, fc.question, fc.answer, difficulty]
             );
             results.push(result.rows[0]);
         }
