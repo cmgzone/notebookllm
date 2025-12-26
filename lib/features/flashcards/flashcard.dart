@@ -25,23 +25,40 @@ class Flashcard with _$Flashcard {
   factory Flashcard.fromJson(Map<String, dynamic> json) =>
       _$FlashcardFromJson(json);
 
-  factory Flashcard.fromBackendJson(Map<String, dynamic> json) => Flashcard(
-        id: json['id'],
-        question: json['question'],
-        answer: json['answer'],
-        notebookId: json['notebook_id'],
-        sourceId: json['source_id'],
-        difficulty: json['difficulty'] ?? 1,
-        timesReviewed: json['times_reviewed'] ?? 0,
-        timesCorrect: json['times_correct'] ?? 0,
-        lastReviewedAt: json['last_reviewed_at'] != null
-            ? DateTime.parse(json['last_reviewed_at'])
-            : null,
-        nextReviewAt: json['next_review_at'] != null
-            ? DateTime.parse(json['next_review_at'])
-            : null,
-        createdAt: DateTime.parse(json['created_at']),
-      );
+  factory Flashcard.fromBackendJson(Map<String, dynamic> json) {
+    // Convert text difficulty to int
+    int difficultyInt = 1;
+    final diff = json['difficulty'];
+    if (diff is int) {
+      difficultyInt = diff;
+    } else if (diff is String) {
+      difficultyInt = diff == 'easy'
+          ? 1
+          : diff == 'medium'
+              ? 2
+              : 3;
+    }
+
+    return Flashcard(
+      id: json['id'],
+      question: json['question'] ?? '',
+      answer: json['answer'] ?? '',
+      notebookId: json['notebook_id'] ?? json['deck_id'] ?? '',
+      sourceId: json['source_id'],
+      difficulty: difficultyInt,
+      timesReviewed: json['times_reviewed'] ?? 0,
+      timesCorrect: json['times_correct'] ?? 0,
+      lastReviewedAt: json['last_reviewed_at'] != null
+          ? DateTime.parse(json['last_reviewed_at'])
+          : null,
+      nextReviewAt: json['next_review_at'] != null
+          ? DateTime.parse(json['next_review_at'])
+          : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : DateTime.now(),
+    );
+  }
 
   Map<String, dynamic> toBackendJson() => {
         'id': id,
