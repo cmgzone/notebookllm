@@ -21,6 +21,15 @@ class ResearchSession {
   });
 
   factory ResearchSession.fromJson(Map<String, dynamic> json) {
+    // Handle source_count which may come as string from PostgreSQL COUNT
+    int sourceCount = 0;
+    final rawCount = json['source_count'];
+    if (rawCount is int) {
+      sourceCount = rawCount;
+    } else if (rawCount is String) {
+      sourceCount = int.tryParse(rawCount) ?? 0;
+    }
+
     return ResearchSession(
       id: json['id'] as String,
       notebookId: json['notebook_id'] as String?,
@@ -28,7 +37,7 @@ class ResearchSession {
       report: json['report'] as String?,
       createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ??
           DateTime.now(),
-      sourceCount: json['source_count'] as int? ?? 0,
+      sourceCount: sourceCount,
     );
   }
 }
