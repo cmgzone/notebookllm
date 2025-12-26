@@ -827,8 +827,9 @@ Generate 3 specific follow-up search queries (one per line, no bullets or number
     }
   }
 
-  /// Perform research in the cloud (backend)
-  /// Returns a stream of updates, with final result containing sessionId
+  /// Perform research in the cloud (backend) using background jobs
+  /// Research continues on server even if app is closed
+  /// Returns a stream of updates, polls for completion
   Stream<DeepResearchUpdate> researchInCloud(
     String query, {
     required String notebookId,
@@ -836,62 +837,136 @@ Generate 3 specific follow-up search queries (one per line, no bullets or number
     ResearchTemplate template = ResearchTemplate.general,
   }) async* {
     try {
-      yield DeepResearchUpdate('[CLOUD] Starting research...', 0.1);
-      await overlayBubbleService.show(status: '[CLOUD] Starting research...');
+      yield DeepResearchUpdate('[CLOUD] Starting background research...', 0.1);
+      await overlayBubbleService.show(
+          status: '[CLOUD] Starting background research...');
 
       final api = ref.read(apiServiceProvider);
 
-      yield DeepResearchUpdate('[CLOUD] Research running on server...', 0.3);
-      await overlayBubbleService.updateStatus('Research running on server...',
-          progress: 30);
-
-      // Call cloud research API
-      final result = await api.startCloudResearch(
+      // Start background job (returns immediately)
+      final jobId = await api.startBackgroundResearch(
         query: query,
         depth: depth.name,
         template: template.name,
         notebookId: notebookId.isNotEmpty ? notebookId : null,
       );
 
-      final report = result['report'] as String? ?? '';
-      final sourcesData = result['sources'] as List<dynamic>? ?? [];
-      final sessionId = result['sessionId'] as String?;
-
-      // Convert sources
-      final sources = sourcesData
-          .map((s) => ResearchSource(
-                title: s['title'] ?? '',
-                url: s['url'] ?? '',
-                content: s['content'] ?? '',
-                snippet: s['snippet'],
-                credibility: _parseCredibility(s['credibility']),
-                credibilityScore: s['credibilityScore'] ?? 60,
-              ))
-          .toList();
+      debugPrint('[DeepResearch] Background job started: $jobId');
 
       yield DeepResearchUpdate(
-        'Cloud research complete!',
-        1.0,
-        result: report,
-        sources: sources,
+          '[CLOUD] Research running on server (Job: ${jobId.substring(0, 8)}...)',
+          0.2);
+      await overlayBubbleService.updateStatus(
+          'Research running on server...\nYou can close the app - check history later',
+          progress: 20);
+
+      // Poll for completion
+      int pollCount = 0;
+      const maxPolls = 120; // 10 minutes max (5 second intervals)
+      const pollInterval = Duration(seconds: 5);
+
+      while (pollCount < maxPolls) {
+        await Future.delayed(pollInterval);
+        pollCount++;
+
+        try {
+          final jobStatus = await api.getResearchJobStatus(jobId);
+
+          if (jobStatus == null) {
+            throw Exception('Job not found');
+          }
+
+          final status = jobStatus['status'] as String? ?? 'unknown';
+          final progress = (jobStatus['progress'] as num?)?.toDouble() ?? 0.0;
+          final statusMessage =
+              jobStatus['status_message'] as String? ?? 'Processing...';
+
+          debugPrint(
+              '[DeepResearch] Job status: $status, progress: $progress, message: $statusMessage');
+
+          if (status == 'completed') {
+            // Job completed - fetch the session
+            final sessionId = jobStatus['session_id'] as String?;
+            if (sessionId != null) {
+              final sessionData = await api.get('/research/sessions/$sessionId');
+              final session = sessionData['session'] as Map<String, dynamic>?;
+              final sourcesData = sessionData['sources'] as List<dynamic>? ?? [];
+
+              final report = session?['report'] as String? ?? '';
+              final sources = sourcesData
+                  .map((s) => ResearchSource(
+                        title: s['title'] ?? '',
+                        url: s['url'] ?? '',
+                        content: s['content'] ?? '',
+                        snippet: s['snippet'],
+                        credibility: _parseCredibility(s['credibility']),
+                        credibilityScore: s['credibility_score'] ?? 60,
+                      ))
+                  .toList();
+
+              yield DeepResearchUpdate(
+                'Cloud research complete!',
+                1.0,
+                result: report,
+                sources: sources,
+              );
+
+              // Refresh sessions
+              ref.invalidate(researchSessionProvider);
+
+              // Track gamification
+              ref.read(gamificationProvider.notifier).trackDeepResearch();
+              ref
+                  .read(gamificationProvider.notifier)
+                  .trackFeatureUsed('cloud_research');
+
+              await overlayBubbleService.updateStatus('Research Complete! ✓',
+                  progress: 100);
+              await Future.delayed(const Duration(seconds: 2));
+              await overlayBubbleService.hide();
+
+              debugPrint(
+                  '[DeepResearch] Cloud research complete, sessionId: $sessionId');
+              return;
+            }
+          } else if (status == 'failed') {
+            final error = jobStatus['error'] as String? ?? 'Unknown error';
+            throw Exception('Research failed: $error');
+          } else {
+            // Still running - update progress
+            final displayProgress = 0.2 + (progress * 0.7);
+            yield DeepResearchUpdate(
+              '[CLOUD] $statusMessage',
+              displayProgress,
+            );
+            await overlayBubbleService.updateStatus(
+              statusMessage,
+              progress: (displayProgress * 100).toInt(),
+            );
+          }
+        } catch (e) {
+          debugPrint('[DeepResearch] Poll error: $e');
+          // Continue polling on transient errors
+          if (pollCount > 3) {
+            // After a few retries, show error but keep polling
+            yield DeepResearchUpdate(
+              '[CLOUD] Checking status... (retry)',
+              0.3,
+            );
+          }
+        }
+      }
+
+      // Timeout - but research may still complete on server
+      yield DeepResearchUpdate(
+        'Research is taking longer than expected.\nCheck Research History later for results.',
+        0.9,
       );
-
-      // Refresh sessions
-      ref.invalidate(researchSessionProvider);
-
-      // Track gamification
-      ref.read(gamificationProvider.notifier).trackDeepResearch();
-      ref
-          .read(gamificationProvider.notifier)
-          .trackFeatureUsed('cloud_research');
-
-      await overlayBubbleService.updateStatus('Research Complete! ✓',
-          progress: 100);
-      await Future.delayed(const Duration(seconds: 2));
+      await overlayBubbleService.updateStatus(
+          'Research still running on server.\nCheck history later.',
+          progress: 90);
+      await Future.delayed(const Duration(seconds: 3));
       await overlayBubbleService.hide();
-
-      debugPrint(
-          '[DeepResearch] Cloud research complete, sessionId: $sessionId');
     } catch (e) {
       debugPrint('[DeepResearch] Cloud research error: $e');
       await overlayBubbleService.updateStatus('Error: $e');
