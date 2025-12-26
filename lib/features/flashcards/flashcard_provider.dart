@@ -23,7 +23,22 @@ class FlashcardNotifier extends StateNotifier<List<FlashcardDeck>> {
     try {
       final api = ref.read(apiServiceProvider);
       final decksData = await api.getFlashcardDecks();
-      state = decksData.map((j) => FlashcardDeck.fromBackendJson(j)).toList()
+
+      // Fetch cards for each deck
+      final decksWithCards = <FlashcardDeck>[];
+      for (final deckJson in decksData) {
+        final deckId = deckJson['id'] as String;
+        try {
+          final cardsData = await api.getFlashcardsForDeck(deckId);
+          deckJson['cards'] = cardsData;
+        } catch (e) {
+          debugPrint('Error loading cards for deck $deckId: $e');
+          deckJson['cards'] = [];
+        }
+        decksWithCards.add(FlashcardDeck.fromBackendJson(deckJson));
+      }
+
+      state = decksWithCards
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     } catch (e) {
       debugPrint('Error loading flashcard decks: $e');
