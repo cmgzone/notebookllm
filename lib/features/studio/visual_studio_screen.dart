@@ -34,6 +34,7 @@ class _VisualStudioScreenState extends ConsumerState<VisualStudioScreen> {
     try {
       final settings = await AISettingsService.getSettings();
       final provider = settings.provider;
+      final model = settings.model;
       final creds = ref.read(globalCredentialsServiceProvider);
 
       String? apiKey;
@@ -49,11 +50,9 @@ class _VisualStudioScreenState extends ConsumerState<VisualStudioScreen> {
       }
 
       final imageService = GeminiImageService(apiKey: apiKey);
-      // Pass provider and model to generateImage if possible, or just prompt.
-      // Since generateImage signature is strict (only prompt), we might need to update GeminiImageService first
-      // or rely on a new method.
-      // For now, I'll update GeminiImageService to accept optional params, then use them here.
-      final url = await imageService.generateImage(prompt, provider: provider);
+      // Pass provider and model to generateImage
+      final url = await imageService.generateImage(prompt,
+          provider: provider, model: model);
 
       if (mounted) {
         setState(() {

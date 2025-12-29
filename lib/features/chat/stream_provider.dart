@@ -146,20 +146,14 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
     buffer.writeln('3. Be concise and professional.');
     buffer.writeln('4. **Notebook Creation**:');
     buffer.writeln(
-        '   - If the user explicitly asks to create a notebook (e.g., "Create a notebook about Space"), output ONLY the following command on a new line:');
-    buffer.writeln('     `[[CREATE_NOTEBOOK: Title of Notebook]]`');
+        '   - If the user implies creating a notebook or the context suggests it would be useful, propose it.');
     buffer.writeln(
-        '   - Replace "Title of Notebook" with the actual title requested or a suitable one.');
+        '   - To propose creating a notebook, output ONLY the following command on a new line:');
+    buffer.writeln('     `[[PROPOSE_NOTEBOOK: Title of Notebook]]`');
     buffer.writeln(
-        '   - Follow this command with a brief confirmation message to the user.');
-    buffer.writeln('5. **Ebook Creation**:');
+        '   - Replace "Title of Notebook" with the actual title intended.');
     buffer.writeln(
-        '   - If the user explicitly asks to create an ebook (e.g., "Create an ebook about AI"), output ONLY the following command on a new line:');
-    buffer.writeln('     `[[CREATE_EBOOK: Title | Topic]]`');
-    buffer.writeln(
-        '   - Replace "Title" with a catchy title and "Topic" with the subject matter.');
-    buffer.writeln(
-        '   - Follow this command with a brief confirmation message to the user.');
+        '   - This will show a button to the user to confirm creation.');
 
     return buffer.toString();
   }

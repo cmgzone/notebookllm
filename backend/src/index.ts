@@ -22,6 +22,7 @@ import researchRoutes from './routes/research.js';
 import searchRoutes from './routes/search.js';
 import featuresRoutes from './routes/features.js';
 import voiceRoutes from './routes/voice.js';
+import sportsRoutes from './routes/sports.js';
 
 // Import services
 import bunnyService from './services/bunnyService.js';
@@ -82,6 +83,7 @@ app.use('/api/research', researchRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/features', featuresRoutes);
 app.use('/api/voice', voiceRoutes);
+app.use('/api/sports', sportsRoutes);
 
 // 404 handler
 app.use((req, res) => {

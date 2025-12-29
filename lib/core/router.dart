@@ -52,6 +52,19 @@ import '../features/gamification/daily_challenges_screen.dart';
 import '../features/language_learning/language_learning_hub.dart';
 import '../features/language_learning/language_session_screen.dart';
 import '../features/admin/ai_models_manager_screen.dart';
+import '../features/sports_predictor/sports_predictor_screen.dart';
+import '../features/sports_predictor/predictor_chat_screen.dart';
+import '../features/sports_predictor/sports_news_screen.dart';
+import '../features/sports_predictor/screens/sports_hub_screen.dart';
+import '../features/sports_predictor/screens/live_scores_screen.dart';
+import '../features/sports_predictor/screens/prediction_history_screen.dart';
+import '../features/sports_predictor/screens/bankroll_screen.dart';
+import '../features/sports_predictor/screens/performance_dashboard_screen.dart';
+import '../features/sports_predictor/screens/leaderboard_screen.dart';
+import '../features/sports_predictor/screens/betting_slip_screen.dart';
+import '../features/sports_predictor/screens/match_preview_screen.dart';
+import '../features/sports_predictor/screens/tipsters_screen.dart';
+import '../features/sports_predictor/screens/favorites_screen.dart';
 
 String getInitialLocation(bool hasSeenOnboarding) {
   return hasSeenOnboarding ? '/home' : '/onboarding';
@@ -431,6 +444,84 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
         name: 'admin-ai-models',
         pageBuilder: (context, state) =>
             buildTransitionPage(child: const AIModelsManagerScreen()),
+      ),
+      GoRoute(
+        path: '/sports-predictor',
+        name: 'sports-predictor',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const SportsPredictorScreen()),
+      ),
+      GoRoute(
+        path: '/sports-predictor/chat',
+        name: 'sports-predictor-chat',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const PredictorChatScreen()),
+      ),
+      GoRoute(
+        path: '/sports-news',
+        name: 'sports-news',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const SportsNewsScreen()),
+      ),
+      GoRoute(
+        path: '/sports-hub',
+        name: 'sports-hub',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const SportsHubScreen()),
+      ),
+      GoRoute(
+        path: '/sports-live',
+        name: 'sports-live',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const LiveScoresScreen()),
+      ),
+      GoRoute(
+        path: '/sports-history',
+        name: 'sports-history',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const PredictionHistoryScreen()),
+      ),
+      GoRoute(
+        path: '/sports-bankroll',
+        name: 'sports-bankroll',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const BankrollScreen()),
+      ),
+      GoRoute(
+        path: '/sports-dashboard',
+        name: 'sports-dashboard',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const PerformanceDashboardScreen()),
+      ),
+      GoRoute(
+        path: '/sports-leaderboard',
+        name: 'sports-leaderboard',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const LeaderboardScreen()),
+      ),
+      GoRoute(
+        path: '/sports-slip',
+        name: 'sports-slip',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const BettingSlipScreen()),
+      ),
+      GoRoute(
+        path: '/sports-preview',
+        name: 'sports-preview',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const MatchPreviewScreen()),
+      ),
+      GoRoute(
+        path: '/sports-tipsters',
+        name: 'sports-tipsters',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const TipstersScreen()),
+      ),
+      GoRoute(
+        path: '/sports-favorites',
+        name: 'sports-favorites',
+        pageBuilder: (context, state) =>
+            buildTransitionPage(child: const FavoritesScreen()),
       ),
     ],
   );

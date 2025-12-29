@@ -8,6 +8,7 @@ import 'dart:ui';
 import '../sources/source_provider.dart';
 import '../../core/ai/ai_provider.dart';
 import 'notebook_provider.dart';
+import '../../core/api/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../chat/context_usage_widget.dart';
 
@@ -29,6 +30,42 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
   final List<ChatMessage> _messages = [];
   bool _isLoading = false;
   ChatStyle _selectedStyle = ChatStyle.standard;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    setState(() => _isLoading = true);
+    try {
+      final history = await ref
+          .read(apiServiceProvider)
+          .getChatHistory(notebookId: widget.notebookId);
+      final messages = history
+          .map((data) => ChatMessage(
+                text: data['content'],
+                isUser: data['role'] == 'user',
+                timestamp: DateTime.parse(data['created_at']),
+              ))
+          .toList();
+
+      if (mounted) {
+        setState(() {
+          _messages.clear();
+          _messages.addAll(messages);
+          _isLoading = false;
+        });
+        Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        debugPrint('Error loading chat history: $e');
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -54,6 +91,13 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
     _scrollToBottom();
 
     try {
+      // Save User Message
+      await ref.read(apiServiceProvider).saveChatMessage(
+            role: 'user',
+            content: message,
+            notebookId: widget.notebookId,
+          );
+
       // Get notebook sources for context
       final allSources = ref.read(sourceProvider);
       final notebookSources =
@@ -62,15 +106,34 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
       final context =
           notebookSources.map((s) => '${s.title}: ${s.content}').toList();
 
+      // Construct history pairs
+      final historyPairs = <AIPromptResponse>[];
+      for (int i = 0; i < _messages.length - 1; i++) {
+        if (_messages[i].isUser && !_messages[i + 1].isUser) {
+          historyPairs.add(AIPromptResponse(
+              prompt: _messages[i].text,
+              response: _messages[i + 1].text,
+              timestamp: _messages[i + 1].timestamp));
+        }
+      }
+
       // Generate AI response
       await ref.read(aiProvider.notifier).generateContent(
             message,
             context: context,
             style: _selectedStyle,
+            externalHistory: historyPairs,
           );
 
       final aiState = ref.read(aiProvider);
       if (aiState.lastResponse != null) {
+        // Save AI Message
+        await ref.read(apiServiceProvider).saveChatMessage(
+              role: 'model',
+              content: aiState.lastResponse!,
+              notebookId: widget.notebookId,
+            );
+
         setState(() {
           _messages.add(ChatMessage(
             text: aiState.lastResponse!,

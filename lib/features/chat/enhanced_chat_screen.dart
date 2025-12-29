@@ -17,8 +17,10 @@ import '../chat/message.dart';
 import '../chat/chat_provider.dart';
 import '../chat/stream_provider.dart';
 import '../sources/source_detail_screen.dart';
-//
+import '../notebook/notebook_provider.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/ai/ai_provider.dart';
+import '../../core/api/api_service.dart';
 import '../sources/source_provider.dart';
 //
 import '../../theme/motion.dart';
@@ -383,6 +385,57 @@ Sources to analyze:''';
     }
   }
 
+  Future<void> _handleCreateNotebookProposal(String title) async {
+    // Show loading feedback
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+          content: Text('Creating notebook "$title"...'),
+          duration: const Duration(seconds: 1)),
+    );
+
+    try {
+      // 1. Create Notebook
+      final notebookId =
+          await ref.read(notebookProvider.notifier).addNotebook(title);
+
+      if (notebookId != null) {
+        // 2. Capture Chat History
+        final messages = ref.read(chatProvider);
+        final historyText = messages
+            .map((m) => '${m.isUser ? "User" : "AI"}: ${m.text}')
+            .join('\n\n');
+
+        // 3. Add as Source
+        await ref.read(apiServiceProvider).createSource(
+              notebookId: notebookId,
+              type: 'text',
+              title: 'Original Chat History',
+              content: historyText,
+            );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Notebook created! Opening...')),
+          );
+          // 4. Navigate
+          context.push('/notebook/$notebookId');
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to create notebook.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
   void _showExportDialog() {
     final scheme = Theme.of(context).colorScheme;
     final messages = ref.read(chatProvider);
@@ -664,6 +717,7 @@ Sources to analyze:''';
                       return _MessageBubble(
                         message: message,
                         isLast: index == messages.length - 1,
+                        onAcceptProposal: _handleCreateNotebookProposal,
                       )
                           .animate()
                           .slide(
@@ -775,16 +829,31 @@ class _MessageBubble extends ConsumerWidget {
   const _MessageBubble({
     required this.message,
     required this.isLast,
+    this.onAcceptProposal,
   });
 
   final Message message;
   final bool isLast;
+
+  final Function(String)? onAcceptProposal;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final isUser = message.isUser;
     final state = context.findAncestorStateOfType<_EnhancedChatScreenState>();
+
+    // Parse proposal
+    final notebookProposalRegex = RegExp(r'\[\[PROPOSE_NOTEBOOK:\s*(.*?)\]\]');
+    final match = notebookProposalRegex.firstMatch(message.text);
+    String? proposalTitle;
+    String displayContent = message.text;
+
+    if (match != null) {
+      proposalTitle = match.group(1)?.trim();
+      displayContent =
+          message.text.replaceAll(notebookProposalRegex, '').trim();
+    }
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -863,18 +932,76 @@ class _MessageBubble extends ConsumerWidget {
                       ),
                     ),
                   _AnimatedMessageText(
-                    text: message.text,
+                    text: displayContent,
                     citations: message.citations,
                     isUser: isUser,
                     isLast: isLast,
                   ),
+                  if (proposalTitle != null && !isUser) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: scheme.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: scheme.primary.withValues(alpha: 0.2)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.book, size: 16, color: scheme.primary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Proposal: Create Notebook',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: scheme.primary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '"$proposalTitle"',
+                            style: TextStyle(
+                              color: scheme.onSurface,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: () {
+                                if (onAcceptProposal != null) {
+                                  onAcceptProposal!(proposalTitle!);
+                                }
+                              },
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Create & Save Chat'),
+                              style: FilledButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (!isUser) ...[
                     const SizedBox(height: 8),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          onPressed: () => state?._playTTS(message.text),
+                          onPressed: () => state?._playTTS(displayContent),
                           icon: const Icon(Icons.volume_up, size: 18),
                           tooltip: 'Play voice',
                         ),

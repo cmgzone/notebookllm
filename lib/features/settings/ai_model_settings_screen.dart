@@ -273,7 +273,7 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
                               child: Row(
                                 children: [
                                   if (isLocked) ...[
-                                    Icon(Icons.lock,
+                                    const Icon(Icons.lock,
                                         size: 14, color: Colors.grey),
                                     const SizedBox(width: 4),
                                   ],
@@ -292,7 +292,7 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
                                     ),
                                   ),
                                   if (isLocked)
-                                    Text(' (Upgrade)',
+                                    const Text(' (Upgrade)',
                                         style: TextStyle(
                                             fontSize: 10, color: Colors.grey)),
                                 ],

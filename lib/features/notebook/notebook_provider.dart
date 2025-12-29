@@ -51,11 +51,11 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
     }
   }
 
-  Future<void> addNotebook(String title) async {
+  Future<String?> addNotebook(String title) async {
     try {
       final authState = ref.read(customAuthStateProvider);
       final user = authState.user;
-      if (user == null) return;
+      if (user == null) return null;
 
       final apiService = ref.read(apiServiceProvider);
 
@@ -87,8 +87,11 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
       // Refresh from API
       await Future.delayed(const Duration(milliseconds: 100));
       await loadNotebooks();
+
+      return notebook.id;
     } catch (e) {
       debugPrint('Error adding notebook: $e');
+      return null;
     }
   }
 

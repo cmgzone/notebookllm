@@ -806,6 +806,27 @@ class ApiService {
     return List<Map<String, dynamic>>.from(response['models'] ?? []);
   }
 
+  // ============ CHAT HISTORY ============
+
+  Future<List<Map<String, dynamic>>> getChatHistory(
+      {String? notebookId}) async {
+    final query = notebookId != null ? '?notebookId=$notebookId' : '';
+    final response = await get('/ai/chat/history$query');
+    return List<Map<String, dynamic>>.from(response['messages'] ?? []);
+  }
+
+  Future<Map<String, dynamic>> saveChatMessage({
+    required String role,
+    required String content,
+    String? notebookId,
+  }) async {
+    return await post('/ai/chat/message', {
+      'role': role,
+      'content': content,
+      if (notebookId != null) 'notebookId': notebookId,
+    });
+  }
+
   // Admin-only endpoints for managing AI models
   Future<Map<String, dynamic>> addAIModel(Map<String, dynamic> model) async {
     final response = await post('/admin/models', model);
@@ -1335,5 +1356,175 @@ class ApiService {
       String provider) async {
     final response = await get('/voice/models/$provider');
     return List<Map<String, dynamic>>.from(response['voices'] ?? []);
+  }
+
+  // ============ SPORTS SOCIAL ============
+
+  // Predictions
+  Future<List<Map<String, dynamic>>> getSportsPredictions({
+    int limit = 50,
+    int offset = 0,
+    String? result,
+  }) async {
+    String query = '/sports/predictions?limit=$limit&offset=$offset';
+    if (result != null) query += '&result=$result';
+    final response = await get(query);
+    return List<Map<String, dynamic>>.from(response['predictions'] ?? []);
+  }
+
+  Future<Map<String, dynamic>> createSportsPrediction(
+      Map<String, dynamic> prediction) async {
+    final response = await post('/sports/predictions', prediction);
+    return response['prediction'];
+  }
+
+  Future<Map<String, dynamic>> settleSportsPrediction(
+      String id, String result) async {
+    final response = await put('/sports/predictions/$id/settle', {
+      'result': result,
+    });
+    return response['prediction'];
+  }
+
+  // Stats & Leaderboard
+  Future<Map<String, dynamic>> getSportsStats() async {
+    final response = await get('/sports/stats');
+    return response['stats'] ?? {};
+  }
+
+  Future<List<Map<String, dynamic>>> getSportsLeaderboard({
+    String timeframe = 'all',
+    int limit = 50,
+  }) async {
+    final response =
+        await get('/sports/leaderboard?timeframe=$timeframe&limit=$limit');
+    return List<Map<String, dynamic>>.from(response['leaderboard'] ?? []);
+  }
+
+  // Tipsters
+  Future<List<Map<String, dynamic>>> getTipsters() async {
+    final response = await get('/sports/tipsters');
+    return List<Map<String, dynamic>>.from(response['tipsters'] ?? []);
+  }
+
+  Future<Map<String, dynamic>> registerAsTipster(
+      Map<String, dynamic> data) async {
+    final response = await post('/sports/tipsters/register', data);
+    return response['tipster'];
+  }
+
+  Future<void> followTipster(String tipsterId) async {
+    await post('/sports/tipsters/$tipsterId/follow', {});
+  }
+
+  Future<void> unfollowTipster(String tipsterId) async {
+    await delete('/sports/tipsters/$tipsterId/follow');
+  }
+
+  Future<List<Map<String, dynamic>>> getFollowingTipsters() async {
+    final response = await get('/sports/tipsters/following');
+    return List<Map<String, dynamic>>.from(response['tipsters'] ?? []);
+  }
+
+  // Favorites
+  Future<List<Map<String, dynamic>>> getFavoriteTeams() async {
+    final response = await get('/sports/favorites');
+    return List<Map<String, dynamic>>.from(response['favorites'] ?? []);
+  }
+
+  Future<Map<String, dynamic>> addFavoriteTeam(
+      Map<String, dynamic> team) async {
+    final response = await post('/sports/favorites', team);
+    return response['favorite'];
+  }
+
+  Future<void> removeFavoriteTeam(String id) async {
+    await delete('/sports/favorites/$id');
+  }
+
+  // Bankroll
+  Future<Map<String, dynamic>> getBankroll({int limit = 50}) async {
+    final response = await get('/sports/bankroll?limit=$limit');
+    return response;
+  }
+
+  Future<Map<String, dynamic>> addBankrollEntry(
+      Map<String, dynamic> entry) async {
+    final response = await post('/sports/bankroll', entry);
+    return response;
+  }
+
+  // Betting Slips
+  Future<List<Map<String, dynamic>>> getBettingSlips() async {
+    final response = await get('/sports/slips');
+    return List<Map<String, dynamic>>.from(response['slips'] ?? []);
+  }
+
+  Future<Map<String, dynamic>> saveBettingSlip(
+      Map<String, dynamic> slip) async {
+    final response = await post('/sports/slips', slip);
+    return response['slip'];
+  }
+
+  Future<void> deleteBettingSlip(String id) async {
+    await delete('/sports/slips/$id');
+  }
+
+  // ============ SPORTS LIVE DATA (SportRadar) ============
+
+  // Get live matches
+  Future<List<Map<String, dynamic>>> getLiveMatches() async {
+    final response = await get('/sports/live');
+    return List<Map<String, dynamic>>.from(response['matches'] ?? []);
+  }
+
+  // Get today's fixtures
+  Future<List<Map<String, dynamic>>> getTodayFixtures() async {
+    final response = await get('/sports/fixtures/today');
+    return List<Map<String, dynamic>>.from(response['matches'] ?? []);
+  }
+
+  // Get fixtures by date
+  Future<List<Map<String, dynamic>>> getFixturesByDate(String date) async {
+    final response = await get('/sports/fixtures/$date');
+    return List<Map<String, dynamic>>.from(response['matches'] ?? []);
+  }
+
+  // Get match details
+  Future<Map<String, dynamic>?> getMatchDetails(String matchId) async {
+    final response = await get('/sports/match/$matchId');
+    return response['match'];
+  }
+
+  // Get match odds
+  Future<Map<String, dynamic>?> getMatchOdds(String matchId) async {
+    final response = await get('/sports/match/$matchId/odds');
+    return response['odds'];
+  }
+
+  // Get head-to-head
+  Future<Map<String, dynamic>?> getHeadToHead(
+      String team1Id, String team2Id) async {
+    final response = await get('/sports/h2h/$team1Id/$team2Id');
+    return response['h2h'];
+  }
+
+  // Get team form
+  Future<Map<String, dynamic>?> getTeamForm(String teamId,
+      {int limit = 5}) async {
+    final response = await get('/sports/team/$teamId/form?limit=$limit');
+    return response['form'];
+  }
+
+  // Get league standings
+  Future<List<Map<String, dynamic>>> getLeagueStandings(String leagueId) async {
+    final response = await get('/sports/standings/$leagueId');
+    return List<Map<String, dynamic>>.from(response['standings'] ?? []);
+  }
+
+  // Get team injuries
+  Future<List<Map<String, dynamic>>> getTeamInjuries(String teamId) async {
+    final response = await get('/sports/team/$teamId/injuries');
+    return List<Map<String, dynamic>>.from(response['injuries'] ?? []);
   }
 }

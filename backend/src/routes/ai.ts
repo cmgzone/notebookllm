@@ -294,4 +294,51 @@ router.post('/notebook-summary', async (req: AuthRequest, res: Response) => {
     }
 });
 
+// Chat persistence
+router.get('/chat/history', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId;
+        const { notebookId } = req.query;
+
+        let query = 'SELECT * FROM chat_messages WHERE user_id = $1';
+        const params: any[] = [userId];
+
+        if (notebookId) {
+            query += ' AND notebook_id = $2';
+            params.push(notebookId);
+        } else {
+            query += ' AND notebook_id IS NULL';
+        }
+
+        query += ' ORDER BY created_at ASC';
+
+        const result = await pool.query(query, params);
+        res.json({ messages: result.rows });
+    } catch (error) {
+        console.error('Error fetching chat history:', error);
+        res.status(500).json({ error: 'Failed to fetch chat history' });
+    }
+});
+
+router.post('/chat/message', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId;
+        const { notebookId, role, content } = req.body;
+
+        if (!content || !role) {
+            return res.status(400).json({ error: 'Content and role are required' });
+        }
+
+        const result = await pool.query(
+            'INSERT INTO chat_messages (user_id, notebook_id, role, content) VALUES ($1, $2, $3, $4) RETURNING *',
+            [userId, notebookId || null, role, content]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        console.error('Error saving chat message:', error);
+        res.status(500).json({ error: 'Failed to save chat message' });
+    }
+});
+
 export default router;

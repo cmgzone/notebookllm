@@ -7,6 +7,7 @@ import 'story.dart';
 import '../../core/ai/gemini_image_service.dart';
 import '../../core/search/serper_service.dart';
 import '../../core/api/api_service.dart';
+import '../../core/security/global_credentials_service.dart';
 
 class StoryGeneratorState {
   final List<Story> stories;
@@ -159,9 +160,12 @@ class StoryGeneratorNotifier extends StateNotifier<StoryGeneratorState> {
       for (final result in searchResults.take(5)) {
         try {
           final content = await serperService.fetchPageContent(result.link);
+
           if (content.length > 100) {
-            sourceContents.add(
-                '${result.title}:\n${content.substring(0, content.length.clamp(0, 1500))}');
+            // Clamp content to 1500 chars to avoid context overflow
+            final truncated =
+                content.length > 1500 ? content.substring(0, 1500) : content;
+            sourceContents.add('${result.title}:\n$truncated');
             sourceUrls.add(result.link);
           }
         } catch (e) {
@@ -279,7 +283,17 @@ class StoryGeneratorNotifier extends StateNotifier<StoryGeneratorState> {
 
       // Generate AI images - use environment API key from config
       final settings = await AISettingsService.getSettings();
-      final imageService = GeminiImageService();
+
+      // Get correct API key
+      final creds = ref.read(globalCredentialsServiceProvider);
+      String? apiKey;
+      if (settings.provider == 'openrouter') {
+        apiKey = await creds.getApiKey('openrouter');
+      } else {
+        apiKey = await creds.getApiKey('gemini');
+      }
+
+      final imageService = GeminiImageService(apiKey: apiKey);
 
       final imageUrls = <String>[];
 
@@ -287,7 +301,7 @@ class StoryGeneratorNotifier extends StateNotifier<StoryGeneratorState> {
       final coverPrompt =
           'Book cover art for: ${storyData['title']}. ${storyData['coverDescription'] ?? prompt}. Digital art, cinematic, detailed.';
       final coverUrl = await imageService.generateImage(coverPrompt,
-          provider: settings.provider);
+          provider: settings.provider, model: settings.model);
       imageUrls.add(coverUrl);
 
       // Generate chapter images
@@ -306,7 +320,7 @@ class StoryGeneratorNotifier extends StateNotifier<StoryGeneratorState> {
           final imgPrompt =
               'Scene illustration: ${chapters[i].title}. Fantasy art style, detailed, atmospheric.';
           chapterImageUrl = await imageService.generateImage(imgPrompt,
-              provider: settings.provider);
+              provider: settings.provider, model: settings.model);
           imageUrls.add(chapterImageUrl);
         } catch (e) {
           debugPrint('Failed to generate chapter image: $e');
@@ -366,7 +380,12 @@ class StoryGeneratorNotifier extends StateNotifier<StoryGeneratorState> {
     String? style,
     List<String>? imageUrls,
   }) async {
-    final sourcesText = sources.join('\n\n---\n\n');
+    var sourcesText = sources.join('\n\n---\n\n');
+    // Hard limit sources text to 25,000 chars (approx 6-8k tokens) to prevent overflow
+    if (sourcesText.length > 25000) {
+      sourcesText = sourcesText.substring(0, 25000);
+      sourcesText += '\n...(truncated)...';
+    }
 
     final prompt = '''
 You are a storyteller. Write an engaging narrative story based on the following real research about "$topic".

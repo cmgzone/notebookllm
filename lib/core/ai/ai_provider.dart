@@ -63,6 +63,7 @@ class AINotifier extends StateNotifier<AIState> {
     String prompt, {
     List<String> context = const [],
     ChatStyle style = ChatStyle.standard,
+    List<AIPromptResponse>? externalHistory,
   }) async {
     state = state.copyWith(status: AIStatus.loading, error: null);
 
@@ -77,9 +78,10 @@ class AINotifier extends StateNotifier<AIState> {
 
       // Build history string (last 8 turns for larger context window)
       final historyBuffer = StringBuffer();
-      final recentHistory = state.history.length > 8
-          ? state.history.sublist(state.history.length - 8)
-          : state.history;
+      final targetHistory = externalHistory ?? state.history;
+      final recentHistory = targetHistory.length > 8
+          ? targetHistory.sublist(targetHistory.length - 8)
+          : targetHistory;
 
       if (recentHistory.isNotEmpty) {
         historyBuffer.writeln('--- Conversation History ---');

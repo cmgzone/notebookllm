@@ -344,6 +344,14 @@ class _AppDrawer extends ConsumerWidget {
                         },
                       ),
                       _DrawerItem(
+                        icon: LucideIcons.target,
+                        label: 'Sports Predictor',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/sports-predictor');
+                        },
+                      ),
+                      _DrawerItem(
                         icon: LucideIcons.messageSquare,
                         label: 'Chat',
                         onTap: () {
