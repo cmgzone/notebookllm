@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -5,12 +6,14 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
+import 'package:just_audio/just_audio.dart';
 import '../../core/ai/gemini_service.dart';
 import '../../core/ai/openrouter_service.dart';
 import '../../core/security/global_credentials_service.dart';
 import '../../core/audio/ai_transcription_service.dart';
+import '../../core/audio/meeting_recorder_service.dart';
 import '../sources/source_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/ai/ai_settings_service.dart';
 
 class MeetingModeScreen extends ConsumerStatefulWidget {
   const MeetingModeScreen({super.key});
@@ -53,12 +56,40 @@ class _MeetingModeScreenState extends ConsumerState<MeetingModeScreen> {
   bool _useAITranscription = true; // Default to AI for better quality
   String _selectedLanguage = 'multi'; // Auto-detect by default
 
+  // Audio Recording
+  bool _recordAudio = true; // Record playable audio file
+  bool _noiseReduction = true; // Enable noise filtering
+  MeetingRecording? _currentRecording;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _isPlayingRecording = false;
+  Duration _playbackPosition = Duration.zero;
+  Duration _playbackDuration = Duration.zero;
+
   @override
   void initState() {
     super.initState();
     _initSpeech();
     _titleController.text =
         'Meeting ${DateFormat('MMM d, yyyy HH:mm').format(DateTime.now())}';
+    _setupAudioPlayer();
+  }
+
+  void _setupAudioPlayer() {
+    _audioPlayer.positionStream.listen((position) {
+      if (mounted) setState(() => _playbackPosition = position);
+    });
+    _audioPlayer.durationStream.listen((duration) {
+      if (mounted && duration != null) {
+        setState(() => _playbackDuration = duration);
+      }
+    });
+    _audioPlayer.playerStateStream.listen((state) {
+      if (mounted) {
+        setState(() {
+          _isPlayingRecording = state.playing;
+        });
+      }
+    });
   }
 
   Future<void> _initSpeech() async {
@@ -129,17 +160,37 @@ class _MeetingModeScreenState extends ConsumerState<MeetingModeScreen> {
     }
   }
 
-  void _startMeeting() {
+  void _startMeeting() async {
     setState(() {
       _isRecording = true;
       _meetingStartTime = DateTime.now();
       _transcript.clear();
       _generatedSummary = null;
+      _currentRecording = null;
     });
 
     if (_useAITranscription) {
+      // AI transcription handles audio recording internally
       _startAIListening();
     } else {
+      // For device transcription, start separate audio recording if enabled
+      if (_recordAudio) {
+        try {
+          final recorder = ref.read(meetingRecorderProvider);
+          final path = await recorder.startRecording(
+            title: _titleController.text,
+            noiseReduction: _noiseReduction,
+          );
+          debugPrint('Audio recording started: $path');
+        } catch (e) {
+          debugPrint('Failed to start audio recording: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Audio recording failed: $e')),
+            );
+          }
+        }
+      }
       _startDeviceListening();
     }
   }
@@ -149,7 +200,7 @@ class _MeetingModeScreenState extends ConsumerState<MeetingModeScreen> {
     if (!_isRecording) return;
 
     try {
-      debugPrint('Starting AI transcription...');
+      debugPrint('Starting AI transcription (saveAudio=$_recordAudio)...');
       final aiService = ref.read(aiTranscriptionServiceProvider);
 
       // Initialize the recorder first
@@ -196,6 +247,8 @@ class _MeetingModeScreenState extends ConsumerState<MeetingModeScreen> {
           }
         },
         language: _selectedLanguage,
+        saveAudioFile: _recordAudio,
+        audioFileName: _titleController.text,
       );
 
       debugPrint('AI transcription started');
@@ -408,15 +461,57 @@ class _MeetingModeScreenState extends ConsumerState<MeetingModeScreen> {
     // Stop recording immediately - don't process remaining audio
     setState(() => _isRecording = false);
 
+    String? savedAudioPath;
+
     if (_useAITranscription) {
-      await ref
-          .read(aiTranscriptionServiceProvider)
-          .stopListening(processRemaining: false);
+      // AI transcription service saves audio internally when _recordAudio is true
+      final aiService = ref.read(aiTranscriptionServiceProvider);
+      final duration = aiService.recordingDuration;
+      savedAudioPath = await aiService.stopListening(processRemaining: false);
+
+      // Create MeetingRecording from the saved audio file
+      if (savedAudioPath != null && _recordAudio) {
+        try {
+          final file = File(savedAudioPath);
+          if (await file.exists()) {
+            final fileSize = await file.length();
+            setState(() {
+              _currentRecording = MeetingRecording(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                title: _titleController.text,
+                filePath: savedAudioPath!,
+                duration: duration,
+                fileSize: fileSize,
+                createdAt: _meetingStartTime ?? DateTime.now(),
+                isTranscribed: _transcript.isNotEmpty,
+              );
+            });
+            debugPrint('AI audio saved: $savedAudioPath ($fileSize bytes)');
+          }
+        } catch (e) {
+          debugPrint('Failed to create recording from AI audio: $e');
+        }
+      }
     } else {
       await _speech.stop();
+
+      // Stop audio recording from meeting recorder (device transcription mode)
+      if (_recordAudio) {
+        try {
+          final recorder = ref.read(meetingRecorderProvider);
+          final recording =
+              await recorder.stopRecording(title: _titleController.text);
+          if (recording != null) {
+            setState(() => _currentRecording = recording);
+            debugPrint('Audio saved: ${recording.filePath}');
+          }
+        } catch (e) {
+          debugPrint('Failed to stop audio recording: $e');
+        }
+      }
     }
 
-    if (_transcript.isNotEmpty) {
+    if (_transcript.isNotEmpty || _currentRecording != null) {
       _showSaveDialog();
     }
   }
@@ -432,10 +527,21 @@ class _MeetingModeScreenState extends ConsumerState<MeetingModeScreen> {
     } else {
       await _speech.stop();
     }
+
+    // Pause audio recording
+    if (_recordAudio) {
+      await ref.read(meetingRecorderProvider).pauseRecording();
+    }
   }
 
-  void _resumeMeeting() {
+  void _resumeMeeting() async {
     setState(() => _isRecording = true);
+
+    // Resume audio recording
+    if (_recordAudio) {
+      await ref.read(meetingRecorderProvider).resumeRecording();
+    }
+
     if (_useAITranscription) {
       _startAIListening();
     } else {
@@ -485,77 +591,262 @@ Format in clean Markdown. Be concise but comprehensive.
   }
 
   Future<String> _generateWithAI(String prompt) async {
-    final prefs = await SharedPreferences.getInstance();
-    final provider = prefs.getString('ai_provider') ?? 'gemini';
+    final settings = await AISettingsService.getSettings();
+    final model = settings.model;
 
-    if (provider == 'openrouter') {
-      final model = prefs.getString('ai_model') ?? 'google/gemini-2.5-flash';
-      final creds = ref.read(globalCredentialsServiceProvider);
+    if (model == null || model.isEmpty) {
+      throw Exception(
+          'No AI model selected. Please configure a model in settings.');
+    }
+
+    final creds = ref.read(globalCredentialsServiceProvider);
+
+    if (settings.provider == 'openrouter') {
       final apiKey = await creds.getApiKey('openrouter');
       return await OpenRouterService()
           .generateContent(prompt, model: model, apiKey: apiKey);
     } else {
-      final creds = ref.read(globalCredentialsServiceProvider);
       final apiKey = await creds.getApiKey('gemini');
-      return await GeminiService().generateContent(prompt, apiKey: apiKey);
+      return await GeminiService()
+          .generateContent(prompt, apiKey: apiKey, model: model);
     }
   }
 
   void _showSaveDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Save Meeting Notes'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: 'Meeting Title',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (_generatedSummary == null)
-              OutlinedButton.icon(
-                onPressed: _isGeneratingSummary ? null : _generateSummary,
-                icon: _isGeneratingSummary
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.auto_awesome),
-                label: Text(_isGeneratingSummary
-                    ? 'Generating...'
-                    : 'Generate AI Summary'),
-              ),
-            if (_generatedSummary != null)
-              const Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.green, size: 16),
-                  SizedBox(width: 8),
-                  Text('Summary generated!',
-                      style: TextStyle(color: Colors.green)),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Save Meeting Notes'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Meeting Title',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Audio recording info and playback
+                if (_currentRecording != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primaryContainer
+                          .withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(LucideIcons.fileAudio,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 8),
+                            const Text('Audio Recording',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                            const Spacer(),
+                            Text(_currentRecording!.formattedSize,
+                                style: const TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        // Playback controls
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: Icon(_isPlayingRecording
+                                  ? Icons.pause
+                                  : Icons.play_arrow),
+                              onPressed: () => _togglePlayback(setDialogState),
+                            ),
+                            Expanded(
+                              child: Slider(
+                                value:
+                                    _playbackPosition.inMilliseconds.toDouble(),
+                                max: _playbackDuration.inMilliseconds
+                                    .toDouble()
+                                    .clamp(1, double.infinity),
+                                onChanged: (value) {
+                                  _audioPlayer.seek(
+                                      Duration(milliseconds: value.toInt()));
+                                },
+                              ),
+                            ),
+                            Text(
+                              '${_formatDuration(_playbackPosition)} / ${_formatDuration(_playbackDuration)}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        // Transcribe button
+                        OutlinedButton.icon(
+                          onPressed: _isGeneratingSummary
+                              ? null
+                              : () => _transcribeRecording(setDialogState),
+                          icon: _isGeneratingSummary
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.transcribe, size: 16),
+                          label: Text(_isGeneratingSummary
+                              ? 'Transcribing...'
+                              : 'AI Transcribe Audio'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                 ],
-              ),
+
+                if (_generatedSummary == null && _transcript.isNotEmpty)
+                  OutlinedButton.icon(
+                    onPressed: _isGeneratingSummary ? null : _generateSummary,
+                    icon: _isGeneratingSummary
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.auto_awesome),
+                    label: Text(_isGeneratingSummary
+                        ? 'Generating...'
+                        : 'Generate AI Summary'),
+                  ),
+                if (_generatedSummary != null)
+                  const Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green, size: 16),
+                      SizedBox(width: 8),
+                      Text('Summary generated!',
+                          style: TextStyle(color: Colors.green)),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                _audioPlayer.stop();
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                _audioPlayer.stop();
+                Navigator.pop(context);
+                _saveMeetingNotes();
+              },
+              child: const Text('Save'),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _saveMeetingNotes();
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
+  }
+
+  Future<void> _togglePlayback(StateSetter setDialogState) async {
+    if (_currentRecording == null) return;
+
+    if (_isPlayingRecording) {
+      await _audioPlayer.pause();
+    } else {
+      if (_audioPlayer.audioSource == null) {
+        await _audioPlayer.setFilePath(_currentRecording!.filePath);
+      }
+      await _audioPlayer.play();
+    }
+    setDialogState(() {});
+  }
+
+  Future<void> _transcribeRecording(StateSetter setDialogState) async {
+    if (_currentRecording == null) return;
+
+    setDialogState(() => _isGeneratingSummary = true);
+    setState(() => _isGeneratingSummary = true);
+
+    try {
+      // Check if file exists and has content
+      final file = File(_currentRecording!.filePath);
+      if (!await file.exists()) {
+        throw Exception(
+            'Recording file not found at: ${_currentRecording!.filePath}');
+      }
+
+      final fileSize = await file.length();
+      if (fileSize < 1000) {
+        throw Exception(
+            'Recording file is too small ($fileSize bytes). No audio was captured.');
+      }
+
+      debugPrint(
+          'Transcribing file: ${_currentRecording!.filePath} ($fileSize bytes)');
+
+      final recorder = ref.read(meetingRecorderProvider);
+      final transcript = await recorder.transcribeRecording(
+        _currentRecording!,
+        language: _selectedLanguage == 'multi' ? 'en' : _selectedLanguage,
+        detectLanguage: _selectedLanguage == 'multi',
+        onProgress: (progress) {
+          debugPrint('Transcription progress: ${(progress * 100).toInt()}%');
+        },
+      );
+
+      if (transcript.isEmpty) {
+        throw Exception(
+            'Transcription returned empty result. The audio may not contain speech.');
+      }
+
+      // Add transcribed segments
+      final lines = transcript.split('\n').where((l) => l.trim().isNotEmpty);
+      for (final line in lines) {
+        _addTranscriptSegment(line);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Audio transcribed successfully!'),
+              backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      debugPrint('Transcription error: $e');
+      if (mounted) {
+        String errorMsg = e.toString();
+        if (errorMsg.contains('Exception:')) {
+          errorMsg = errorMsg.replaceFirst('Exception:', '').trim();
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Transcription failed: $errorMsg'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } finally {
+      setDialogState(() => _isGeneratingSummary = false);
+      setState(() => _isGeneratingSummary = false);
+    }
+  }
+
+  String _formatDuration(Duration d) {
+    final mins = d.inMinutes;
+    final secs = d.inSeconds % 60;
+    return '$mins:${secs.toString().padLeft(2, '0')}';
   }
 
   Future<void> _saveMeetingNotes() async {
@@ -623,12 +914,45 @@ $fullTranscript
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Transcription Settings',
+              Text('Recording Settings',
                   style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).colorScheme.onSurface)),
               const SizedBox(height: 20),
+
+              // Audio recording toggle
+              SwitchListTile(
+                title: const Text('Record Audio File'),
+                subtitle: Text(_recordAudio
+                    ? 'Saves playable audio for later transcription'
+                    : 'Live transcription only, no audio saved'),
+                value: _recordAudio,
+                onChanged: (value) {
+                  setState(() => _recordAudio = value);
+                  setSheetState(() {});
+                },
+                secondary: Icon(
+                    _recordAudio ? LucideIcons.fileAudio : LucideIcons.micOff),
+              ),
+
+              // Noise reduction toggle
+              if (_recordAudio)
+                SwitchListTile(
+                  title: const Text('Noise Reduction'),
+                  subtitle:
+                      const Text('Filter background noise for clearer audio'),
+                  value: _noiseReduction,
+                  onChanged: (value) {
+                    setState(() => _noiseReduction = value);
+                    setSheetState(() {});
+                  },
+                  secondary: Icon(_noiseReduction
+                      ? LucideIcons.waves
+                      : LucideIcons.volume2),
+                ),
+
+              const Divider(),
 
               // Provider toggle
               SwitchListTile(
@@ -658,6 +982,7 @@ $fullTranscript
                 children: [
                   _buildLanguageChip('multi', 'Auto-detect', setSheetState),
                   _buildLanguageChip('en', 'English', setSheetState),
+                  _buildLanguageChip('sw', 'Swahili', setSheetState),
                   _buildLanguageChip('es', 'Spanish', setSheetState),
                   _buildLanguageChip('zh', 'Chinese', setSheetState),
                   _buildLanguageChip('ja', 'Japanese', setSheetState),
@@ -666,12 +991,23 @@ $fullTranscript
                   _buildLanguageChip('de', 'German', setSheetState),
                   _buildLanguageChip('ar', 'Arabic', setSheetState),
                   _buildLanguageChip('hi', 'Hindi', setSheetState),
+                  _buildLanguageChip('pt', 'Portuguese', setSheetState),
+                  _buildLanguageChip('ru', 'Russian', setSheetState),
+                  _buildLanguageChip('id', 'Indonesian', setSheetState),
                 ],
               ),
 
               const SizedBox(height: 20),
 
-              if (_useAITranscription)
+              if (_recordAudio)
+                Text(
+                  '💡 Audio files are saved locally and can be transcribed later using AI.',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.outline),
+                ),
+
+              if (_useAITranscription && !_recordAudio)
                 Text(
                   'Note: AI transcription requires Deepgram or Gemini API key configured in settings.',
                   style: TextStyle(
@@ -706,6 +1042,7 @@ $fullTranscript
   void dispose() {
     _speech.stop();
     ref.read(aiTranscriptionServiceProvider).dispose();
+    _audioPlayer.dispose();
     _scrollController.dispose();
     _titleController.dispose();
     super.dispose();
@@ -788,12 +1125,48 @@ $fullTranscript
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        _isRecording ? 'Recording...' : 'Ready to record',
-                        style: TextStyle(
-                          color: _isRecording ? Colors.white : scheme.onSurface,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            _isRecording ? 'Recording...' : 'Ready to record',
+                            style: TextStyle(
+                              color: _isRecording
+                                  ? Colors.white
+                                  : scheme.onSurface,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (_isRecording && _recordAudio) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(LucideIcons.fileAudio,
+                                      size: 10,
+                                      color:
+                                          Colors.white.withValues(alpha: 0.9)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Audio',
+                                    style: TextStyle(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.9),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       if (_meetingStartTime != null)
                         Text(

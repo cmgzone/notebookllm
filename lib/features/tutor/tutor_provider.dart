@@ -1,14 +1,16 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'tutor_session.dart';
 import '../sources/source_provider.dart';
 import '../gamification/gamification_provider.dart';
 import '../../core/ai/gemini_service.dart';
 import '../../core/ai/openrouter_service.dart';
+
 import '../../core/security/global_credentials_service.dart';
 import '../../core/api/api_service.dart';
+import '../../core/ai/ai_settings_service.dart';
 
 /// Provider for managing AI Tutor sessions
 class TutorNotifier extends StateNotifier<List<TutorSession>> {
@@ -440,12 +442,17 @@ Keep it to 3-4 paragraphs.
 
   Future<String> _callAI(String prompt) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final provider = prefs.getString('ai_provider') ?? 'gemini';
-      final model = prefs.getString('ai_model') ?? 'gemini-2.5-flash';
+      final settings = await AISettingsService.getSettings();
+      final model = settings.model;
+
+      if (model == null || model.isEmpty) {
+        throw Exception(
+            'No AI model selected. Please configure a model in settings.');
+      }
+
       final creds = ref.read(globalCredentialsServiceProvider);
 
-      if (provider == 'openrouter') {
+      if (settings.provider == 'openrouter') {
         final apiKey = await creds.getApiKey('openrouter');
         if (apiKey == null || apiKey.isEmpty) {
           throw Exception('OpenRouter API key not configured');

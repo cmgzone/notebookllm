@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'gemini_service.dart';
 import 'openrouter_service.dart';
 import 'context_engineering_service.dart';
 import 'ai_models_provider.dart';
+import 'ai_settings_service.dart';
 import '../search/serper_service.dart';
 import '../api/api_service.dart';
 import '../security/global_credentials_service.dart';
@@ -279,14 +279,23 @@ Be balanced and objective. Support each point with evidence.
 
   /// Get user's selected AI provider from settings
   Future<String> _getSelectedProvider() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('ai_provider') ?? 'gemini';
+    // Get the selected model first
+    final model = await AISettingsService.getModel();
+
+    if (model != null && model.isNotEmpty) {
+      // Auto-detect provider from the model
+      return await AISettingsService.getProviderForModel(model, ref);
+    }
+
+    // Fallback to saved provider if no model selected
+    final settings = await AISettingsService.getSettings();
+    return settings.provider;
   }
 
   /// Get user's selected AI model from settings
   Future<String> _getSelectedModel() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('ai_model') ?? 'gemini-1.5-flash';
+    final settings = await AISettingsService.getSettings();
+    return settings.getEffectiveModel();
   }
 
   /// Get context window for the selected model
@@ -888,9 +897,11 @@ Generate 3 specific follow-up search queries (one per line, no bullets or number
             // Job completed - fetch the session
             final sessionId = jobStatus['session_id'] as String?;
             if (sessionId != null) {
-              final sessionData = await api.get('/research/sessions/$sessionId');
+              final sessionData =
+                  await api.get('/research/sessions/$sessionId');
               final session = sessionData['session'] as Map<String, dynamic>?;
-              final sourcesData = sessionData['sources'] as List<dynamic>? ?? [];
+              final sourcesData =
+                  sessionData['sources'] as List<dynamic>? ?? [];
 
               final report = session?['report'] as String? ?? '';
               final sources = sourcesData

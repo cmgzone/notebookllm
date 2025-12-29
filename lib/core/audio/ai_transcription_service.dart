@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:intl/intl.dart';
 import '../security/global_credentials_service.dart';
 
 final aiTranscriptionServiceProvider = Provider<AITranscriptionService>((ref) {
@@ -27,6 +30,12 @@ class AITranscriptionService {
   bool _isProcessing = false;
   bool _isStopped = true;
   String _currentLanguage = 'multi';
+
+  // Audio file recording
+  bool _saveAudioFile = false;
+  String? _audioFilePath;
+  List<int> _fullAudioBuffer = []; // Store all audio for file saving
+  DateTime? _recordingStartTime;
 
   // Callbacks
   Function(String text, bool isFinal)? onTranscript;
@@ -81,6 +90,8 @@ class AITranscriptionService {
     required Function(String text, bool isFinal) onResult,
     Function(String error)? onErrorCallback,
     String language = 'multi',
+    bool saveAudioFile = false,
+    String? audioFileName,
   }) async {
     if (_isRecording) return;
 
@@ -92,8 +103,32 @@ class AITranscriptionService {
     _audioBuffer = [];
     _overlapBuffer = [];
     _currentLanguage = language;
+    _saveAudioFile = saveAudioFile;
+    _fullAudioBuffer = [];
+    _recordingStartTime = DateTime.now();
 
-    debugPrint('Starting AI transcription (chunked mode)...');
+    // Setup audio file path if saving
+    if (_saveAudioFile) {
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final recordingsDir = Directory('${appDir.path}/meeting_recordings');
+        if (!await recordingsDir.exists()) {
+          await recordingsDir.create(recursive: true);
+        }
+        final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+        final safeName = (audioFileName ?? 'meeting')
+            .replaceAll(RegExp(r'[^\w\s-]'), '')
+            .replaceAll(' ', '_');
+        _audioFilePath = '${recordingsDir.path}/${safeName}_$timestamp.wav';
+        debugPrint('Will save audio to: $_audioFilePath');
+      } catch (e) {
+        debugPrint('Failed to setup audio file path: $e');
+        _saveAudioFile = false;
+      }
+    }
+
+    debugPrint(
+        'Starting AI transcription (chunked mode, saveAudio=$_saveAudioFile)...');
 
     try {
       final stream = await _recorder.startStream(
@@ -105,7 +140,13 @@ class AITranscriptionService {
       );
 
       _audioSubscription = stream.listen(
-        (data) => _audioBuffer.addAll(data),
+        (data) {
+          _audioBuffer.addAll(data);
+          // Also store for file saving
+          if (_saveAudioFile) {
+            _fullAudioBuffer.addAll(data);
+          }
+        },
         onError: (e) {
           debugPrint('Audio stream error: $e');
           onError?.call('Audio stream error: $e');
@@ -300,7 +341,7 @@ class AITranscriptionService {
     }
   }
 
-  Future<void> stopListening({bool processRemaining = false}) async {
+  Future<String?> stopListening({bool processRemaining = false}) async {
     _isStopped = true;
     _isRecording = false;
 
@@ -310,15 +351,87 @@ class AITranscriptionService {
     await _audioSubscription?.cancel();
     _audioSubscription = null;
 
+    // Save audio file if enabled
+    String? savedFilePath;
+    if (_saveAudioFile &&
+        _fullAudioBuffer.isNotEmpty &&
+        _audioFilePath != null) {
+      try {
+        final wavData = _createWavFileFromBuffer(_fullAudioBuffer);
+        final file = File(_audioFilePath!);
+        await file.writeAsBytes(wavData);
+        savedFilePath = _audioFilePath;
+        debugPrint('Audio saved to: $_audioFilePath (${wavData.length} bytes)');
+      } catch (e) {
+        debugPrint('Failed to save audio file: $e');
+      }
+    }
+
     _audioBuffer = [];
     _overlapBuffer = [];
+    _fullAudioBuffer = [];
     _isProcessing = false;
     onTranscript = null;
     onError = null;
+    _saveAudioFile = false;
+    _audioFilePath = null;
 
     await _recorder.stop();
     debugPrint('AI Transcription stopped');
+
+    return savedFilePath;
   }
+
+  /// Create WAV file from full audio buffer
+  Uint8List _createWavFileFromBuffer(List<int> pcmData) {
+    final dataSize = pcmData.length;
+    final fileSize = 36 + dataSize;
+    final header = ByteData(44);
+
+    // RIFF header
+    header.setUint8(0, 0x52); // R
+    header.setUint8(1, 0x49); // I
+    header.setUint8(2, 0x46); // F
+    header.setUint8(3, 0x46); // F
+    header.setUint32(4, fileSize, Endian.little);
+    header.setUint8(8, 0x57); // W
+    header.setUint8(9, 0x41); // A
+    header.setUint8(10, 0x56); // V
+    header.setUint8(11, 0x45); // E
+
+    // fmt chunk
+    header.setUint8(12, 0x66); // f
+    header.setUint8(13, 0x6D); // m
+    header.setUint8(14, 0x74); // t
+    header.setUint8(15, 0x20); // space
+    header.setUint32(16, 16, Endian.little); // chunk size
+    header.setUint16(20, 1, Endian.little); // audio format (PCM)
+    header.setUint16(22, 1, Endian.little); // num channels
+    header.setUint32(24, _sampleRate, Endian.little); // sample rate
+    header.setUint32(28, _sampleRate * 2, Endian.little); // byte rate
+    header.setUint16(32, 2, Endian.little); // block align
+    header.setUint16(34, 16, Endian.little); // bits per sample
+
+    // data chunk
+    header.setUint8(36, 0x64); // d
+    header.setUint8(37, 0x61); // a
+    header.setUint8(38, 0x74); // t
+    header.setUint8(39, 0x61); // a
+    header.setUint32(40, dataSize, Endian.little);
+
+    final wavFile = Uint8List(44 + pcmData.length);
+    wavFile.setAll(0, header.buffer.asUint8List());
+    wavFile.setAll(44, pcmData);
+    return wavFile;
+  }
+
+  /// Get the saved audio file path (if any)
+  String? get savedAudioFilePath => _audioFilePath;
+
+  /// Get recording duration
+  Duration get recordingDuration => _recordingStartTime != null
+      ? DateTime.now().difference(_recordingStartTime!)
+      : Duration.zero;
 
   bool get isRecording => _isRecording;
 

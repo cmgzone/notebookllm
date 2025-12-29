@@ -1,0 +1,208 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/ai/ai_models_provider.dart';
+import '../core/ai/ai_settings_service.dart';
+
+/// Compact AI model selector that appears on every page
+class QuickAIModelSelector extends ConsumerWidget {
+  const QuickAIModelSelector({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final selectedModel = ref.watch(selectedAIModelProvider);
+    final modelsAsync = ref.watch(availableModelsProvider);
+
+    return modelsAsync.when(
+      data: (models) {
+        // Combine all models
+        final allModels = [
+          ...models['gemini'] ?? [],
+          ...models['openrouter'] ?? [],
+        ];
+
+        if (allModels.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        // Find the selected model to display its name
+        final currentModel =
+            allModels.where((m) => m.id == selectedModel).firstOrNull;
+        final displayName = currentModel?.name ?? 'Select Model';
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: scheme.primary.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: DropdownButton<String>(
+            value: allModels.any((m) => m.id == selectedModel)
+                ? selectedModel
+                : null,
+            hint: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.auto_awesome, size: 16, color: scheme.primary),
+                const SizedBox(width: 6),
+                Text(
+                  displayName,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+            underline: const SizedBox.shrink(),
+            isDense: true,
+            icon: Icon(Icons.arrow_drop_down, size: 18, color: scheme.primary),
+            dropdownColor: scheme.surfaceContainer,
+            borderRadius: BorderRadius.circular(12),
+            items: [
+              // Gemini models
+              if (models['gemini']?.isNotEmpty == true) ...[
+                DropdownMenuItem<String>(
+                  enabled: false,
+                  value: '__gemini_header__',
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Text(
+                      'GEMINI',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: scheme.primary,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
+                ...models['gemini']!.map((m) {
+                  return DropdownMenuItem<String>(
+                    value: m.id,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.auto_awesome,
+                            size: 14, color: Colors.blue),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            m.name,
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+              // OpenRouter models
+              if (models['openrouter']?.isNotEmpty == true) ...[
+                DropdownMenuItem<String>(
+                  enabled: false,
+                  value: '__openrouter_header__',
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8, top: 8),
+                    child: Text(
+                      'OPENROUTER',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: scheme.primary,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
+                ...models['openrouter']!.map((m) {
+                  return DropdownMenuItem<String>(
+                    value: m.id,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.model_training,
+                          size: 14,
+                          color: m.isPremium ? Colors.amber[700] : Colors.green,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            m.name + (m.isPremium ? ' 💎' : ''),
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ],
+            onChanged: (val) async {
+              if (val != null && !val.startsWith('__')) {
+                // Find the model to determine its provider
+                final model = allModels.where((m) => m.id == val).firstOrNull;
+                if (model != null) {
+                  // Update the state
+                  ref.read(selectedAIModelProvider.notifier).state = val;
+
+                  // Save to SharedPreferences
+                  await AISettingsService.setModel(val);
+
+                  // Auto-detect and save provider
+                  final provider = model.provider;
+                  String mappedProvider = provider;
+                  if (provider == 'openai' || provider == 'anthropic') {
+                    mappedProvider = 'openrouter';
+                  }
+                  await AISettingsService.setProvider(mappedProvider);
+
+                  // Show confirmation
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('✓ Switched to ${model.name}'),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: scheme.primary,
+                      ),
+                    );
+                  }
+                }
+              }
+            },
+          ),
+        );
+      },
+      loading: () => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const SizedBox(
+          width: 100,
+          height: 24,
+          child: Center(
+            child: SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        ),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}

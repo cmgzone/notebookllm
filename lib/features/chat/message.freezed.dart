@@ -28,6 +28,9 @@ mixin _$Message {
   List<String> get suggestedQuestions => throw _privateConstructorUsedError;
   List<SourceSuggestion> get relatedSources =>
       throw _privateConstructorUsedError;
+  String? get imageUrl =>
+      throw _privateConstructorUsedError; // Local file path or URL for attached image
+  bool get isDeepSearch => throw _privateConstructorUsedError;
 
   /// Serializes this Message to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -50,7 +53,9 @@ abstract class $MessageCopyWith<$Res> {
       DateTime timestamp,
       List<Citation> citations,
       List<String> suggestedQuestions,
-      List<SourceSuggestion> relatedSources});
+      List<SourceSuggestion> relatedSources,
+      String? imageUrl,
+      bool isDeepSearch});
 }
 
 /// @nodoc
@@ -75,6 +80,8 @@ class _$MessageCopyWithImpl<$Res, $Val extends Message>
     Object? citations = null,
     Object? suggestedQuestions = null,
     Object? relatedSources = null,
+    Object? imageUrl = freezed,
+    Object? isDeepSearch = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -105,6 +112,14 @@ class _$MessageCopyWithImpl<$Res, $Val extends Message>
           ? _value.relatedSources
           : relatedSources // ignore: cast_nullable_to_non_nullable
               as List<SourceSuggestion>,
+      imageUrl: freezed == imageUrl
+          ? _value.imageUrl
+          : imageUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+      isDeepSearch: null == isDeepSearch
+          ? _value.isDeepSearch
+          : isDeepSearch // ignore: cast_nullable_to_non_nullable
+              as bool,
     ) as $Val);
   }
 }
@@ -123,7 +138,9 @@ abstract class _$$MessageImplCopyWith<$Res> implements $MessageCopyWith<$Res> {
       DateTime timestamp,
       List<Citation> citations,
       List<String> suggestedQuestions,
-      List<SourceSuggestion> relatedSources});
+      List<SourceSuggestion> relatedSources,
+      String? imageUrl,
+      bool isDeepSearch});
 }
 
 /// @nodoc
@@ -146,6 +163,8 @@ class __$$MessageImplCopyWithImpl<$Res>
     Object? citations = null,
     Object? suggestedQuestions = null,
     Object? relatedSources = null,
+    Object? imageUrl = freezed,
+    Object? isDeepSearch = null,
   }) {
     return _then(_$MessageImpl(
       id: null == id
@@ -176,6 +195,14 @@ class __$$MessageImplCopyWithImpl<$Res>
           ? _value._relatedSources
           : relatedSources // ignore: cast_nullable_to_non_nullable
               as List<SourceSuggestion>,
+      imageUrl: freezed == imageUrl
+          ? _value.imageUrl
+          : imageUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+      isDeepSearch: null == isDeepSearch
+          ? _value.isDeepSearch
+          : isDeepSearch // ignore: cast_nullable_to_non_nullable
+              as bool,
     ));
   }
 }
@@ -190,7 +217,9 @@ class _$MessageImpl implements _Message {
       required this.timestamp,
       final List<Citation> citations = const [],
       final List<String> suggestedQuestions = const [],
-      final List<SourceSuggestion> relatedSources = const []})
+      final List<SourceSuggestion> relatedSources = const [],
+      this.imageUrl,
+      this.isDeepSearch = false})
       : _citations = citations,
         _suggestedQuestions = suggestedQuestions,
         _relatedSources = relatedSources;
@@ -235,8 +264,15 @@ class _$MessageImpl implements _Message {
   }
 
   @override
+  final String? imageUrl;
+// Local file path or URL for attached image
+  @override
+  @JsonKey()
+  final bool isDeepSearch;
+
+  @override
   String toString() {
-    return 'Message(id: $id, text: $text, isUser: $isUser, timestamp: $timestamp, citations: $citations, suggestedQuestions: $suggestedQuestions, relatedSources: $relatedSources)';
+    return 'Message(id: $id, text: $text, isUser: $isUser, timestamp: $timestamp, citations: $citations, suggestedQuestions: $suggestedQuestions, relatedSources: $relatedSources, imageUrl: $imageUrl, isDeepSearch: $isDeepSearch)';
   }
 
   @override
@@ -254,7 +290,11 @@ class _$MessageImpl implements _Message {
             const DeepCollectionEquality()
                 .equals(other._suggestedQuestions, _suggestedQuestions) &&
             const DeepCollectionEquality()
-                .equals(other._relatedSources, _relatedSources));
+                .equals(other._relatedSources, _relatedSources) &&
+            (identical(other.imageUrl, imageUrl) ||
+                other.imageUrl == imageUrl) &&
+            (identical(other.isDeepSearch, isDeepSearch) ||
+                other.isDeepSearch == isDeepSearch));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -267,7 +307,9 @@ class _$MessageImpl implements _Message {
       timestamp,
       const DeepCollectionEquality().hash(_citations),
       const DeepCollectionEquality().hash(_suggestedQuestions),
-      const DeepCollectionEquality().hash(_relatedSources));
+      const DeepCollectionEquality().hash(_relatedSources),
+      imageUrl,
+      isDeepSearch);
 
   /// Create a copy of Message
   /// with the given fields replaced by the non-null parameter values.
@@ -293,7 +335,9 @@ abstract class _Message implements Message {
       required final DateTime timestamp,
       final List<Citation> citations,
       final List<String> suggestedQuestions,
-      final List<SourceSuggestion> relatedSources}) = _$MessageImpl;
+      final List<SourceSuggestion> relatedSources,
+      final String? imageUrl,
+      final bool isDeepSearch}) = _$MessageImpl;
 
   factory _Message.fromJson(Map<String, dynamic> json) = _$MessageImpl.fromJson;
 
@@ -311,6 +355,10 @@ abstract class _Message implements Message {
   List<String> get suggestedQuestions;
   @override
   List<SourceSuggestion> get relatedSources;
+  @override
+  String? get imageUrl; // Local file path or URL for attached image
+  @override
+  bool get isDeepSearch;
 
   /// Create a copy of Message
   /// with the given fields replaced by the non-null parameter values.

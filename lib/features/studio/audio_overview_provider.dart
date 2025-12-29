@@ -7,11 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'audio_overview.dart';
+
 import '../../core/ai/gemini_service.dart';
 import '../../core/ai/openrouter_service.dart';
 import '../../core/audio/elevenlabs_service.dart';
 import '../../core/audio/google_cloud_tts_service.dart';
 import '../../core/audio/murf_service.dart';
+import '../../core/ai/ai_settings_service.dart';
 import '../../core/security/global_credentials_service.dart';
 import '../../core/services/wakelock_service.dart';
 import '../../core/services/overlay_bubble_service.dart';
@@ -111,16 +113,21 @@ class AudioOverviewNotifier extends StateNotifier<AudioStudioState> {
   }
 
   Future<String> _callAI(String prompt) async {
-    final prefs = await SharedPreferences.getInstance();
-    final provider = prefs.getString('ai_provider') ?? 'gemini';
-    final model = prefs.getString('ai_model') ?? 'gemini-1.5-flash';
+    final settings = await AISettingsService.getSettings();
+    final model = settings.model;
+
+    if (model == null || model.isEmpty) {
+      throw Exception(
+          'No AI model selected. Please configure a model in settings.');
+    }
+
     final creds = ref.read(globalCredentialsServiceProvider);
 
     debugPrint(
-        '[AudioOverviewProvider] Using AI provider: $provider, model: $model');
+        '[AudioOverviewProvider] Using AI provider: ${settings.provider}, model: $model');
 
     try {
-      if (provider == 'openrouter') {
+      if (settings.provider == 'openrouter') {
         final apiKey = await creds.getApiKey('openrouter');
         if (apiKey == null || apiKey.isEmpty) {
           throw Exception(

@@ -411,11 +411,11 @@ Future<void> _generateArtifactInBackground(
 ) async {
   final prompt = params['prompt'] as String?;
   final apiKey = params['apiKey'] as String?;
-  final model = params['model'] as String? ?? 'gemini-1.5-flash';
+  final model = params['model'] as String?;
   final provider = params['provider'] as String? ?? 'gemini';
 
-  if (prompt == null || apiKey == null) {
-    throw Exception('Missing required parameters');
+  if (prompt == null || apiKey == null || model == null) {
+    throw Exception('Missing required parameters (prompt, apiKey, or model)');
   }
 
   await _showProgressNotification(notifications, 'Generating artifact...', 30);
@@ -440,11 +440,11 @@ Future<void> _generateEbookChapterInBackground(
 ) async {
   final prompt = params['prompt'] as String?;
   final apiKey = params['apiKey'] as String?;
-  final model = params['model'] as String? ?? 'gemini-1.5-flash';
+  final model = params['model'] as String?;
   final chapterNumber = params['chapterNumber'] as int? ?? 1;
 
-  if (prompt == null || apiKey == null) {
-    throw Exception('Missing required parameters');
+  if (prompt == null || apiKey == null || model == null) {
+    throw Exception('Missing required parameters (prompt, apiKey, or model)');
   }
 
   await _showProgressNotification(
@@ -466,11 +466,11 @@ Future<void> _runResearchInBackground(
   final query = params['query'] as String?;
   final apiKey = params['apiKey'] as String?;
 
-  final model = params['model'] as String? ?? 'gemini-1.5-flash';
+  final model = params['model'] as String?;
   final provider = params['provider'] as String? ?? 'gemini';
 
-  if (query == null || apiKey == null) {
-    throw Exception('Missing required parameters');
+  if (query == null || apiKey == null || model == null) {
+    throw Exception('Missing required parameters (query, apiKey, or model)');
   }
 
   await _showProgressNotification(notifications, 'Researching: $query', 30);

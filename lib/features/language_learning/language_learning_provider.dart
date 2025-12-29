@@ -1,13 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'language_session.dart';
 import '../../core/ai/gemini_service.dart';
 import '../../core/ai/openrouter_service.dart';
 import '../../core/security/global_credentials_service.dart';
 import '../../core/api/api_service.dart';
 import '../gamification/gamification_provider.dart';
+import '../../core/ai/ai_settings_service.dart';
 
 class LanguageLearningNotifier extends StateNotifier<List<LanguageSession>> {
   final Ref ref;
@@ -214,9 +215,9 @@ $history
   }
 
   Future<String> _callAI(String prompt) async {
-    final prefs = await SharedPreferences.getInstance();
-    final provider = prefs.getString('ai_provider') ?? 'gemini';
-    final model = prefs.getString('ai_model') ?? 'gemini-1.5-flash';
+    final settings = await AISettingsService.getSettings();
+    final provider = settings.provider;
+    final model = settings.getEffectiveModel();
     final creds = ref.read(globalCredentialsServiceProvider);
 
     if (provider == 'openrouter') {

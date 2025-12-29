@@ -89,16 +89,16 @@ class GlobalCredentialsService {
     // Map service name to .env key format
     final envKey = _getEnvKeyName(service);
 
-    // Try .env file first
-    final envValue = dotenv.env[envKey];
-    if (envValue != null && envValue.isNotEmpty) {
-      return envValue;
-    }
-
-    // Try secure storage
+    // Try secure storage first (User override)
     final stored = await _storage.read(key: 'api_key_$service');
     if (stored != null && stored.isNotEmpty) {
       return _decryptValue(stored);
+    }
+
+    // Try .env file fallback
+    final envValue = dotenv.env[envKey];
+    if (envValue != null && envValue.isNotEmpty) {
+      return envValue;
     }
 
     return null;

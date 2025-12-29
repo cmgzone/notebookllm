@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'gemini_service.dart';
 import 'openrouter_service.dart';
 import 'deep_research_service.dart';
+import 'ai_settings_service.dart';
 import '../search/serper_service.dart';
 import '../security/global_credentials_service.dart';
 
@@ -37,6 +38,15 @@ class ContextEngineeringService {
   );
 
   Future<String> _getSelectedProvider() async {
+    // Get the selected model first
+    final model = await AISettingsService.getModel();
+
+    if (model != null && model.isNotEmpty) {
+      // Auto-detect provider from the model
+      return await AISettingsService.getProviderForModel(model, ref);
+    }
+
+    // Fallback to saved provider if no model selected
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('ai_provider') ?? 'gemini';
   }

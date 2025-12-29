@@ -3,23 +3,36 @@ import '../../../core/ai/gemini_image_service.dart';
 import '../../../core/security/global_credentials_service.dart';
 import '../models/ebook_project.dart';
 import '../models/ebook_chapter.dart';
+import '../../../core/ai/ai_settings_service.dart';
 
 class DesignerAgent {
   final Ref ref;
 
   DesignerAgent(this.ref);
 
-  Future<GeminiImageService> _getImageService() async {
+  Future<GeminiImageService> _getImageService(
+      {required String? providerOverride}) async {
+    final settings = await AISettingsService.getSettings();
+    final provider = providerOverride ?? settings.provider;
     final creds = ref.read(globalCredentialsServiceProvider);
-    final apiKey = await creds.getApiKey('gemini');
+
+    String? apiKey;
+    if (provider == 'openrouter') {
+      apiKey = await creds.getApiKey('openrouter');
+    } else {
+      apiKey = await creds.getApiKey('gemini');
+    }
+
     if (apiKey == null || apiKey.isEmpty) {
-      throw Exception('Gemini API key not found');
+      throw Exception('API key not found for $provider');
     }
     return GeminiImageService(apiKey: apiKey);
   }
 
   Future<String> generateCoverArt(EbookProject project) async {
-    final imageService = await _getImageService();
+    final settings = await AISettingsService.getSettings();
+    final imageService =
+        await _getImageService(providerOverride: settings.provider);
 
     final prompt = '''
 Book cover design for a book titled "${project.title}".
@@ -28,12 +41,15 @@ Style: Professional, modern, minimalist, high quality, 4k.
 Primary color: ${project.branding.primaryColorValue.toRadixString(16)}
 ''';
 
-    return await imageService.generateImage(prompt);
+    return await imageService.generateImage(prompt,
+        provider: settings.provider);
   }
 
   Future<String> generateChapterIllustration(
       EbookChapter chapter, String style) async {
-    final imageService = await _getImageService();
+    final settings = await AISettingsService.getSettings();
+    final imageService =
+        await _getImageService(providerOverride: settings.provider);
 
     // Safely get content preview
     final contentPreview = chapter.content.isEmpty
@@ -46,7 +62,8 @@ Context: $contentPreview...
 Style: $style, consistent, professional.
 ''';
 
-    return await imageService.generateImage(prompt);
+    return await imageService.generateImage(prompt,
+        provider: settings.provider);
   }
 }
 

@@ -7,8 +7,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:record/record.dart';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../chat/message.dart';
 import '../chat/chat_provider.dart';
@@ -22,6 +25,7 @@ import '../../theme/motion.dart';
 import '../../core/audio/voice_service.dart';
 import '../../core/extensions/color_compat.dart';
 import '../subscription/services/credit_manager.dart';
+import 'context_usage_widget.dart';
 
 class EnhancedChatScreen extends ConsumerStatefulWidget {
   const EnhancedChatScreen({super.key});
@@ -39,6 +43,11 @@ class _EnhancedChatScreenState extends ConsumerState<EnhancedChatScreen> {
   final AudioRecorder _recorder = AudioRecorder();
   bool _recording = false;
   bool _isDeepSearchEnabled = false;
+
+  // Image attachment
+  final ImagePicker _imagePicker = ImagePicker();
+  XFile? _selectedImage;
+  Uint8List? _selectedImageBytes;
 
   @override
   void dispose() {
@@ -61,22 +70,89 @@ class _EnhancedChatScreenState extends ConsumerState<EnhancedChatScreen> {
 
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && _selectedImage == null) return;
 
     // Check and consume credits
     final hasCredits = await ref.tryUseCredits(
       context: context,
-      amount: CreditCosts.chatMessage,
-      feature: 'chat_message',
+      amount: _selectedImage != null
+          ? CreditCosts.chatMessage * 2
+          : CreditCosts.chatMessage,
+      feature: _selectedImage != null ? 'image_chat' : 'chat_message',
     );
     if (!hasCredits) return;
 
-    ref
-        .read(chatProvider.notifier)
-        .send(text, useDeepSearch: _isDeepSearchEnabled);
+    // Capture image data before clearing
+    final imageBytes = _selectedImageBytes;
+    final imagePath = _selectedImage?.path;
+
+    ref.read(chatProvider.notifier).send(
+          text.isNotEmpty ? text : 'Analyze this image',
+          useDeepSearch: _isDeepSearchEnabled,
+          imagePath: imagePath,
+          imageBytes: imageBytes,
+        );
+
     _controller.clear();
+    setState(() {
+      _selectedImage = null;
+      _selectedImageBytes = null;
+    });
 
     Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _selectedImage = image;
+          _selectedImageBytes = bytes;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick image: $e')),
+      );
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    try {
+      final image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _selectedImage = image;
+          _selectedImageBytes = bytes;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to take photo: $e')),
+      );
+    }
+  }
+
+  void _removeSelectedImage() {
+    setState(() {
+      _selectedImage = null;
+      _selectedImageBytes = null;
+    });
   }
 
   Future<void> _playTTS(String text) async {
@@ -490,6 +566,12 @@ Sources to analyze:''';
       appBar: AppBar(
         title: const Text('AI Chat'),
         actions: [
+          // Context usage indicator
+          GestureDetector(
+            onTap: () => showContextUsageDialog(context),
+            child: const ContextUsageIndicator(compact: true),
+          ).animate().fadeIn(duration: Motion.short),
+          const SizedBox(width: 8),
           // AI Writing Assistant
           IconButton(
             onPressed: _showAIWritingDialog,
@@ -618,6 +700,11 @@ Sources to analyze:''';
             isDeepSearchEnabled: _isDeepSearchEnabled,
             onToggleDeepSearch: () =>
                 setState(() => _isDeepSearchEnabled = !_isDeepSearchEnabled),
+            onPickImage: _pickImage,
+            onTakePhoto: _takePhoto,
+            selectedImage: _selectedImage,
+            onRemoveImage: _removeSelectedImage,
+            isRecording: _recording,
           ),
         ],
       ),
@@ -710,6 +797,31 @@ class _MessageBubble extends ConsumerWidget {
           crossAxisAlignment:
               isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
+            // Deep search indicator for AI responses
+            if (!isUser && message.isDeepSearch)
+              Container(
+                margin: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: scheme.tertiary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.public, size: 12, color: scheme.tertiary),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Web Search',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: scheme.tertiary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -729,6 +841,27 @@ class _MessageBubble extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Show attached image if present
+                  if (message.imageUrl != null && isUser)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          File(message.imageUrl!),
+                          height: 150,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            height: 100,
+                            color: Colors.grey[300],
+                            child: const Center(
+                              child: Icon(Icons.broken_image),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   _AnimatedMessageText(
                     text: message.text,
                     citations: message.citations,
@@ -1186,6 +1319,11 @@ class _ChatInputArea extends StatelessWidget {
     required this.onMic,
     required this.isDeepSearchEnabled,
     required this.onToggleDeepSearch,
+    required this.onPickImage,
+    required this.onTakePhoto,
+    this.selectedImage,
+    this.onRemoveImage,
+    this.isRecording = false,
   });
 
   final TextEditingController controller;
@@ -1194,6 +1332,11 @@ class _ChatInputArea extends StatelessWidget {
   final VoidCallback onMic;
   final bool isDeepSearchEnabled;
   final VoidCallback onToggleDeepSearch;
+  final VoidCallback onPickImage;
+  final VoidCallback onTakePhoto;
+  final XFile? selectedImage;
+  final VoidCallback? onRemoveImage;
+  final bool isRecording;
 
   @override
   Widget build(BuildContext context) {
@@ -1210,84 +1353,203 @@ class _ChatInputArea extends StatelessWidget {
           ),
         ),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          // Deep Search indicator
+          if (isDeepSearchEnabled)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(24),
+                color: scheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: scheme.outline.withValues(alpha: 0.2),
-                  width: 1,
+                  color: scheme.primary.withValues(alpha: 0.3),
                 ),
               ),
               child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    onPressed: onToggleDeepSearch,
-                    icon: Icon(
-                      Icons.public,
-                      color: isDeepSearchEnabled
-                          ? scheme.primary
-                          : scheme.onSurface.withValues(alpha: 0.5),
-                      size: 20,
+                  Icon(Icons.public, size: 16, color: scheme.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Deep Search enabled - will search the web',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w500,
                     ),
-                    tooltip: isDeepSearchEnabled
-                        ? 'Deep Search Enabled'
-                        : 'Enable Deep Search',
                   ),
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      onChanged: onChanged,
-                      decoration: InputDecoration(
-                        hintText: 'Ask about your research...',
-                        hintStyle: TextStyle(
-                          color: scheme.onSurface.withValues(alpha: 0.5),
+                ],
+              ),
+            ).animate().fadeIn().slideY(begin: 0.2),
+
+          // Image preview
+          if (selectedImage != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(
+                      File(selectedImage!.path),
+                      height: 100,
+                      width: 100,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: GestureDetector(
+                      onTap: onRemoveImage,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      maxLines: null,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => onSend(),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: onSend,
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: scheme.primary,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(
-                        Icons.send,
-                        color: scheme.onPrimary,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: onMic,
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: scheme.secondary,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(
-                        Icons.mic,
-                        color: scheme.onSecondary,
-                        size: 18,
+                        child: const Icon(
+                          Icons.close,
+                          size: 16,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
+            ).animate().scale(duration: Motion.short),
+
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color:
+                        scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: scheme.outline.withValues(alpha: 0.2),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      // Image picker button
+                      PopupMenuButton<String>(
+                        icon: Icon(
+                          LucideIcons.image,
+                          color: scheme.onSurface.withValues(alpha: 0.6),
+                          size: 20,
+                        ),
+                        tooltip: 'Add image',
+                        onSelected: (value) {
+                          if (value == 'gallery') {
+                            onPickImage();
+                          } else if (value == 'camera') {
+                            onTakePhoto();
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: 'gallery',
+                            child: Row(
+                              children: [
+                                Icon(LucideIcons.image,
+                                    size: 18, color: scheme.primary),
+                                const SizedBox(width: 8),
+                                const Text('From Gallery'),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'camera',
+                            child: Row(
+                              children: [
+                                Icon(LucideIcons.camera,
+                                    size: 18, color: scheme.primary),
+                                const SizedBox(width: 8),
+                                const Text('Take Photo'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Deep search toggle
+                      IconButton(
+                        onPressed: onToggleDeepSearch,
+                        icon: Icon(
+                          Icons.public,
+                          color: isDeepSearchEnabled
+                              ? scheme.primary
+                              : scheme.onSurface.withValues(alpha: 0.5),
+                          size: 20,
+                        ),
+                        tooltip: isDeepSearchEnabled
+                            ? 'Deep Search ON'
+                            : 'Enable Deep Search',
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: controller,
+                          onChanged: onChanged,
+                          decoration: InputDecoration(
+                            hintText: selectedImage != null
+                                ? 'Ask about this image...'
+                                : 'Ask about your research...',
+                            hintStyle: TextStyle(
+                              color: scheme.onSurface.withValues(alpha: 0.5),
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          maxLines: null,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => onSend(),
+                        ),
+                      ),
+                      // Send button
+                      IconButton(
+                        onPressed: onSend,
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(
+                            Icons.send,
+                            color: scheme.onPrimary,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                      // Mic button
+                      IconButton(
+                        onPressed: onMic,
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isRecording ? Colors.red : scheme.secondary,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(
+                            isRecording ? Icons.stop : Icons.mic,
+                            color: scheme.onSecondary,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

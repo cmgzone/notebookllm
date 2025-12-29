@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'source_provider.dart';
 import 'source.dart';
 import '../../core/ai/openrouter_service.dart';
 import '../../core/ai/gemini_service.dart';
 import '../../core/security/global_credentials_service.dart';
+import '../../core/ai/ai_settings_service.dart';
 
 /// AI Writing Tools available for text notes
 enum AIWritingTool {
@@ -202,15 +203,20 @@ class _EnhancedTextNoteSheetState extends ConsumerState<EnhancedTextNoteSheet>
 
   // Helper to call AI with proper settings
   Future<String> _callAI(String prompt) async {
-    final prefs = await SharedPreferences.getInstance();
-    final provider = prefs.getString('ai_provider') ?? 'gemini';
-    final model = prefs.getString('ai_model') ?? 'gemini-2.5-flash';
+    final settings = await AISettingsService.getSettings();
+    final model = settings.model;
+
+    if (model == null || model.isEmpty) {
+      throw Exception(
+          'No AI model selected. Please configure a model in settings.');
+    }
+
     final creds = ref.read(globalCredentialsServiceProvider);
 
     debugPrint(
-        '[EnhancedTextNote] Using AI provider: $provider, model: $model');
+        '[EnhancedTextNote] Using AI provider: ${settings.provider}, model: $model');
 
-    if (provider == 'openrouter') {
+    if (settings.provider == 'openrouter') {
       final apiKey = await creds.getApiKey('openrouter');
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception(
@@ -225,7 +231,7 @@ class _EnhancedTextNoteSheetState extends ConsumerState<EnhancedTextNoteSheet>
             'Gemini API key not found. Please configure it in Settings.');
       }
       return await _gemini.generateContent(prompt,
-          apiKey: apiKey, maxTokens: 4096);
+          apiKey: apiKey, model: model, maxTokens: 4096);
     }
   }
 

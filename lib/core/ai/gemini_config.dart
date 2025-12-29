@@ -4,21 +4,8 @@ class GeminiConfig {
   static String get apiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
   static const String baseUrl =
       'https://generativelanguage.googleapis.com/v1beta';
-  // Use gemini-1.5-flash as default - guaranteed free tier
-  static const String defaultModel = 'gemini-1.5-flash';
-  static const String visionModel = 'gemini-1.5-flash';
-
-  // All available Gemini models (December 2025 - Free Tier Compatible)
-  static const Map<String, String> availableModels = {
-    // Gemini 2.0 Models (Latest)
-    'gemini-2.0-flash-exp': 'Gemini 2.0 Flash (Experimental)',
-    'gemini-2.0-flash-lite': 'Gemini 2.0 Flash Lite (Fastest)',
-
-    // Gemini 1.5 Models (Stable - Free Tier)
-    'gemini-1.5-pro': 'Gemini 1.5 Pro (Best for long reports)',
-    'gemini-1.5-flash': 'Gemini 1.5 Flash',
-    'gemini-1.5-flash-8b': 'Gemini 1.5 Flash 8B',
-  };
+  static const String defaultModel = '';
+  static const String visionModel = '';
   static const double defaultTemperature = 0.7;
   // Gemini 1.5 Flash supports up to 8192 output tokens
   // Gemini 1.5 Pro supports up to 8192 output tokens

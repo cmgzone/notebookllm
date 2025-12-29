@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/motion.dart';
 import 'services/ai_model_service.dart';
+import '../../core/ai/ai_models_provider.dart';
 
 class AIModelsManagerScreen extends ConsumerStatefulWidget {
   const AIModelsManagerScreen({super.key});
@@ -78,6 +79,7 @@ class _AIModelsManagerScreenState extends ConsumerState<AIModelsManagerScreen> {
     setState(() => _isLoading = true);
     try {
       await ref.read(aiModelServiceProvider).deleteModel(model.id);
+      ref.invalidate(availableModelsProvider);
       await _loadModels();
     } catch (e) {
       if (mounted) {
@@ -189,7 +191,7 @@ class _AIModelsManagerScreenState extends ConsumerState<AIModelsManagerScreen> {
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('${model.provider} • ${model.modelId}'),
+                            Text('${model.provider} â€¢ ${model.modelId}'),
                             if (!model.isActive)
                               Text('Inactive',
                                   style: TextStyle(color: scheme.error)),
@@ -289,6 +291,7 @@ class _ModelDialogState extends ConsumerState<_ModelDialog> {
       } else {
         await ref.read(aiModelServiceProvider).updateModel(model);
       }
+      ref.invalidate(availableModelsProvider);
 
       if (mounted) {
         Navigator.pop(context);
@@ -306,6 +309,8 @@ class _ModelDialogState extends ConsumerState<_ModelDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    
     return AlertDialog(
       title: Text(widget.model == null ? 'Add AI Model' : 'Edit AI Model'),
       content: SingleChildScrollView(
@@ -359,6 +364,54 @@ class _ModelDialogState extends ConsumerState<_ModelDialog> {
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
                     ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _contextController,
+                decoration: const InputDecoration(
+                  labelText: 'Context Window (tokens)',
+                  helperText: 'Max tokens (e.g., 128000 for 128K)',
+                  hintText: 'Leave 0 for auto-detect',
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                children: [
+                  ActionChip(
+                    label: const Text('128K', style: TextStyle(fontSize: 12)),
+                    onPressed: () => _contextController.text = '128000',
+                    backgroundColor: scheme.surfaceContainerHighest,
+                    side: BorderSide(color: scheme.outline.withValues(alpha: 0.2)),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    labelPadding: EdgeInsets.zero,
+                  ),
+                  ActionChip(
+                    label: const Text('200K', style: TextStyle(fontSize: 12)),
+                    onPressed: () => _contextController.text = '200000',
+                    backgroundColor: scheme.surfaceContainerHighest,
+                    side: BorderSide(color: scheme.outline.withValues(alpha: 0.2)),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    labelPadding: EdgeInsets.zero,
+                  ),
+                  ActionChip(
+                    label: const Text('1M', style: TextStyle(fontSize: 12)),
+                    onPressed: () => _contextController.text = '1000000',
+                    backgroundColor: scheme.surfaceContainerHighest,
+                    side: BorderSide(color: scheme.outline.withValues(alpha: 0.2)),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    labelPadding: EdgeInsets.zero,
+                  ),
+                  ActionChip(
+                    label: const Text('2M', style: TextStyle(fontSize: 12)),
+                    onPressed: () => _contextController.text = '2000000',
+                    backgroundColor: scheme.surfaceContainerHighest,
+                    side: BorderSide(color: scheme.outline.withValues(alpha: 0.2)),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    labelPadding: EdgeInsets.zero,
                   ),
                 ],
               ),

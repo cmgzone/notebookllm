@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'gemini_service.dart';
 import 'openrouter_service.dart';
+import 'ai_settings_service.dart';
 import '../security/global_credentials_service.dart';
 
 enum AIStatus { idle, loading, success, error }
@@ -15,13 +15,30 @@ class AINotifier extends StateNotifier<AIState> {
   final OpenRouterService _openRouterService = OpenRouterService();
 
   Future<String> _getSelectedProvider() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('ai_provider') ?? 'gemini';
+    // Get the selected model first
+    final model = await AISettingsService.getModel();
+
+    if (model != null && model.isNotEmpty) {
+      // Auto-detect provider from the model
+      return await AISettingsService.getProviderForModel(model, ref);
+    }
+
+    // Fallback to saved provider if no model selected
+    return await AISettingsService.getProvider();
   }
 
   Future<String> _getSelectedModel() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('ai_model') ?? 'gemini-2.0-flash-exp';
+    final model = await AISettingsService.getModel();
+    if (model == null || model.isEmpty) {
+      // Optional: try to get the first available model from provider as last resort?
+      // But user asked to remove hardcoded fallbacks.
+      // Letting it fail or return empty string might be better if we want to force selection.
+      // But existing code expects a string.
+      // Let's throw to indicate need for configuration.
+      throw Exception(
+          'No AI model selected. Please configure a model in settings.');
+    }
+    return model;
   }
 
   Future<String?> _getOpenRouterKey() async {

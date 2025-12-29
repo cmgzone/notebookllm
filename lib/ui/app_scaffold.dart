@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../features/studio/mini_audio_player.dart';
+import 'quick_ai_model_selector.dart';
 
 class AppScaffold extends StatelessWidget {
   const AppScaffold({super.key, required this.child});
@@ -49,6 +50,14 @@ class AppScaffold extends StatelessWidget {
       body: Stack(
         children: [
           child,
+          // Quick AI Model Selector (bottom-left, above nav bar)
+          const Positioned(
+            left: 8,
+            bottom: 80, // Above the NavigationBar
+            child: SafeArea(
+              child: QuickAIModelSelector(),
+            ),
+          ),
           const Positioned(
             left: 0,
             right: 0,

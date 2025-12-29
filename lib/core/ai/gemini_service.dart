@@ -9,7 +9,7 @@ class GeminiService {
 
   Future<String> generateContent(
     String prompt, {
-    String model = GeminiConfig.defaultModel,
+    required String model,
     double temperature = GeminiConfig.defaultTemperature,
     int maxTokens = GeminiConfig.defaultMaxTokens,
     String? apiKey,
@@ -55,11 +55,11 @@ class GeminiService {
       final msg = e.message.toLowerCase();
       if (msg.contains('quota') || msg.contains('rate')) {
         throw Exception(
-            'API quota exceeded. Try: 1) Wait a minute, 2) Use gemini-1.5-flash, 3) Check billing at console.cloud.google.com');
+            'API quota exceeded. Try: 1) Wait a minute, 2) Use a different model, 3) Check billing at console.cloud.google.com');
       }
       if (msg.contains('not found') || msg.contains('invalid')) {
         throw Exception(
-            'Model "$model" not available. Try gemini-1.5-flash instead.');
+            'Model "$model" not available. Try a different model instead.');
       }
       throw Exception('Gemini API error: ${e.message}');
     } catch (e) {
@@ -70,7 +70,7 @@ class GeminiService {
   Future<String> generateContentWithContext(
     String prompt,
     List<String> context, {
-    String model = GeminiConfig.defaultModel,
+    required String model,
     double temperature = GeminiConfig.defaultTemperature,
     int maxTokens = GeminiConfig.defaultMaxTokens,
     String? apiKey,
@@ -96,7 +96,7 @@ Please provide a comprehensive and accurate response based on the given context.
   /// Stream content generation - returns chunks as they arrive
   Stream<String> streamContent(
     String prompt, {
-    String model = GeminiConfig.defaultModel,
+    required String model,
     double temperature = GeminiConfig.defaultTemperature,
     int maxTokens = GeminiConfig.defaultMaxTokens,
     String? apiKey,
@@ -130,7 +130,7 @@ Please provide a comprehensive and accurate response based on the given context.
   /// Legacy method for compatibility - now uses streaming internally
   Future<String> generateStream(
     String prompt, {
-    String model = GeminiConfig.defaultModel,
+    required String model,
     double temperature = GeminiConfig.defaultTemperature,
     int maxTokens = GeminiConfig.defaultMaxTokens,
     String? apiKey,
@@ -142,5 +142,68 @@ Please provide a comprehensive and accurate response based on the given context.
       maxTokens: maxTokens,
       apiKey: apiKey,
     );
+  }
+
+  /// Generate content with an image (vision capability)
+  Future<String> generateContentWithImage(
+    String prompt,
+    Uint8List imageBytes, {
+    required String model,
+    double temperature = GeminiConfig.defaultTemperature,
+    int maxTokens = GeminiConfig.defaultMaxTokens,
+    String? apiKey,
+  }) async {
+    try {
+      final key = apiKey ?? this.apiKey;
+      if (key.isEmpty) {
+        throw Exception('Missing GEMINI_API_KEY');
+      }
+
+      final genModel = GenerativeModel(
+        model: model,
+        apiKey: key,
+        generationConfig: GenerationConfig(
+          temperature: temperature,
+          maxOutputTokens: maxTokens,
+          topP: GeminiConfig.defaultTopP,
+          topK: GeminiConfig.defaultTopK,
+        ),
+        safetySettings: [
+          SafetySetting(HarmCategory.harassment, HarmBlockThreshold.medium),
+          SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.medium),
+          SafetySetting(
+              HarmCategory.sexuallyExplicit, HarmBlockThreshold.medium),
+          SafetySetting(
+              HarmCategory.dangerousContent, HarmBlockThreshold.medium),
+        ],
+      );
+
+      final content = [
+        Content.multi([
+          TextPart(prompt),
+          DataPart('image/jpeg', imageBytes),
+        ])
+      ];
+
+      final response = await genModel.generateContent(content);
+
+      debugPrint('[GeminiService] Image response: ${response.text}');
+
+      if (response.text == null || response.text!.isEmpty) {
+        final reason = response.candidates.firstOrNull?.finishReason;
+        throw Exception(
+            'Empty response from Gemini vision. Finish reason: $reason');
+      }
+
+      return response.text!;
+    } on GenerativeAIException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('quota') || msg.contains('rate')) {
+        throw Exception('API quota exceeded. Please wait and try again.');
+      }
+      throw Exception('Gemini vision error: ${e.message}');
+    } catch (e) {
+      throw Exception('Failed to analyze image: $e');
+    }
   }
 }

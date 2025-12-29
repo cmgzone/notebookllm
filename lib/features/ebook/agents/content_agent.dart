@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/ai/gemini_service.dart';
 import '../../../core/ai/openrouter_service.dart';
 import '../../../core/security/global_credentials_service.dart';
+import '../../../core/ai/ai_settings_service.dart';
 import '../models/ebook_project.dart';
 import '../models/ebook_chapter.dart';
 
@@ -35,9 +35,9 @@ class ContentAgent {
       }
     } else {
       // Fallback to global settings
-      final prefs = await SharedPreferences.getInstance();
-      provider = prefs.getString('ai_provider') ?? 'gemini';
-      targetModel = prefs.getString('ai_model') ?? 'gemini-1.5-flash';
+      final settings = await AISettingsService.getSettings();
+      provider = settings.provider;
+      targetModel = settings.getEffectiveModel();
     }
 
     if (provider == 'openrouter') {
@@ -49,10 +49,6 @@ class ContentAgent {
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('Gemini API key not found');
       }
-      // For Gemini, we might need to ensure the model name is valid for the API
-      // But usually the dropdown values are correct.
-      // If targetModel is from OpenRouter but we are in Gemini block (shouldn't happen with logic above),
-      // we might default to a safe Gemini model.
       return await GeminiService(apiKey: apiKey)
           .generateContent(prompt, model: targetModel);
     }

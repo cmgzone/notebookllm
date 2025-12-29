@@ -136,6 +136,7 @@ export default function AIModels() {
                             <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold">Name</th>
                             <th className="px-3 py-3.5 text-left text-sm font-semibold">Model ID</th>
                             <th className="px-3 py-3.5 text-left text-sm font-semibold">Provider</th>
+                            <th className="px-3 py-3.5 text-left text-sm font-semibold">Context</th>
                             <th className="px-3 py-3.5 text-left text-sm font-semibold">Cost (In/Out)</th>
                             <th className="px-3 py-3.5 text-left text-sm font-semibold">Status</th>
                             <th className="relative py-3.5 pl-3 pr-4">
@@ -159,6 +160,9 @@ export default function AIModels() {
                                 </td>
                                 <td className="whitespace-nowrap px-3 py-4 text-sm text-muted-foreground">{model.model_id}</td>
                                 <td className="whitespace-nowrap px-3 py-4 text-sm text-muted-foreground capitalize">{model.provider}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-muted-foreground">
+                                    {parseInt(model.context_window || 0).toLocaleString()} tok
+                                </td>
                                 <td className="whitespace-nowrap px-3 py-4 text-sm text-muted-foreground">
                                     ${parseFloat(model.cost_input || 0).toFixed(4)} / ${parseFloat(model.cost_output || 0).toFixed(4)}
                                 </td>
@@ -232,6 +236,28 @@ export default function AIModels() {
                                             <option key={p} value={p}>{p}</option>
                                         ))}
                                     </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Context Window (tokens)</label>
+                                    <input
+                                        type="number"
+                                        value={formData.context_window}
+                                        onChange={e => setFormData({ ...formData, context_window: parseInt(e.target.value) || 0 })}
+                                        className="block w-full rounded-md border border-border p-2"
+                                    />
+                                    <div className="flex gap-2 mt-2 flex-wrap">
+                                        {[128000, 200000, 1000000, 2000000].map(size => (
+                                            <button
+                                                key={size}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, context_window: size })}
+                                                className="px-2 py-1 text-xs bg-muted hover:bg-muted/80 rounded border"
+                                            >
+                                                {(size / 1000) + 'K'}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">

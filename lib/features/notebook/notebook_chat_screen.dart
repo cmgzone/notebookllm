@@ -9,6 +9,7 @@ import '../sources/source_provider.dart';
 import '../../core/ai/ai_provider.dart';
 import 'notebook_provider.dart';
 import '../../theme/app_theme.dart';
+import '../chat/context_usage_widget.dart';
 
 class NotebookChatScreen extends ConsumerStatefulWidget {
   final String notebookId;
@@ -250,6 +251,12 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
+          // Context usage indicator
+          GestureDetector(
+            onTap: () => showContextUsageDialog(context),
+            child: const ContextUsageIndicator(compact: true),
+          ),
+          const SizedBox(width: 4),
           if (_messages.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.save),

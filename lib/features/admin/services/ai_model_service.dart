@@ -34,28 +34,28 @@ class AIModel {
     return AIModel(
       id: map['id']?.toString() ?? '',
       name: map['name'] ?? '',
-      modelId: map['model_id'] ?? '',
+      modelId: map['model_id'] ?? map['modelId'] ?? '',
       provider: map['provider'] ?? '',
       description: map['description'],
-      costInput: (map['cost_input'] as num?)?.toDouble() ?? 0.0,
-      costOutput: (map['cost_output'] as num?)?.toDouble() ?? 0.0,
-      contextWindow: (map['context_window'] as num?)?.toInt() ?? 0,
-      isActive: map['is_active'] ?? true,
-      isPremium: map['is_premium'] ?? false,
+      costInput: (map['cost_input'] ?? map['costInput'] as num?)?.toDouble() ?? 0.0,
+      costOutput: (map['cost_output'] ?? map['costOutput'] as num?)?.toDouble() ?? 0.0,
+      contextWindow: (map['context_window'] ?? map['contextWindow'] as num?)?.toInt() ?? 0,
+      isActive: map['is_active'] ?? map['isActive'] ?? true,
+      isPremium: map['is_premium'] ?? map['isPremium'] ?? false,
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'name': name,
-      'modelId': modelId,
+      'model_id': modelId,
       'provider': provider,
       'description': description,
-      'costInput': costInput,
-      'costOutput': costOutput,
-      'contextWindow': contextWindow,
-      'isActive': isActive,
-      'isPremium': isPremium,
+      'cost_input': costInput,
+      'cost_output': costOutput,
+      'context_window': contextWindow,
+      'is_active': isActive,
+      'is_premium': isPremium,
     };
   }
 }

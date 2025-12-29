@@ -1,13 +1,16 @@
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'message.dart';
 import 'stream_provider.dart';
 import '../notebook/notebook_provider.dart';
+
 import 'package:uuid/uuid.dart';
 import '../ebook/ebook_provider.dart';
 import '../ebook/models/ebook_project.dart';
 import '../ebook/models/branding_config.dart';
 import 'services/suggestion_service.dart';
+import '../../core/ai/ai_settings_service.dart';
 
 class ChatNotifier extends StateNotifier<List<Message>> {
   ChatNotifier(this.ref) : super([]);
@@ -23,12 +26,16 @@ class ChatNotifier extends StateNotifier<List<Message>> {
     state = [...state, aiMsg];
   }
 
-  Future<void> send(String text, {bool useDeepSearch = false}) async {
+  Future<void> send(String text,
+      {bool useDeepSearch = false,
+      String? imagePath,
+      Uint8List? imageBytes}) async {
     final userMsg = Message(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       text: text,
       isUser: true,
       timestamp: DateTime.now(),
+      imageUrl: imagePath,
     );
     state = [...state, userMsg];
 
@@ -38,6 +45,7 @@ class ChatNotifier extends StateNotifier<List<Message>> {
           text,
           chatHistory: chatHistory,
           useDeepSearch: useDeepSearch,
+          imageBytes: imageBytes,
         );
 
     StringBuffer buffer = StringBuffer();
@@ -67,6 +75,7 @@ class ChatNotifier extends StateNotifier<List<Message>> {
         isUser: false,
         timestamp: DateTime.now(),
         citations: citations,
+        isDeepSearch: useDeepSearch,
       );
       state = [...state.sublist(0, state.length - 1), aiMsg];
     }
@@ -121,8 +130,12 @@ class ChatNotifier extends StateNotifier<List<Message>> {
   }
 
   Future<void> _createEbook(String title, String topic) async {
-    final prefs = await SharedPreferences.getInstance();
-    final currentModel = prefs.getString('ai_model') ?? 'gemini-1.5-flash';
+    final settings = await AISettingsService.getSettings();
+    final currentModel = settings.model ?? '';
+
+    if (currentModel.isEmpty) {
+      throw Exception('No AI model selected for ebook creation.');
+    }
 
     final id = const Uuid().v4();
     final now = DateTime.now();

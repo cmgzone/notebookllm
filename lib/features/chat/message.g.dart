@@ -24,6 +24,8 @@ _$MessageImpl _$$MessageImplFromJson(Map<String, dynamic> json) =>
               ?.map((e) => SourceSuggestion.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
+      imageUrl: json['imageUrl'] as String?,
+      isDeepSearch: json['isDeepSearch'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$$MessageImplToJson(_$MessageImpl instance) =>
@@ -35,6 +37,8 @@ Map<String, dynamic> _$$MessageImplToJson(_$MessageImpl instance) =>
       'citations': instance.citations,
       'suggestedQuestions': instance.suggestedQuestions,
       'relatedSources': instance.relatedSources,
+      'imageUrl': instance.imageUrl,
+      'isDeepSearch': instance.isDeepSearch,
     };
 
 _$CitationImpl _$$CitationImplFromJson(Map<String, dynamic> json) =>

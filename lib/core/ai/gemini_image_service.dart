@@ -6,52 +6,30 @@ import 'gemini_config.dart';
 
 class GeminiImageService {
   final String apiKey;
-  static const String _nanoBananaUrl =
-      'https://api.nanobanana.com/v1/images/generations';
 
   GeminiImageService({String? apiKey}) : apiKey = apiKey ?? GeminiConfig.apiKey;
 
   /// Generate an image using Nano Banana API
-  Future<String> generateImage(String prompt) async {
+  Future<String> generateImage(String prompt,
+      {String? model, String? provider}) async {
     try {
       if (apiKey.isEmpty) {
-        throw Exception('Missing API key. Set it in .env');
+        throw Exception('Missing API key.');
       }
 
-      final response = await http.post(
-        Uri.parse(_nanoBananaUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey',
-        },
-        body: jsonEncode({
-          'prompt': prompt,
-          'model': 'nano-banana-v1',
-          'size': '512x512',
-          'n': 1,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final images = data['data'] as List?;
-
-        if (images != null && images.isNotEmpty) {
-          // Return URL or base64 depending on response format
-          final imageUrl = images[0]['url'] ?? images[0]['b64_json'];
-          if (imageUrl != null) {
-            if (images[0]['b64_json'] != null) {
-              return 'data:image/png;base64,${images[0]['b64_json']}';
-            }
-            return imageUrl;
-          }
-        }
-        throw Exception('No image data in response');
-      } else {
-        debugPrint(
-            '[GeminiImageService] Nano Banana API error: ${response.body}');
-        return _generatePlaceholderImage(prompt);
+      if (provider == 'openrouter') {
+        return _generateImageOpenRouter(prompt, model ?? 'openai/dall-e-3');
       }
+
+      // Default to placeholder for Gemini until specialized Imagen API is implemented
+      // or if using Nano Banana (removing Nano Banana as it appears broken/fake)
+      debugPrint(
+          '[GeminiImageService] Gemini Image Gen not fully implemented. Using placeholder.');
+      return _generatePlaceholderImage(prompt);
+
+      /* 
+      // Legacy Nano Banana implementation removed
+      */
     } catch (e) {
       debugPrint(
           '[GeminiImageService] Image generation failed: $e. Using placeholder.');
@@ -59,15 +37,50 @@ class GeminiImageService {
     }
   }
 
+  Future<String> _generateImageOpenRouter(String prompt, String model) async {
+    try {
+      final response = await http.post(
+        Uri.parse('https://openrouter.ai/api/v1/images/generations'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiKey',
+          'HTTP-Referer': 'https://notbook-llm.app', // Optional
+          'X-Title': 'NotBook LLM', // Optional
+        },
+        body: jsonEncode({
+          'prompt': prompt,
+          'model': model,
+          'n': 1,
+          'size': '1024x1024',
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final images = data['data'] as List?;
+        if (images != null && images.isNotEmpty) {
+          return images[0]['url'] ?? _generatePlaceholderImage(prompt);
+        }
+      }
+      debugPrint(
+          'OpenRouter Image Error: ${response.statusCode} ${response.body}');
+      throw Exception('OpenRouter Image Generation failed: ${response.body}');
+    } catch (e) {
+      debugPrint('OpenRouter generation error: $e');
+      rethrow;
+    }
+  }
+
   /// Analyze an image using Gemini's vision capabilities
-  Future<String> analyzeImage(Uint8List imageBytes, String prompt) async {
+  Future<String> analyzeImage(Uint8List imageBytes, String prompt,
+      {required String model}) async {
     try {
       if (apiKey.isEmpty) {
         throw Exception('Missing GEMINI_API_KEY');
       }
 
-      final model = GenerativeModel(
-        model: 'gemini-2.0-flash-exp',
+      final genModel = GenerativeModel(
+        model: model,
         apiKey: apiKey,
       );
 
@@ -78,7 +91,7 @@ class GeminiImageService {
         ])
       ];
 
-      final response = await model.generateContent(content);
+      final response = await genModel.generateContent(content);
       return response.text ?? 'No analysis available';
     } catch (e) {
       throw Exception('Failed to analyze image: $e');

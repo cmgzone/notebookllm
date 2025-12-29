@@ -24,7 +24,16 @@ router.get('/models', async (req: AuthRequest, res: Response) => {
 
 router.post('/models', async (req: AuthRequest, res: Response) => {
     try {
-        const { name, modelId, provider, description, costInput, costOutput, contextWindow, isActive, isPremium } = req.body;
+        // Accept both camelCase and snake_case from frontend
+        const name = req.body.name;
+        const modelId = req.body.modelId || req.body.model_id;
+        const provider = req.body.provider;
+        const description = req.body.description;
+        const costInput = req.body.costInput ?? req.body.cost_input ?? 0;
+        const costOutput = req.body.costOutput ?? req.body.cost_output ?? 0;
+        const contextWindow = req.body.contextWindow ?? req.body.context_window ?? 0;
+        const isActive = req.body.isActive ?? req.body.is_active ?? true;
+        const isPremium = req.body.isPremium ?? req.body.is_premium ?? false;
 
         const result = await pool.query(`
             INSERT INTO ai_models (
@@ -33,7 +42,7 @@ router.post('/models', async (req: AuthRequest, res: Response) => {
                 is_active, is_premium
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING *
-        `, [name, modelId, provider, description, costInput || 0, costOutput || 0, contextWindow || 0, isActive ?? true, isPremium ?? false]);
+        `, [name, modelId, provider, description, costInput, costOutput, contextWindow, isActive, isPremium]);
 
         res.json({ model: result.rows[0] });
     } catch (error) {
@@ -45,7 +54,16 @@ router.post('/models', async (req: AuthRequest, res: Response) => {
 router.put('/models/:id', async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { name, modelId, provider, description, costInput, costOutput, contextWindow, isActive, isPremium } = req.body;
+        // Accept both camelCase and snake_case from frontend
+        const name = req.body.name;
+        const modelId = req.body.modelId || req.body.model_id;
+        const provider = req.body.provider;
+        const description = req.body.description;
+        const costInput = req.body.costInput ?? req.body.cost_input;
+        const costOutput = req.body.costOutput ?? req.body.cost_output;
+        const contextWindow = req.body.contextWindow ?? req.body.context_window;
+        const isActive = req.body.isActive ?? req.body.is_active;
+        const isPremium = req.body.isPremium ?? req.body.is_premium;
 
         const result = await pool.query(`
             UPDATE ai_models SET
@@ -314,7 +332,7 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
 
         const countResult = await pool.query('SELECT COUNT(*) FROM users');
 
-        res.json({ 
+        res.json({
             users: result.rows,
             total: parseInt(countResult.rows[0].count)
         });
@@ -327,7 +345,7 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
 router.put('/users/:id/role', async (req: AuthRequest, res: Response) => {
     try {
         const { role } = req.body;
-        
+
         if (!['user', 'admin'].includes(role)) {
             return res.status(400).json({ error: 'Invalid role' });
         }

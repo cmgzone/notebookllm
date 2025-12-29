@@ -5,6 +5,7 @@ import '../../core/rag/vector_store.dart';
 import '../../core/rag/rag_provider.dart';
 import '../../core/ai/gemini_service.dart';
 import '../../core/ai/openrouter_service.dart';
+import '../../core/ai/ai_settings_service.dart';
 import '../../core/security/global_credentials_service.dart';
 import '../../core/services/wakelock_service.dart';
 import '../../core/services/background_ai_service.dart';
@@ -20,13 +21,13 @@ class ArtifactNotifier extends StateNotifier<List<Artifact>> {
   final OpenRouterService _openRouterService = OpenRouterService();
 
   Future<String> _getSelectedProvider() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('ai_provider') ?? 'gemini';
+    final settings = await AISettingsService.getSettings();
+    return settings.provider;
   }
 
   Future<String> _getSelectedModel() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('ai_model') ?? 'gemini-2.5-flash';
+    final settings = await AISettingsService.getSettings();
+    return settings.getEffectiveModel();
   }
 
   Future<String?> _getGeminiKey() async {

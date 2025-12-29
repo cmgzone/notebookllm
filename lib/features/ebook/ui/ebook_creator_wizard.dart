@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ebook_project.dart';
 import '../models/branding_config.dart';
 import '../agents/ebook_orchestrator.dart';
 import 'ebook_generation_view.dart';
 import '../../notebook/notebook_provider.dart';
 import '../../../core/services/overlay_bubble_service.dart';
+import '../../../core/ai/ai_models_provider.dart';
+import '../../../core/ai/ai_settings_service.dart';
 import '../../subscription/services/credit_manager.dart';
 
 class EbookCreatorWizard extends ConsumerStatefulWidget {
@@ -26,7 +27,7 @@ class _EbookCreatorWizardState extends ConsumerState<EbookCreatorWizard> {
   final _authorController = TextEditingController();
 
   Color _selectedColor = const Color(0xFF2196F3);
-  String _selectedModel = 'gemini-1.5-flash';
+  String _selectedModel = '';
   String? _selectedNotebookId;
   int _currentStep = 0;
 
@@ -41,8 +42,8 @@ class _EbookCreatorWizardState extends ConsumerState<EbookCreatorWizard> {
   }
 
   Future<void> _loadGlobalAISettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    final globalModel = prefs.getString('ai_model');
+    final settings = await AISettingsService.getSettings();
+    final globalModel = settings.model;
     if (globalModel != null && globalModel.isNotEmpty && mounted) {
       setState(() => _selectedModel = globalModel);
     }
@@ -384,90 +385,60 @@ class _EbookCreatorWizardState extends ConsumerState<EbookCreatorWizard> {
                   const SizedBox(height: 8),
                   Consumer(
                     builder: (context, ref, _) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          DropdownButtonFormField<String>(
-                            initialValue: _selectedModel,
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              helperText: 'Select the AI model for generation',
-                            ),
-                            style: TextStyle(color: scheme.onSurface),
-                            dropdownColor: scheme.surfaceContainer,
-                            items: [
-                              // Gemini Models
-                              DropdownMenuItem(
-                                value: 'gemini-1.5-flash',
-                                child: Text('Gemini 1.5 Flash (Recommended)',
-                                    style: TextStyle(color: scheme.onSurface)),
+                      final modelsAsync = ref.watch(availableModelsProvider);
+                      return modelsAsync.when(
+                        loading: () => const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                        error: (e, s) => Center(child: Text('Error: $e')),
+                        data: (models) {
+                          final allModels = models.entries
+                              .expand((entry) => entry.value)
+                              .toList();
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              DropdownButtonFormField<String>(
+                                initialValue: _selectedModel.isEmpty &&
+                                        allModels.isNotEmpty
+                                    ? allModels.first.id
+                                    : _selectedModel,
+                                decoration: const InputDecoration(
+                                  border: OutlineInputBorder(),
+                                  helperText:
+                                      'Select the AI model for generation',
+                                ),
+                                style: TextStyle(color: scheme.onSurface),
+                                dropdownColor: scheme.surfaceContainer,
+                                items: allModels
+                                    .map((m) => DropdownMenuItem(
+                                          value: m.id,
+                                          child: Text(
+                                            '${m.name}${m.provider != 'gemini' ? ' (${m.provider})' : ''}',
+                                            style: TextStyle(
+                                                color: scheme.onSurface),
+                                          ),
+                                        ))
+                                    .toList(),
+                                onChanged: (v) =>
+                                    setState(() => _selectedModel = v!),
                               ),
-                              DropdownMenuItem(
-                                value: 'gemini-1.5-pro',
-                                child: Text('Gemini 1.5 Pro (Best Quality)',
-                                    style: TextStyle(color: scheme.onSurface)),
-                              ),
-                              DropdownMenuItem(
-                                value: 'gemini-2.0-flash-exp',
-                                child: Text('Gemini 2.0 Flash (Experimental)',
-                                    style: TextStyle(color: scheme.onSurface)),
-                              ),
-                              DropdownMenuItem(
-                                value: 'gemini-2.5-flash',
-                                child: Text('Gemini 2.5 Flash',
-                                    style: TextStyle(color: scheme.onSurface)),
-                              ),
-                              // OpenRouter Free Models
-                              DropdownMenuItem(
-                                value: 'amazon/nova-2-lite-v1:free',
-                                child: Text('Amazon Nova 2 Lite (Free)',
-                                    style: TextStyle(color: scheme.onSurface)),
-                              ),
-                              DropdownMenuItem(
-                                value: 'google/gemini-2.0-flash-exp:free',
-                                child: Text('Gemini 2.0 Flash Exp (Free)',
-                                    style: TextStyle(color: scheme.onSurface)),
-                              ),
-                              DropdownMenuItem(
-                                value: 'meta-llama/llama-3.1-8b-instruct:free',
-                                child: Text('Llama 3.1 8B (Free)',
-                                    style: TextStyle(color: scheme.onSurface)),
-                              ),
-                              DropdownMenuItem(
-                                value: 'mistralai/mistral-7b-instruct:free',
-                                child: Text('Mistral 7B (Free)',
-                                    style: TextStyle(color: scheme.onSurface)),
-                              ),
-                              // OpenRouter Paid Models
-                              DropdownMenuItem(
-                                value: 'openai/gpt-4o',
-                                child: Text('GPT-4o (OpenRouter - Paid)',
-                                    style: TextStyle(color: scheme.onSurface)),
-                              ),
-                              DropdownMenuItem(
-                                value: 'anthropic/claude-3.5-sonnet',
-                                child: Text(
-                                    'Claude 3.5 Sonnet (OpenRouter - Paid)',
-                                    style: TextStyle(color: scheme.onSurface)),
-                              ),
-                              DropdownMenuItem(
-                                value: 'deepseek/deepseek-chat',
-                                child: Text('DeepSeek V3 (OpenRouter)',
-                                    style: TextStyle(color: scheme.onSurface)),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Models with "/" use OpenRouter. Others use Gemini API directly.',
+                                style: text.bodySmall?.copyWith(
+                                  color:
+                                      scheme.onSurface.withValues(alpha: 0.6),
+                                  fontStyle: FontStyle.italic,
+                                ),
                               ),
                             ],
-                            onChanged: (v) =>
-                                setState(() => _selectedModel = v!),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Models with "/" use OpenRouter. Others use Gemini API directly.',
-                            style: text.bodySmall?.copyWith(
-                              color: scheme.onSurface.withValues(alpha: 0.6),
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ],
+                          );
+                        },
                       );
                     },
                   ),

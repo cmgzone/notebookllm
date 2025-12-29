@@ -1,9 +1,9 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../ai/gemini_service.dart';
 import '../ai/gemini_image_service.dart';
+import '../ai/openrouter_service.dart';
 import '../../features/sources/source_provider.dart';
 import '../../features/notebook/notebook_provider.dart';
 import '../../core/security/global_credentials_service.dart';
@@ -11,6 +11,7 @@ import '../../features/ebook/ebook_provider.dart';
 import '../../features/ebook/models/ebook_project.dart';
 import '../../features/ebook/models/branding_config.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/ai/ai_settings_service.dart';
 
 final voiceActionHandlerProvider = Provider<VoiceActionHandler>((ref) {
   return VoiceActionHandler(ref);
@@ -34,13 +35,35 @@ class VoiceActionHandler {
   final Ref ref;
   VoiceActionHandler(this.ref);
 
-  Future<GeminiService> _getGeminiService() async {
-    final creds = ref.read(globalCredentialsServiceProvider);
-    final apiKey = await creds.getApiKey('gemini');
-    if (apiKey == null || apiKey.isEmpty) {
-      throw Exception('Gemini API key not found');
+  /// Generate AI content using the user's selected provider (OpenRouter or Gemini)
+  Future<String> _generateAIContent(String prompt) async {
+    final settings = await AISettingsService.getSettings();
+    final model = settings.model;
+
+    if (model == null || model.isEmpty) {
+      throw Exception(
+          'No AI model selected. Please configure a model in settings.');
     }
-    return GeminiService(apiKey: apiKey);
+
+    final creds = ref.read(globalCredentialsServiceProvider);
+
+    if (settings.provider == 'openrouter') {
+      final apiKey = await creds.getApiKey('openrouter');
+      if (apiKey == null || apiKey.isEmpty) {
+        throw Exception(
+            'OpenRouter API key not configured. Please add it in settings.');
+      }
+      return await OpenRouterService()
+          .generateContent(prompt, model: model, apiKey: apiKey);
+    } else {
+      final apiKey = await creds.getApiKey('gemini');
+      if (apiKey == null || apiKey.isEmpty) {
+        throw Exception(
+            'Gemini API key not configured. Please add it in settings.');
+      }
+      return await GeminiService(apiKey: apiKey)
+          .generateContent(prompt, model: model);
+    }
   }
 
   Future<GeminiImageService> _getImageService() async {
@@ -56,68 +79,162 @@ class VoiceActionHandler {
     String userText,
     List<String> conversationHistory,
   ) async {
-    final intent = await _detectIntent(userText);
+    // Fast keyword-based intent detection first (no AI call needed)
+    final fastIntent = _detectIntentFast(userText);
 
-    switch (intent['action']) {
-      case 'create_note':
-        return await _createNote(userText, intent);
-      case 'search_sources':
-        return await _searchSources(userText, intent);
-      case 'list_sources':
-        return await _listSources();
-      case 'create_notebook':
-        return await _createNotebook(userText, intent);
-      case 'list_notebooks':
-        return await _listNotebooks();
-      case 'get_summary':
-        return await _getSummary();
-      case 'generate_image':
-        return await _generateImage(userText, intent);
-      case 'create_ebook':
-        return await _createEbook(userText, intent);
-      default:
-        return await _handleConversation(userText, conversationHistory);
+    if (fastIntent['action'] != 'conversation') {
+      // Handle action directly without AI intent detection
+      switch (fastIntent['action']) {
+        case 'create_note':
+          return await _createNote(userText, fastIntent);
+        case 'search_sources':
+          return await _searchSources(userText, fastIntent);
+        case 'list_sources':
+          return await _listSources();
+        case 'create_notebook':
+          return await _createNotebook(userText, fastIntent);
+        case 'list_notebooks':
+          return await _listNotebooks();
+        case 'get_summary':
+          return await _getSummary();
+        case 'generate_image':
+          return await _generateImage(userText, fastIntent);
+        case 'create_ebook':
+          return await _createEbook(userText, fastIntent);
+      }
     }
+
+    // For conversation, respond directly without intent detection
+    return await _handleConversation(userText, conversationHistory);
   }
 
-  Future<Map<String, dynamic>> _detectIntent(String userText) async {
-    final prompt = '''
-Analyze this user request and determine the intent. Return ONLY a JSON object.
+  /// Fast keyword-based intent detection - no AI call needed
+  Map<String, dynamic> _detectIntentFast(String userText) {
+    final text = userText.toLowerCase().trim();
 
-User request: "$userText"
-
-Possible actions:
-- create_note: User wants to save/create/write a note
-- search_sources: User wants to search or query their sources
-- list_sources: User wants to see their sources
-- create_notebook: User wants to create a new notebook
-- list_notebooks: User wants to see their notebooks
-- get_summary: User wants a summary of their content
-- generate_image: User wants to create/generate an image
-- create_ebook: User wants to create/write/generate an ebook
-- conversation: Just normal conversation
-
-Return format:
-{
-  "action": "action_name",
-  "title": "extracted title if creating something",
-  "content": "extracted content if creating something",
-  "query": "search query if searching"
-}
-''';
-
-    try {
-      final gemini = await _getGeminiService();
-      final response = await gemini.generateContent(prompt);
-      final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(response);
-      if (jsonMatch != null) {
-        return jsonDecode(jsonMatch.group(0)!);
-      }
-    } catch (e) {
-      // If parsing fails, default to conversation
+    // Create note patterns
+    if (_matchesAny(text, [
+      'create a note',
+      'save a note',
+      'write a note',
+      'make a note',
+      'add a note',
+      'new note'
+    ])) {
+      final content = _extractAfter(
+          text, ['about', 'called', 'titled', 'saying', 'that says']);
+      return {
+        'action': 'create_note',
+        'title': content.isNotEmpty
+            ? _capitalize(content.split(' ').take(5).join(' '))
+            : 'Voice Note',
+        'content': content.isNotEmpty ? content : userText,
+      };
     }
 
+    // Search patterns
+    if (_matchesAny(
+        text, ['search for', 'find', 'look for', 'search my', 'query'])) {
+      final query = _extractAfter(
+          text, ['search for', 'find', 'look for', 'search my', 'query']);
+      return {
+        'action': 'search_sources',
+        'query': query.isNotEmpty ? query : userText,
+      };
+    }
+
+    // List sources
+    if (_matchesAny(text,
+        ['list my sources', 'show my sources', 'what sources', 'my sources'])) {
+      return {'action': 'list_sources'};
+    }
+
+    // Create notebook
+    if (_matchesAny(text, [
+      'create a notebook',
+      'new notebook',
+      'make a notebook',
+      'add a notebook'
+    ])) {
+      final title = _extractAfter(text, ['called', 'named', 'titled']);
+      return {
+        'action': 'create_notebook',
+        'title': title.isNotEmpty ? _capitalize(title) : 'New Notebook',
+      };
+    }
+
+    // List notebooks
+    if (_matchesAny(text, [
+      'list my notebooks',
+      'show my notebooks',
+      'what notebooks',
+      'my notebooks'
+    ])) {
+      return {'action': 'list_notebooks'};
+    }
+
+    // Summary
+    if (_matchesAny(
+        text, ['summarize', 'summary', 'give me a summary', 'summarise'])) {
+      return {'action': 'get_summary'};
+    }
+
+    // Generate image
+    if (_matchesAny(text, [
+      'generate an image',
+      'create an image',
+      'make an image',
+      'draw',
+      'generate image',
+      'create image'
+    ])) {
+      final prompt =
+          _extractAfter(text, ['of', 'showing', 'with', 'that shows']);
+      return {
+        'action': 'generate_image',
+        'content': prompt.isNotEmpty ? prompt : userText,
+      };
+    }
+
+    // Create ebook
+    if (_matchesAny(text, [
+      'create an ebook',
+      'write an ebook',
+      'make an ebook',
+      'new ebook',
+      'create ebook'
+    ])) {
+      final topic = _extractAfter(text, ['about', 'on', 'called', 'titled']);
+      return {
+        'action': 'create_ebook',
+        'title': topic.isNotEmpty
+            ? _capitalize(topic.split(' ').take(5).join(' '))
+            : 'New Ebook',
+        'content': topic.isNotEmpty ? topic : 'General Topic',
+      };
+    }
+
+    // Default to conversation
     return {'action': 'conversation'};
+  }
+
+  bool _matchesAny(String text, List<String> patterns) {
+    return patterns.any((p) => text.contains(p));
+  }
+
+  String _extractAfter(String text, List<String> keywords) {
+    for (final keyword in keywords) {
+      final index = text.indexOf(keyword);
+      if (index != -1) {
+        return text.substring(index + keyword.length).trim();
+      }
+    }
+    return '';
+  }
+
+  String _capitalize(String text) {
+    if (text.isEmpty) return text;
+    return text[0].toUpperCase() + text.substring(1);
   }
 
   Future<VoiceActionResult> _createNote(
@@ -285,8 +402,7 @@ Provide a brief spoken summary of these sources in 2-3 sentences:
 $context
 ''';
 
-      final gemini = await _getGeminiService();
-      final summary = await gemini.generateContent(summaryPrompt);
+      final summary = await _generateAIContent(summaryPrompt);
 
       return VoiceActionResult(
         response: summary,
@@ -306,16 +422,20 @@ $context
     List<String> conversationHistory,
   ) async {
     try {
-      final gemini = await _getGeminiService();
-      final response = await gemini.generateContentWithContext(
-        userText,
-        [
-          'You are a helpful AI voice assistant for a notebook app.',
-          'Keep responses concise and conversational.',
-          'No markdown formatting - this will be spoken aloud.',
-          ...conversationHistory.take(10),
-        ],
-      );
+      final contextPrompt = '''
+You are a helpful AI voice assistant for a notebook app.
+Keep responses concise and conversational.
+No markdown formatting - this will be spoken aloud.
+
+Previous conversation:
+${conversationHistory.take(10).join('\n')}
+
+User: $userText
+
+Respond naturally and helpfully:
+''';
+
+      final response = await _generateAIContent(contextPrompt);
 
       return VoiceActionResult(
         response: response,
@@ -325,11 +445,16 @@ $context
       debugPrint('Voice conversation error: $e');
       // Provide more helpful error message
       String errorMessage = 'Sorry, I had trouble processing that.';
-      if (e.toString().contains('API key')) {
-        errorMessage = 'Please configure your Gemini API key in settings.';
-      } else if (e.toString().contains('network') ||
-          e.toString().contains('connection')) {
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('api key') || errorStr.contains('not configured')) {
+        errorMessage = 'Please configure your AI API key in settings.';
+      } else if (errorStr.contains('network') ||
+          errorStr.contains('connection') ||
+          errorStr.contains('socket')) {
         errorMessage = 'Please check your internet connection and try again.';
+      } else if (errorStr.contains('quota') || errorStr.contains('rate')) {
+        errorMessage =
+            'API rate limit reached. Please wait a moment and try again.';
       }
       return VoiceActionResult(
         response: errorMessage,
@@ -345,16 +470,15 @@ $context
     try {
       final prompt = intent['content'] as String? ?? userText;
 
-      // Use Gemini to enhance the prompt for better image generation
-      final gemini = await _getGeminiService();
-      final enhancedPrompt = await gemini.generateContent('''
+      // Use AI to enhance the prompt for better image generation
+      final enhancedPrompt = await _generateAIContent('''
 Convert this user request into a detailed, vivid image generation prompt (max 2 sentences):
 "$prompt"
 
 Return only the enhanced prompt, nothing else.
 ''');
 
-      // Generate image using Gemini Imagen
+      // Generate image using Gemini Imagen (requires Gemini API key)
       final imageGen = await _getImageService();
       final imageUrl = await imageGen.generateImage(enhancedPrompt.trim());
 
@@ -380,8 +504,12 @@ Return only the enhanced prompt, nothing else.
       final title = intent['title'] as String? ?? 'New Ebook';
       final topic = intent['content'] as String? ?? 'General Topic';
 
-      final prefs = await SharedPreferences.getInstance();
-      final currentModel = prefs.getString('ai_model') ?? 'gemini-1.5-flash';
+      final settings = await AISettingsService.getSettings();
+      final currentModel = settings.model ?? '';
+
+      if (currentModel.isEmpty) {
+        throw Exception('No AI model selected for ebook creation');
+      }
 
       final id = const Uuid().v4();
       final now = DateTime.now();

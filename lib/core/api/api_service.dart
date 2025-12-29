@@ -646,6 +646,57 @@ class ApiService {
     return response['response'];
   }
 
+  Stream<String> chatWithAIStream({
+    required List<Map<String, String>> messages,
+    String provider = 'gemini',
+    String? model,
+  }) async* {
+    final token = await getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final uri = Uri.parse('$_baseUrl/ai/chat/stream');
+    final request = http.Request('POST', uri);
+    request.headers.addAll({
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    });
+    request.body = jsonEncode({
+      'messages': messages,
+      'provider': provider,
+      if (model != null) 'model': model,
+    });
+
+    final client = http.Client();
+    try {
+      final response = await client.send(request);
+      if (response.statusCode != 200) {
+        throw Exception('Failed to stream: ${response.statusCode}');
+      }
+
+      yield* response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .map((line) {
+            if (line.startsWith('data: ')) {
+              final dataStr = line.substring(6);
+              if (dataStr == '[DONE]') return null;
+              try {
+                final json = jsonDecode(dataStr);
+                if (json['error'] != null) throw Exception(json['error']);
+                return json['text'] as String?;
+              } catch (_) {
+                return null;
+              }
+            }
+            return null;
+          })
+          .where((text) => text != null)
+          .cast<String>();
+    } finally {
+      client.close();
+    }
+  }
+
   Future<String> generateSummary({
     required String content,
     String provider = 'gemini',

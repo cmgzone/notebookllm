@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/ai/gemini_image_service.dart';
 import '../../core/security/global_credentials_service.dart';
+import '../../core/ai/ai_settings_service.dart';
 
 class VisualStudioScreen extends ConsumerStatefulWidget {
   const VisualStudioScreen({super.key});
@@ -31,16 +32,28 @@ class _VisualStudioScreenState extends ConsumerState<VisualStudioScreen> {
     });
 
     try {
-      // Get API key from secure storage
+      final settings = await AISettingsService.getSettings();
+      final provider = settings.provider;
       final creds = ref.read(globalCredentialsServiceProvider);
-      final apiKey = await creds.getApiKey('gemini');
+
+      String? apiKey;
+      if (provider == 'openrouter') {
+        apiKey = await creds.getApiKey('openrouter');
+      } else {
+        apiKey = await creds.getApiKey('gemini');
+      }
 
       if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('Gemini API key not found. Please set it in Settings.');
+        throw Exception(
+            'API key not found for $provider. Please set it in Settings.');
       }
 
       final imageService = GeminiImageService(apiKey: apiKey);
-      final url = await imageService.generateImage(prompt);
+      // Pass provider and model to generateImage if possible, or just prompt.
+      // Since generateImage signature is strict (only prompt), we might need to update GeminiImageService first
+      // or rely on a new method.
+      // For now, I'll update GeminiImageService to accept optional params, then use them here.
+      final url = await imageService.generateImage(prompt, provider: provider);
 
       if (mounted) {
         setState(() {

@@ -13,6 +13,8 @@ class Message with _$Message {
     @Default([]) List<Citation> citations,
     @Default([]) List<String> suggestedQuestions,
     @Default([]) List<SourceSuggestion> relatedSources,
+    String? imageUrl, // Local file path or URL for attached image
+    @Default(false) bool isDeepSearch, // Whether this used deep search
   }) = _Message;
 
   factory Message.fromJson(Map<String, dynamic> json) =>

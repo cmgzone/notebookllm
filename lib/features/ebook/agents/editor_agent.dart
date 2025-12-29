@@ -1,26 +1,27 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../../core/ai/gemini_service.dart';
 import '../../../core/ai/openrouter_service.dart';
 import '../../../core/security/global_credentials_service.dart';
+import '../../../core/ai/ai_settings_service.dart';
 
 class EditorAgent {
   final Ref ref;
 
   EditorAgent(this.ref);
 
-  Future<String> _getSelectedProvider() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('ai_provider') ?? 'gemini';
-  }
-
   Future<String> _generateContent(String prompt) async {
-    final provider = await _getSelectedProvider();
+    final settings = await AISettingsService.getSettings();
+    final model = settings.model;
+
+    if (model == null || model.isEmpty) {
+      throw Exception(
+          'No AI model selected. Please configure a model in settings.');
+    }
+
     final creds = ref.read(globalCredentialsServiceProvider);
 
-    if (provider == 'openrouter') {
-      final prefs = await SharedPreferences.getInstance();
-      final model = prefs.getString('ai_model') ?? 'amazon/nova-2-lite-v1:free';
+    if (settings.provider == 'openrouter') {
       final apiKey = await creds.getApiKey('openrouter');
       return await OpenRouterService()
           .generateContent(prompt, model: model, apiKey: apiKey);
@@ -29,7 +30,8 @@ class EditorAgent {
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('Gemini API key not found');
       }
-      return await GeminiService(apiKey: apiKey).generateContent(prompt);
+      return await GeminiService(apiKey: apiKey)
+          .generateContent(prompt, model: model);
     }
   }
 

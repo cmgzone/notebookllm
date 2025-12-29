@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:uuid/uuid.dart';
 import 'infographic.dart';
 import '../sources/source_provider.dart';
@@ -7,6 +8,7 @@ import '../../core/ai/gemini_service.dart';
 import '../../core/ai/openrouter_service.dart';
 import '../../core/security/global_credentials_service.dart';
 import '../../core/api/api_service.dart';
+import '../../core/ai/ai_settings_service.dart';
 
 /// Provider for managing infographics
 class InfographicNotifier extends StateNotifier<List<Infographic>> {
@@ -139,14 +141,19 @@ Return ONLY the image generation prompt, no other text.
   Future<String> _callAI(String prompt) async {
     try {
       final creds = ref.read(globalCredentialsServiceProvider);
-      // Hardcoded or fetched from another provider if not in SharedPreferences
-      const provider = 'gemini';
-      const model = 'gemini-1.5-flash';
+      final settings = await AISettingsService.getSettings();
+      final provider = settings.provider;
+      final model = settings.model;
+
+      if (model == null || model.isEmpty) {
+        throw Exception(
+            'No AI model selected. Please configure a model in settings.');
+      }
 
       debugPrint(
           '[InfographicProvider] Using AI provider: $provider, model: $model');
 
-      if (provider == 'openrouter') {
+      if (settings.provider == 'openrouter') {
         final apiKey = await creds.getApiKey('openrouter');
         if (apiKey == null || apiKey.isEmpty) {
           throw Exception(
@@ -163,7 +170,7 @@ Return ONLY the image generation prompt, no other text.
         }
         final gemini = GeminiService();
         return await gemini.generateContent(prompt,
-            apiKey: apiKey, maxTokens: 8192);
+            apiKey: apiKey, model: model, maxTokens: 8192);
       }
     } catch (e) {
       debugPrint('[InfographicProvider] AI call failed: $e');

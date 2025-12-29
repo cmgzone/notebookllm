@@ -1,37 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/admin/services/ai_model_service.dart';
-import 'gemini_config.dart';
-import 'openrouter_service.dart';
 
 final availableModelsProvider =
     FutureProvider<Map<String, List<AIModelOption>>>((ref) async {
-  // Get base models with default context windows
-  final baseGemini = GeminiConfig.availableModels.entries
-      .map((e) => AIModelOption(
-            id: e.key,
-            name: e.value,
-            provider: 'gemini',
-            isPremium: false,
-            contextWindow: _getDefaultContextWindow(e.key),
-          ))
-      .toList();
+  final List<AIModelOption> geminiModels = [];
+  final List<AIModelOption> openRouterModels = [];
 
-  final baseOpenRouter = OpenRouterService.allModels.entries
-      .map((e) => AIModelOption(
-            id: e.key,
-            name: e.value.replaceAll(' (Paid)', '').replaceAll(' (Free)', ''),
-            provider: 'openrouter',
-            isPremium: e.value.contains('(Paid)'),
-            contextWindow: _getDefaultContextWindow(e.key),
-          ))
-      .toList();
-
-  // Get dynamic models from DB (if table exists)
+  // Get dynamic models from DB
   try {
     final service = ref.read(aiModelServiceProvider);
-    // ensureTableExists is lightweight
-    await service.ensureTableExists();
     final dbModels = await service.listModels();
 
     for (final m in dbModels) {
@@ -48,65 +27,130 @@ final availableModelsProvider =
       );
 
       if (m.provider == 'gemini') {
-        // Replace if exists, otherwise add
-        final existingIndex = baseGemini.indexWhere((o) => o.id == m.modelId);
-        if (existingIndex >= 0) {
-          baseGemini[existingIndex] = option;
-        } else {
-          baseGemini.add(option);
-        }
-      } else if (m.provider == 'openrouter') {
-        final existingIndex =
-            baseOpenRouter.indexWhere((o) => o.id == m.modelId);
-        if (existingIndex >= 0) {
-          baseOpenRouter[existingIndex] = option;
-        } else {
-          baseOpenRouter.add(option);
-        }
-      } else {
-        // Handle custom providers or map to existing ones
-        if (m.provider == 'openai' || m.provider == 'anthropic') {
-          baseOpenRouter.add(option);
-        }
+        geminiModels.add(option);
+      } else if (m.provider == 'openrouter' ||
+          m.provider == 'openai' ||
+          m.provider == 'anthropic') {
+        openRouterModels.add(option);
       }
     }
   } catch (e) {
-    // Fallback to static lists if DB fails
     debugPrint('Failed to load dynamic AI models: $e');
   }
 
   return {
-    'gemini': baseGemini,
-    'openrouter': baseOpenRouter,
+    'gemini': geminiModels,
+    'openrouter': openRouterModels,
   };
+});
+
+final selectedAIModelProvider = StateProvider<String>((ref) => '');
+
+final currentAIModelIdProvider = FutureProvider<String>((ref) async {
+  final prefs = await SharedPreferences.getInstance();
+  final saved = prefs.getString('ai_model');
+  if (saved != null && saved.isNotEmpty) return saved;
+
+  // No saved model, pick first active one from DB
+  final models = await ref.watch(availableModelsProvider.future);
+  final provider = prefs.getString('ai_provider') ?? 'gemini';
+  final available = models[provider] ?? [];
+
+  if (available.isNotEmpty) {
+    return available.first.id;
+  }
+
+  // Last resort: empty string (indicates no models configured)
+  return '';
 });
 
 /// Get default context window for known models
 int _getDefaultContextWindow(String modelId) {
+  final lower = modelId.toLowerCase();
+
   // Gemini models
-  if (modelId.contains('gemini-2.0') || modelId.contains('gemini-2.5')) {
+  if (lower.contains('gemini-2.0') || lower.contains('gemini-2.5')) {
     return 1000000; // 1M tokens
   }
-  if (modelId.contains('gemini-1.5-pro')) {
+  if (lower.contains('gemini-1.5-pro')) {
     return 2000000; // 2M tokens
   }
-  if (modelId.contains('gemini-1.5-flash')) {
+  if (lower.contains('gemini-1.5-flash') || lower.contains('gemini-flash')) {
     return 1000000; // 1M tokens
+  }
+  if (lower.contains('gemini') && lower.contains('exp')) {
+    return 1000000; // Experimental Gemini models
+  }
+
+  // Google Nano models (lightweight, smaller context)
+  if (lower.contains('nano')) {
+    return 128000; // 128K tokens - reasonable for nano models
   }
 
   // OpenRouter / Claude models
-  if (modelId.contains('claude-3')) {
+  if (lower.contains('claude-3.5')) {
     return 200000; // 200K tokens
   }
-  if (modelId.contains('gpt-4')) {
-    return 128000; // 128K tokens
+  if (lower.contains('claude-3')) {
+    return 200000; // 200K tokens
   }
-  if (modelId.contains('nova')) {
+  if (lower.contains('claude')) {
+    return 100000; // Older Claude models
+  }
+
+  // OpenAI GPT models
+  if (lower.contains('gpt-4o')) {
+    return 128000; // GPT-4o
+  }
+  if (lower.contains('gpt-4-turbo')) {
+    return 128000; // GPT-4 Turbo
+  }
+  if (lower.contains('gpt-4')) {
+    return 8192; // Standard GPT-4
+  }
+  if (lower.contains('gpt-3.5-turbo-16k')) {
+    return 16000;
+  }
+  if (lower.contains('gpt-3.5')) {
+    return 4096;
+  }
+
+  // AWS Nova models
+  if (lower.contains('nova')) {
     return 300000; // 300K tokens
   }
 
-  // Default fallback
-  return 8192;
+  // Mistral models
+  if (lower.contains('mistral-large')) {
+    return 128000;
+  }
+  if (lower.contains('mistral')) {
+    return 32000;
+  }
+
+  // Llama models
+  if (lower.contains('llama-3.3') || lower.contains('llama-3.2')) {
+    return 128000;
+  }
+  if (lower.contains('llama-3.1')) {
+    return 128000;
+  }
+  if (lower.contains('llama')) {
+    return 8192;
+  }
+
+  // Qwen models
+  if (lower.contains('qwen')) {
+    return 32000;
+  }
+
+  // DeepSeek models
+  if (lower.contains('deepseek')) {
+    return 64000;
+  }
+
+  // Default fallback - generous for modern models
+  return 32768; // 32K tokens should handle most modern models
 }
 
 class AIModelOption {

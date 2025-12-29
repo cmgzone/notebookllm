@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/ai/ai_settings_service.dart';
 import '../../../core/ai/gemini_service.dart';
 import '../../../core/ai/openrouter_service.dart';
 import '../../../core/security/global_credentials_service.dart';
@@ -28,9 +28,9 @@ class SuggestionService {
     required List<Message> history,
   }) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final provider = prefs.getString('ai_provider') ?? 'gemini';
-      final model = prefs.getString('ai_model') ?? 'gemini-1.5-flash';
+      final settings = await AISettingsService.getSettings();
+      final provider = settings.provider;
+      final model = settings.getEffectiveModel();
 
       // Get brief source context
       final sources = ref.read(sourceProvider);

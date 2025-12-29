@@ -1,11 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../core/ai/gemini_service.dart';
 import '../../core/ai/gemini_image_service.dart';
 import '../../core/ai/openrouter_service.dart';
 import '../../core/security/global_credentials_service.dart';
+import '../../core/ai/ai_settings_service.dart';
 
 class AdsGeneratorState {
   final bool isGenerating;
@@ -83,9 +84,15 @@ class AdsGeneratorNotifier extends StateNotifier<AdsGeneratorState> {
     state = state.copyWith(isGenerating: true, error: null, generatedAd: null);
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final provider = prefs.getString('ai_provider') ?? 'gemini';
-      final model = prefs.getString('ai_model') ?? 'gemini-2.5-flash';
+      final settings = await AISettingsService.getSettings();
+      final provider = settings.provider;
+      final model = settings.model;
+
+      if (model == null || model.isEmpty) {
+        throw Exception(
+            'No AI model selected. Please configure a model in settings.');
+      }
+
       final creds = ref.read(globalCredentialsServiceProvider);
 
       String content;
@@ -163,6 +170,7 @@ Target Audience Analysis: Briefly analyze who this ad would appeal to based on t
           content = await imageService.analyzeImage(
             state.selectedImageBytes!,
             fullPrompt,
+            model: model,
           );
         } else {
           // Text-only generation with Gemini
@@ -181,7 +189,8 @@ Please generate:
 4. Suggested Hashtags
 ''';
 
-          content = await geminiService.generateContent(fullPrompt);
+          content =
+              await geminiService.generateContent(fullPrompt, model: model);
         }
       }
 

@@ -15,7 +15,7 @@ import '../../core/ai/ai_models_provider.dart';
 
 // Providers for selected models
 final selectedAIModelProvider = StateProvider<String>((ref) {
-  return 'gemini-2.5-flash'; // Default to Gemini 2.5 Flash
+  return ''; // Initial empty, will be loaded from prefs or available models
 });
 
 final selectedTTSVoiceProvider = StateProvider<String>((ref) {
@@ -58,12 +58,39 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    final aiModel = prefs.getString('ai_model');
+
+    // Auto-sync provider based on saved model
+    if (aiModel != null && aiModel.isNotEmpty) {
+      try {
+        final models = await ref.read(availableModelsProvider.future);
+        // Find the model's actual provider
+        String? detectedProvider;
+        for (final entry in models.entries) {
+          final found = entry.value.where((m) => m.id == aiModel).firstOrNull;
+          if (found != null) {
+            detectedProvider = entry.key; // 'gemini' or 'openrouter'
+            break;
+          }
+        }
+        if (detectedProvider != null) {
+          setState(() => _aiProvider = detectedProvider!);
+        } else {
+          setState(
+              () => _aiProvider = prefs.getString('ai_provider') ?? 'gemini');
+        }
+      } catch (e) {
+        setState(
+            () => _aiProvider = prefs.getString('ai_provider') ?? 'gemini');
+      }
+    } else {
+      setState(() => _aiProvider = prefs.getString('ai_provider') ?? 'gemini');
+    }
+
     setState(() {
-      _aiProvider = prefs.getString('ai_provider') ?? 'gemini';
       _ttsProvider = prefs.getString('tts_provider') ?? 'google';
     });
 
-    final aiModel = prefs.getString('ai_model');
     final ttsVoice = prefs.getString('tts_voice');
     final ttsModel = prefs.getString('tts_model');
     final googleTtsVoice = prefs.getString('google_tts_voice');
@@ -155,10 +182,20 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
                 title: 'Google Gemini',
                 subtitle: 'Fast, powerful, paid API (Gemini 2.5/3.0)',
                 isSelected: _aiProvider == 'gemini',
-                onTap: () {
+                onTap: () async {
                   setState(() => _aiProvider = 'gemini');
-                  ref.read(selectedAIModelProvider.notifier).state =
-                      'gemini-2.5-flash';
+                  // Try to find the first available Gemini model from the provider
+                  try {
+                    final models =
+                        await ref.read(availableModelsProvider.future);
+                    final gemini = models['gemini'] ?? [];
+                    if (gemini.isNotEmpty) {
+                      ref.read(selectedAIModelProvider.notifier).state =
+                          gemini.first.id;
+                    }
+                  } catch (e) {
+                    ref.read(selectedAIModelProvider.notifier).state = '';
+                  }
                 },
                 icon: Icons.auto_awesome,
                 color: Colors.blue,
@@ -168,10 +205,14 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
                 title: 'OpenRouter',
                 subtitle: 'Access Free & Premium Models (Claude, GPT-4)',
                 isSelected: _aiProvider == 'openrouter',
-                onTap: () {
+                onTap: () async {
                   setState(() => _aiProvider = 'openrouter');
-                  ref.read(selectedAIModelProvider.notifier).state =
-                      'amazon/nova-2-lite-v1:free';
+                  final models = await ref.read(availableModelsProvider.future);
+                  final openrouter = models['openrouter'] ?? [];
+                  if (openrouter.isNotEmpty) {
+                    ref.read(selectedAIModelProvider.notifier).state =
+                        openrouter.first.id;
+                  }
                 },
                 icon: Icons.model_training,
                 color: Colors.purple,
@@ -207,10 +248,12 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
                               ),
                             );
                           }).toList(),
-                          onChanged: (val) {
+                          onChanged: (val) async {
                             if (val != null) {
                               ref.read(selectedAIModelProvider.notifier).state =
                                   val;
+                              // Auto-save when model changes
+                              await _saveSettings();
                             }
                           },
                         );
@@ -245,10 +288,12 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
                                   style: const TextStyle(fontSize: 13)),
                             );
                           }).toList(),
-                          onChanged: (val) {
+                          onChanged: (val) async {
                             if (val != null) {
                               ref.read(selectedAIModelProvider.notifier).state =
                                   val;
+                              // Auto-save when model changes
+                              await _saveSettings();
                             }
                           },
                         );

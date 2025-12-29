@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/ai/gemini_service.dart';
 import '../../../core/ai/openrouter_service.dart';
 import '../../../core/security/global_credentials_service.dart';
+import '../../../core/ai/ai_settings_service.dart';
 
 class ResearchAgent {
   final Ref ref;
@@ -34,9 +34,9 @@ class ResearchAgent {
       }
     } else {
       // Fallback to global settings
-      final prefs = await SharedPreferences.getInstance();
-      provider = prefs.getString('ai_provider') ?? 'gemini';
-      targetModel = prefs.getString('ai_model') ?? 'gemini-1.5-flash';
+      final settings = await AISettingsService.getSettings();
+      provider = settings.provider;
+      targetModel = settings.getEffectiveModel();
     }
 
     if (provider == 'openrouter') {

@@ -35,7 +35,7 @@ export async function generateWithGemini(
         }));
 
         const lastMessage = messages[messages.length - 1];
-        
+
         const chat = geminiModel.startChat({
             history: history.length > 0 ? history : undefined,
         });
@@ -103,9 +103,9 @@ export async function* streamWithGemini(
     try {
         const geminiModel = genAI.getGenerativeModel({ model });
         const prompt = messages.map(msg => `${msg.role}: ${msg.content}`).join('\n\n');
-        
+
         const result = await geminiModel.generateContentStream(prompt);
-        
+
         for await (const chunk of result.stream) {
             const text = chunk.text();
             if (text) {
@@ -119,10 +119,81 @@ export async function* streamWithGemini(
 }
 
 /**
+ * Stream AI response using OpenRouter
+ */
+export async function* streamWithOpenRouter(
+    messages: ChatMessage[],
+    model: string = 'meta-llama/llama-3.3-70b-instruct'
+): AsyncGenerator<string> {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+
+    if (!apiKey) {
+        throw new Error('OpenRouter API key not configured');
+    }
+
+    try {
+        const response = await axios.post(
+            'https://openrouter.ai/api/v1/chat/completions',
+            {
+                model,
+                messages: messages.map(msg => ({
+                    role: msg.role,
+                    content: msg.content
+                })),
+                stream: true,
+                max_tokens: 4096,
+            },
+            {
+                responseType: 'stream',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': 'https://notebookllm.app',
+                    'X-Title': 'Notebook LLM'
+                }
+            }
+        );
+
+        const stream = response.data;
+        let buffer = '';
+
+        for await (const chunk of stream) {
+            const chunkStr = chunk.toString();
+            buffer += chunkStr;
+
+            const lines = buffer.split('\n');
+            // Process all complete lines
+            for (let i = 0; i < lines.length - 1; i++) {
+                const line = lines[i].trim();
+                if (line.startsWith('data: ')) {
+                    const dataStr = line.slice(6);
+                    if (dataStr === '[DONE]') continue;
+
+                    try {
+                        const data = JSON.parse(dataStr);
+                        const content = data.choices?.[0]?.delta?.content;
+                        if (content) {
+                            yield content;
+                        }
+                    } catch (e) {
+                        // Ignore parse errors for partial lines (shouldn't happen with line split logic)
+                    }
+                }
+            }
+            // Keep the last partial line in buffer
+            buffer = lines[lines.length - 1];
+        }
+    } catch (error: any) {
+        console.error('OpenRouter streaming error:', error);
+        throw new Error(`OpenRouter streaming error: ${error.message}`);
+    }
+}
+
+/**
  * Generate content summary using AI
  */
 export async function generateSummary(
-    content: string, 
+    content: string,
     provider: 'gemini' | 'openrouter' = 'gemini'
 ): Promise<string> {
     const messages: ChatMessage[] = [
@@ -147,7 +218,7 @@ export async function generateSummary(
  * Generate question suggestions based on content
  */
 export async function generateQuestions(
-    content: string, 
+    content: string,
     count: number = 5
 ): Promise<string[]> {
     const messages: ChatMessage[] = [
@@ -188,7 +259,7 @@ export async function generateFlashcards(
     ];
 
     const response = await generateWithGemini(messages);
-    
+
     try {
         const jsonMatch = response.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
@@ -197,7 +268,7 @@ export async function generateFlashcards(
     } catch (e) {
         console.error('Failed to parse flashcards:', e);
     }
-    
+
     return [];
 }
 
@@ -225,7 +296,7 @@ export async function generateQuiz(
     ];
 
     const response = await generateWithGemini(messages);
-    
+
     try {
         const jsonMatch = response.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
@@ -234,6 +305,6 @@ export async function generateQuiz(
     } catch (e) {
         console.error('Failed to parse quiz:', e);
     }
-    
+
     return [];
 }

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/ai/ai_settings_service.dart';
 import 'package:uuid/uuid.dart';
 import 'story.dart';
 import '../../core/ai/gemini_service.dart';
@@ -282,15 +282,25 @@ class StoryGeneratorNotifier extends StateNotifier<StoryGeneratorState> {
 
       // Generate AI images
       final creds = ref.read(globalCredentialsServiceProvider);
-      final geminiKey = await creds.getApiKey('gemini');
-      final imageService = GeminiImageService(apiKey: geminiKey);
+      final settings = await AISettingsService.getSettings();
+      final provider = settings.provider;
+
+      String? apiKey;
+      if (provider == 'openrouter') {
+        apiKey = await creds.getApiKey('openrouter');
+      } else {
+        apiKey = await creds.getApiKey('gemini');
+      }
+
+      final imageService = GeminiImageService(apiKey: apiKey);
 
       final imageUrls = <String>[];
 
       // Generate cover image
       final coverPrompt =
           'Book cover art for: ${storyData['title']}. ${storyData['coverDescription'] ?? prompt}. Digital art, cinematic, detailed.';
-      final coverUrl = await imageService.generateImage(coverPrompt);
+      final coverUrl =
+          await imageService.generateImage(coverPrompt, provider: provider);
       imageUrls.add(coverUrl);
 
       // Generate chapter images
@@ -308,7 +318,8 @@ class StoryGeneratorNotifier extends StateNotifier<StoryGeneratorState> {
         try {
           final imgPrompt =
               'Scene illustration: ${chapters[i].title}. Fantasy art style, detailed, atmospheric.';
-          chapterImageUrl = await imageService.generateImage(imgPrompt);
+          chapterImageUrl =
+              await imageService.generateImage(imgPrompt, provider: provider);
           imageUrls.add(chapterImageUrl);
         } catch (e) {
           debugPrint('Failed to generate chapter image: $e');
@@ -464,9 +475,9 @@ Return JSON format:
   }
 
   Future<String> _callAI(String prompt) async {
-    final prefs = await SharedPreferences.getInstance();
-    final provider = prefs.getString('ai_provider') ?? 'gemini';
-    final model = prefs.getString('ai_model') ?? 'gemini-2.5-flash';
+    final settings = await AISettingsService.getSettings();
+    final provider = settings.provider;
+    final model = settings.getEffectiveModel();
     final creds = ref.read(globalCredentialsServiceProvider);
 
     if (provider == 'openrouter') {

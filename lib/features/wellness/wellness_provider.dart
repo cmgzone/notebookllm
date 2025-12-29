@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/ai/deep_research_service.dart';
+import '../../core/ai/ai_settings_service.dart';
 import '../../core/ai/gemini_service.dart';
 import '../../core/ai/openrouter_service.dart';
 import '../../core/security/global_credentials_service.dart';
@@ -200,10 +201,20 @@ class WellnessNotifier extends StateNotifier<WellnessState> {
     ]);
   }
 
+  Future<String> _getSelectedProvider() async {
+    final settings = await AISettingsService.getSettings();
+    return settings.provider;
+  }
+
+  Future<String> _getSelectedModel() async {
+    final settings = await AISettingsService.getSettings();
+    return settings.getEffectiveModel();
+  }
+
   Future<String> _getAIResponse(String userMessage,
       {required bool isMedical}) async {
-    const provider = 'gemini';
-    const model = 'gemini-1.5-flash';
+    final provider = await _getSelectedProvider();
+    final model = await _getSelectedModel();
     final creds = ref.read(globalCredentialsServiceProvider);
 
     final systemPrompt = isMedical
@@ -220,7 +231,7 @@ class WellnessNotifier extends StateNotifier<WellnessState> {
       }
 
       return await OpenRouterService(apiKey: apiKey)
-          .generateContent(fullPrompt, model: provider);
+          .generateContent(fullPrompt, model: model);
     } else {
       final apiKey = await creds.getApiKey('gemini');
 

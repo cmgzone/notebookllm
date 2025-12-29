@@ -9,17 +9,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'elevenlabs_service.dart';
 import 'google_tts_service.dart';
 import 'google_cloud_tts_service.dart';
+import 'deepgram_websocket_service.dart';
 
 import 'murf_service.dart';
 
 enum TtsProvider { elevenlabs, google, googleCloud, murf }
+
+enum SttProvider { device, deepgram }
 
 final voiceServiceProvider = Provider<VoiceService>((ref) {
   final elevenLabs = ref.read(elevenLabsServiceProvider);
   final googleTts = ref.read(googleTtsServiceProvider);
   final googleCloudTts = ref.read(googleCloudTtsServiceProvider);
   final murfService = ref.read(murfServiceProvider);
-  return VoiceService(elevenLabs, googleTts, googleCloudTts, murfService);
+  final deepgramWs = ref.read(deepgramWebSocketProvider);
+  return VoiceService(
+      elevenLabs, googleTts, googleCloudTts, murfService, deepgramWs);
 });
 
 class VoiceService {
@@ -27,20 +32,53 @@ class VoiceService {
   final GoogleTtsService _googleTtsService;
   final GoogleCloudTtsService _googleCloudTtsService;
   final MurfService _murfService;
+  final DeepgramWebSocketService _deepgramService;
   final SpeechToText _speechToText = SpeechToText();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   bool _isInitialized = false;
   TtsProvider _currentProvider = TtsProvider.google; // Default to free option
+  SttProvider _currentSttProvider = SttProvider.device; // Default to device STT
+
+  // Store accumulated text for Deepgram (so stopListening can return it)
+  String _deepgramAccumulatedText = '';
+  Timer? _deepgramSilenceTimer;
+  Function(String)? _deepgramOnDone;
 
   VoiceService(
     this._elevenLabsService,
     this._googleTtsService,
     this._googleCloudTtsService,
     this._murfService,
+    this._deepgramService,
   ) {
     _loadTtsProvider();
+    _loadSttProvider();
   }
+
+  Future<void> _loadSttProvider() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final providerStr = prefs.getString('stt_provider') ?? 'device';
+      _currentSttProvider =
+          providerStr == 'deepgram' ? SttProvider.deepgram : SttProvider.device;
+    } catch (e) {
+      debugPrint('Failed to load STT provider: $e');
+    }
+  }
+
+  Future<void> setSttProvider(SttProvider provider) async {
+    _currentSttProvider = provider;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('stt_provider',
+          provider == SttProvider.deepgram ? 'deepgram' : 'device');
+    } catch (e) {
+      debugPrint('Failed to save STT provider: $e');
+    }
+  }
+
+  SttProvider get currentSttProvider => _currentSttProvider;
 
   Future<void> _loadTtsProvider() async {
     try {
@@ -95,6 +133,83 @@ class VoiceService {
   double get currentAudioLevel => _currentAudioLevel;
 
   Future<void> listen({
+    required Function(String) onResult,
+    required Function(String) onDone,
+    Function(double)? onSoundLevel,
+    String language = 'en',
+    bool detectLanguage = false,
+  }) async {
+    // Use Deepgram WebSocket for faster transcription if selected
+    if (_currentSttProvider == SttProvider.deepgram) {
+      await _listenWithDeepgram(
+        onResult: onResult,
+        onDone: onDone,
+        language: language,
+        detectLanguage: detectLanguage,
+      );
+      return;
+    }
+
+    // Fallback to device speech recognition
+    await _listenWithDevice(
+      onResult: onResult,
+      onDone: onDone,
+      onSoundLevel: onSoundLevel,
+    );
+  }
+
+  Future<void> _listenWithDeepgram({
+    required Function(String) onResult,
+    required Function(String) onDone,
+    String language = 'en',
+    bool detectLanguage = false,
+  }) async {
+    final hasPermission = await _deepgramService.initialize();
+    if (!hasPermission) {
+      throw Exception('Microphone permission denied');
+    }
+
+    _deepgramAccumulatedText = '';
+    _deepgramOnDone = onDone;
+
+    // Auto-stop after silence (user stopped speaking)
+    void resetSilenceTimer() {
+      _deepgramSilenceTimer?.cancel();
+      _deepgramSilenceTimer = Timer(const Duration(seconds: 2), () {
+        // User stopped speaking for 2 seconds, process the result
+        if (_deepgramAccumulatedText.trim().isNotEmpty) {
+          debugPrint(
+              'Deepgram: Silence detected, processing: $_deepgramAccumulatedText');
+          final textToProcess = _deepgramAccumulatedText.trim();
+          _deepgramAccumulatedText = '';
+          _deepgramOnDone?.call(textToProcess);
+        }
+      });
+    }
+
+    await _deepgramService.startListening(
+      onResult: (text, isFinal) {
+        if (isFinal && text.isNotEmpty) {
+          _deepgramAccumulatedText += ' $text';
+          onResult(_deepgramAccumulatedText.trim());
+          resetSilenceTimer();
+        } else if (!isFinal && text.isNotEmpty) {
+          // Show interim results
+          onResult('$_deepgramAccumulatedText $text'.trim());
+          resetSilenceTimer();
+        }
+      },
+      onErrorCallback: (error) {
+        debugPrint('Deepgram error: $error');
+        _deepgramSilenceTimer?.cancel();
+      },
+      language: language,
+      detectLanguage: detectLanguage,
+      interimResults: true,
+    );
+  }
+
+  Future<void> _listenWithDevice({
     required Function(String) onResult,
     required Function(String) onDone,
     Function(double)? onSoundLevel,
@@ -166,6 +281,20 @@ class VoiceService {
   }
 
   Future<String> stopListening() async {
+    // Stop Deepgram if it's listening
+    if (_deepgramService.isListening) {
+      _deepgramSilenceTimer?.cancel();
+      // Return accumulated text from our local storage (more reliable)
+      final transcript = _deepgramAccumulatedText.trim().isNotEmpty
+          ? _deepgramAccumulatedText.trim()
+          : _deepgramService.fullTranscript;
+      _deepgramAccumulatedText = '';
+      _deepgramOnDone = null;
+      await _deepgramService.stopListening();
+      return transcript;
+    }
+
+    // Stop device speech recognition
     final capturedText = _lastRecognizedText;
     _hasProcessedFinalResult = true; // Prevent any pending callbacks
     await _speechToText.stop();
@@ -174,7 +303,14 @@ class VoiceService {
   }
 
   /// Get the current recognized text without stopping
-  String get currentRecognizedText => _lastRecognizedText;
+  String get currentRecognizedText => _deepgramService.isListening
+      ? '${_deepgramService.fullTranscript} ${_deepgramService.interimTranscript}'
+          .trim()
+      : _lastRecognizedText;
+
+  /// Check if currently listening (either provider)
+  bool get isListening =>
+      _speechToText.isListening || _deepgramService.isListening;
 
   /// Sanitize text for TTS - removes symbols and formatting that sound unprofessional
   String _sanitizeTextForTts(String text) {
@@ -384,6 +520,4 @@ class VoiceService {
     await _audioPlayer.stop();
     await _googleTtsService.stop();
   }
-
-  bool get isListening => _speechToText.isListening;
 }

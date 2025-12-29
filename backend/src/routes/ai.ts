@@ -3,6 +3,8 @@ import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 import {
     generateWithGemini,
     generateWithOpenRouter,
+    streamWithGemini,
+    streamWithOpenRouter,
     generateSummary,
     generateQuestions,
     type ChatMessage
@@ -29,7 +31,13 @@ router.use(authenticateToken);
 // Chat completion endpoint
 router.post('/chat', async (req: AuthRequest, res: Response) => {
     try {
-        const { messages, provider = 'gemini', model } = req.body;
+        let { messages, provider = 'gemini', model } = req.body;
+
+        // Auto-detect provider. If model contains '/', it's definitely OpenRouter (or compatible).
+        // Also check for common OpenRouter prefixes.
+        if (model && (model.includes('/') || model.startsWith('gpt-') || model.startsWith('claude-') || model.startsWith('meta-'))) {
+            provider = 'openrouter';
+        }
 
         if (!messages || !Array.isArray(messages)) {
             return res.status(400).json({ error: 'messages array is required' });
@@ -46,6 +54,54 @@ router.post('/chat', async (req: AuthRequest, res: Response) => {
     } catch (error: any) {
         console.error('Chat error:', error);
         res.status(500).json({ error: error.message || 'Failed to generate response' });
+    }
+});
+
+// Stream chat completion endpoint (SSE)
+router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
+    try {
+        let { messages, provider = 'gemini', model } = req.body;
+
+        // Auto-detect provider. If model contains '/', it's definitely OpenRouter.
+        if (model && (model.includes('/') || model.startsWith('gpt-') || model.startsWith('claude-') || model.startsWith('meta-'))) {
+            provider = 'openrouter';
+        }
+
+        if (!messages || !Array.isArray(messages)) {
+            return res.status(400).json({ error: 'messages array is required' });
+        }
+
+        // Set up SSE headers
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+
+        let generator;
+        if (provider === 'openrouter') {
+            generator = streamWithOpenRouter(messages, model);
+        } else {
+            generator = streamWithGemini(messages, model);
+        }
+
+        for await (const chunk of generator) {
+            // Send chunk as data event
+            // Properly escape newlines for SSE
+            const payload = JSON.stringify({ text: chunk });
+            res.write(`data: ${payload}\n\n`);
+        }
+
+        res.write('data: [DONE]\n\n');
+        res.end();
+    } catch (error: any) {
+        console.error('Streaming error:', error);
+        // If headers already sent, we can't send JSON error, just end stream with error data?
+        if (!res.headersSent) {
+            res.status(500).json({ error: error.message || 'Failed to stream response' });
+        } else {
+            res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+            res.end();
+        }
     }
 });
 

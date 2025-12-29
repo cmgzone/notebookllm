@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/ai/ai_settings_service.dart';
 import 'package:uuid/uuid.dart';
 import 'meal.dart';
 import '../../core/ai/gemini_service.dart';
@@ -321,9 +321,9 @@ Return ONLY a JSON array with this format:
   }
 
   Future<String> _callAI(String prompt) async {
-    final prefs = await SharedPreferences.getInstance();
-    final provider = prefs.getString('ai_provider') ?? 'gemini';
-    final model = prefs.getString('ai_model') ?? 'gemini-2.5-flash';
+    final settings = await AISettingsService.getSettings();
+    final provider = settings.provider;
+    final model = settings.getEffectiveModel();
     final creds = ref.read(globalCredentialsServiceProvider);
 
     if (provider == 'openrouter') {

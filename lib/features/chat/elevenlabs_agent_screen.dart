@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -19,6 +19,7 @@ import '../ebook/ebook_provider.dart';
 import '../ebook/models/ebook_project.dart';
 import '../ebook/models/branding_config.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/ai/ai_settings_service.dart';
 
 class ElevenLabsAgentScreen extends ConsumerStatefulWidget {
   const ElevenLabsAgentScreen({super.key});
@@ -588,8 +589,8 @@ class _MobileAgentScreenState extends ConsumerState<_MobileAgentScreen> {
       title = topic;
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final currentModel = prefs.getString('ai_model') ?? 'gemini-1.5-flash';
+    final settings = await AISettingsService.getSettings();
+    final currentModel = settings.getEffectiveModel();
 
     final id = const Uuid().v4();
     final now = DateTime.now();

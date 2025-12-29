@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:uuid/uuid.dart';
 import 'flashcard.dart';
 import '../sources/source_provider.dart';
@@ -10,6 +10,7 @@ import '../../core/ai/gemini_service.dart';
 import '../../core/ai/openrouter_service.dart';
 import '../../core/security/global_credentials_service.dart';
 import '../../core/api/api_service.dart';
+import '../../core/ai/ai_settings_service.dart';
 
 /// Provider for managing flashcard decks
 class FlashcardNotifier extends StateNotifier<List<FlashcardDeck>> {
@@ -150,15 +151,21 @@ difficulty: 1=easy, 2=medium, 3=hard
 
   Future<String> _callAI(String prompt) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final provider = prefs.getString('ai_provider') ?? 'gemini';
-      final model = prefs.getString('ai_model') ?? 'gemini-2.5-flash';
+      final settings = await AISettingsService.getSettings();
+      final provider = settings.provider;
+      final model = settings.model;
+
+      if (model == null || model.isEmpty) {
+        throw Exception(
+            'No AI model selected. Please configure a model in settings.');
+      }
+
       final creds = ref.read(globalCredentialsServiceProvider);
 
       debugPrint(
           '[FlashcardProvider] Using AI provider: $provider, model: $model');
 
-      if (provider == 'openrouter') {
+      if (settings.provider == 'openrouter') {
         final apiKey = await creds.getApiKey('openrouter');
         if (apiKey == null || apiKey.isEmpty) {
           throw Exception(
@@ -175,7 +182,7 @@ difficulty: 1=easy, 2=medium, 3=hard
         }
         final gemini = GeminiService();
         return await gemini.generateContent(prompt,
-            apiKey: apiKey, maxTokens: 8192);
+            apiKey: apiKey, model: model, maxTokens: 8192);
       }
     } catch (e) {
       debugPrint('[FlashcardProvider] AI call failed: $e');
