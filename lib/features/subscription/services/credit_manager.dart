@@ -226,12 +226,14 @@ class CreditManager {
     final balance = await getFreshBalance();
 
     if (balance < amount) {
-      showInsufficientCreditsDialog(
-        context,
-        required: amount,
-        available: balance,
-        feature: feature,
-      );
+      if (context.mounted) {
+        showInsufficientCreditsDialog(
+          context,
+          required: amount,
+          available: balance,
+          feature: feature,
+        );
+      }
       return false;
     }
 
