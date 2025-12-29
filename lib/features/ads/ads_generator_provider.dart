@@ -2,11 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
-import '../../core/ai/gemini_service.dart';
 import '../../core/ai/gemini_image_service.dart';
-import '../../core/ai/openrouter_service.dart';
-import '../../core/security/global_credentials_service.dart';
 import '../../core/ai/ai_settings_service.dart';
+import '../../core/api/api_service.dart';
 
 class AdsGeneratorState {
   final bool isGenerating;
@@ -93,19 +91,9 @@ class AdsGeneratorNotifier extends StateNotifier<AdsGeneratorState> {
             'No AI model selected. Please configure a model in settings.');
       }
 
-      final creds = ref.read(globalCredentialsServiceProvider);
-
       String content;
 
-      if (provider == 'openrouter') {
-        final apiKey = await creds.getApiKey('openrouter');
-        if (apiKey == null || apiKey.isEmpty) {
-          throw Exception('OpenRouter API key not found');
-        }
-
-        final openRouterService = OpenRouterService(apiKey: apiKey);
-
-        final fullPrompt = '''
+      final fullPrompt = '''
 You are an expert marketing copywriter. Create a compelling advertisement based on the user's requirements.
 
 User Requirements:
@@ -119,79 +107,26 @@ Please generate:
 ${state.selectedImageBytes != null ? '\nTarget Audience Analysis: Briefly analyze who this ad would appeal to based on the image.' : ''}
 ''';
 
-        if (state.selectedImageBytes != null) {
-          // Multimodal generation with OpenRouter
-          // Use a vision-capable model if the selected model is free/default
-          // or use the user's selected model if they know what they are doing.
-          // For safety, we default to a known vision model if the default text model is selected.
-          var visionModel = model;
-          if (model.contains('amazon/nova')) {
-            visionModel = 'google/gemini-2.0-flash-exp:free';
-          }
-
-          content = await openRouterService.generateWithImage(
-            fullPrompt,
-            state.selectedImageBytes!,
-            model: visionModel,
-          );
-        } else {
-          // Text-only generation with OpenRouter
-          content = await openRouterService.generateContent(
-            fullPrompt,
-            model: model,
-          );
-        }
+      if (state.selectedImageBytes != null) {
+        // Multimodal generation (with image) - uses client side for now
+        final imageService = GeminiImageService();
+        content = await imageService.analyzeImage(
+          state.selectedImageBytes!,
+          fullPrompt,
+          model: model,
+        );
       } else {
-        // Default to Gemini
-        final apiKey = await creds.getApiKey('gemini');
-        if (apiKey == null || apiKey.isEmpty) {
-          throw Exception('Gemini API key not found');
-        }
+        // Text-only generation - Use Backend Proxy (Admin's API keys)
+        final apiService = ref.read(apiServiceProvider);
+        final messages = [
+          {'role': 'user', 'content': fullPrompt}
+        ];
 
-        if (state.selectedImageBytes != null) {
-          // Multimodal generation with Gemini
-          final imageService = GeminiImageService(apiKey: apiKey);
-
-          final fullPrompt = '''
-You are an expert marketing copywriter. Create a compelling advertisement based on this image and the user's requirements.
-
-User Requirements:
-$prompt
-
-Please generate:
-1. A Catchy Headline
-2. Engaging Ad Body Copy (2-3 paragraphs)
-3. Call to Action (CTA)
-4. Suggested Hashtags
-
-Target Audience Analysis: Briefly analyze who this ad would appeal to based on the image/prompt.
-''';
-
-          content = await imageService.analyzeImage(
-            state.selectedImageBytes!,
-            fullPrompt,
-            model: model,
-          );
-        } else {
-          // Text-only generation with Gemini
-          final geminiService = GeminiService(apiKey: apiKey);
-
-          final fullPrompt = '''
-You are an expert marketing copywriter. Create a compelling advertisement based on the user's requirements.
-
-User Requirements:
-$prompt
-
-Please generate:
-1. A Catchy Headline
-2. Engaging Ad Body Copy (2-3 paragraphs)
-3. Call to Action (CTA)
-4. Suggested Hashtags
-''';
-
-          content =
-              await geminiService.generateContent(fullPrompt, model: model);
-        }
+        content = await apiService.chatWithAI(
+          messages: messages,
+          provider: provider,
+          model: model,
+        );
       }
 
       state = state.copyWith(

@@ -1,9 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/ai/gemini_service.dart';
-import '../../core/ai/openrouter_service.dart';
 import '../../core/ai/ai_settings_service.dart';
-import '../../core/security/global_credentials_service.dart';
+import '../../core/api/api_service.dart';
 
 class FactCheckResult {
   final String claim;
@@ -34,24 +32,20 @@ class FactCheckService {
   FactCheckService(this.ref);
 
   Future<String> _generateContent(String prompt) async {
-    final creds = ref.read(globalCredentialsServiceProvider);
-
     final settings = await AISettingsService.getSettings();
-    final provider = settings.provider;
     final model = settings.getEffectiveModel();
 
-    if (provider == 'openrouter') {
-      final apiKey = await creds.getApiKey('openrouter');
-      return await OpenRouterService()
-          .generateContent(prompt, model: model, apiKey: apiKey);
-    } else {
-      final apiKey = await creds.getApiKey('gemini');
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('Gemini API key not found');
-      }
-      return await GeminiService(apiKey: apiKey)
-          .generateContent(prompt, model: model);
-    }
+    // Use Backend Proxy (Admin's API keys)
+    final apiService = ref.read(apiServiceProvider);
+    final messages = [
+      {'role': 'user', 'content': prompt}
+    ];
+
+    return await apiService.chatWithAI(
+      messages: messages,
+      provider: settings.provider,
+      model: model,
+    );
   }
 
   Future<List<FactCheckResult>> verifyContent(String content) async {
