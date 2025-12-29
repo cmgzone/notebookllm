@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:go_router/go_router.dart';
 
 class SportsHubScreen extends ConsumerWidget {
   const SportsHubScreen({super.key});
@@ -229,7 +230,7 @@ class _FeatureCardState extends State<_FeatureCard> {
       onTapDown: (_) => setState(() => _isPressed = true),
       onTapUp: (_) => setState(() => _isPressed = false),
       onTapCancel: () => setState(() => _isPressed = false),
-      onTap: () => Navigator.pushNamed(context, widget.feature.route),
+      onTap: () => context.push(widget.feature.route),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         transform: Matrix4.diagonal3Values(

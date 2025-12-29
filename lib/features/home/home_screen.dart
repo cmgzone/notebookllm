@@ -344,11 +344,11 @@ class _AppDrawer extends ConsumerWidget {
                         },
                       ),
                       _DrawerItem(
-                        icon: LucideIcons.target,
-                        label: 'Sports Predictor',
+                        icon: LucideIcons.trophy,
+                        label: 'Sports Hub',
                         onTap: () {
                           Navigator.pop(context);
-                          context.push('/sports-predictor');
+                          context.push('/sports-hub');
                         },
                       ),
                       _DrawerItem(
