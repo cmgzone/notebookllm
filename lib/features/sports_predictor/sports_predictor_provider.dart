@@ -84,28 +84,35 @@ class SportsPredictorNotifier extends StateNotifier<SportsPredictorState> {
       // Use deep research to gather information
       final sources = <PredictionSource>[];
       String researchReport = '';
+      bool researchCompleted = false;
 
-      await for (final update in deepResearch.research(
-        query,
-        notebookId: '',
-        depth: ResearchDepth.standard,
-        template: ResearchTemplate.general,
-      )) {
-        state = state.copyWith(
-          currentStatus: update.status,
-          progress: update.progress * 0.6, // 60% for research
-          researchSources: update.sources?.map((s) => s.title).toList() ?? [],
-        );
+      try {
+        await for (final update in deepResearch.research(
+          query,
+          notebookId: '',
+          depth: ResearchDepth.standard,
+          template: ResearchTemplate.general,
+        )) {
+          state = state.copyWith(
+            currentStatus: update.status,
+            progress: update.progress * 0.6, // 60% for research
+            researchSources: update.sources?.map((s) => s.title).toList() ?? [],
+          );
 
-        if (update.result != null) {
-          researchReport = update.result!;
-          sources.addAll(update.sources?.map((s) => PredictionSource(
-                    title: s.title,
-                    url: s.url,
-                    snippet: s.snippet ?? '',
-                  )) ??
-              []);
+          if (update.result != null) {
+            researchReport = update.result!;
+            researchCompleted = true;
+            sources.addAll(update.sources?.map((s) => PredictionSource(
+                      title: s.title,
+                      url: s.url,
+                      snippet: s.snippet ?? '',
+                    )) ??
+                []);
+          }
         }
+      } catch (researchError) {
+        debugPrint('[SportsPredictor] Research error: $researchError');
+        // Continue with sample data if research fails
       }
 
       state = state.copyWith(
@@ -113,13 +120,21 @@ class SportsPredictorNotifier extends StateNotifier<SportsPredictorState> {
         progress: 0.7,
       );
 
-      // Generate predictions from research
-      var predictions = await _generatePredictionsFromResearch(
-        sport: sport,
-        league: league,
-        researchReport: researchReport,
-        sources: sources,
-      );
+      // Generate predictions from research (or use sample data if research failed)
+      List<SportsPrediction> predictions;
+      if (researchCompleted && researchReport.isNotEmpty) {
+        predictions = await _generatePredictionsFromResearch(
+          sport: sport,
+          league: league,
+          researchReport: researchReport,
+          sources: sources,
+        );
+      } else {
+        // Use sample predictions if research didn't complete
+        debugPrint(
+            '[SportsPredictor] Using sample predictions (research incomplete)');
+        predictions = _getSamplePredictions(sport, league, sources);
+      }
 
       state = state.copyWith(
         currentStatus: 'Fetching team logos...',

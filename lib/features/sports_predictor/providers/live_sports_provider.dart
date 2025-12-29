@@ -74,6 +74,19 @@ class LiveScoresNotifier extends StateNotifier<LiveScoresState> {
       // Fetch from backend (SportRadar)
       final data = await _api.getLiveMatches();
 
+      if (data.isEmpty) {
+        // Use sample data if API returns empty
+        final matches = _getSampleMatches(sportFilter);
+        state = state.copyWith(
+          matches: matches,
+          isLoading: false,
+          selectedSport: sportFilter,
+          selectedLeague: league,
+          lastUpdated: DateTime.now(),
+        );
+        return;
+      }
+
       final matches = data
           .map((m) => LiveMatch(
                 id: m['id'] ?? '',
@@ -86,7 +99,8 @@ class LiveScoresNotifier extends StateNotifier<LiveScoresState> {
                 status: _mapStatus(m['status']),
                 minute: m['minute'],
                 kickoff: m['kickoff'] != null
-                    ? DateTime.parse(m['kickoff'])
+                    ? DateTime.tryParse(m['kickoff'].toString()) ??
+                        DateTime.now()
                     : DateTime.now(),
                 events: (m['events'] as List?)
                         ?.map((e) => MatchEvent(
@@ -109,7 +123,7 @@ class LiveScoresNotifier extends StateNotifier<LiveScoresState> {
           .toList();
 
       state = state.copyWith(
-        matches: matches,
+        matches: matches.isNotEmpty ? matches : _getSampleMatches(sportFilter),
         isLoading: false,
         selectedSport: sportFilter,
         selectedLeague: league,
