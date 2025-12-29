@@ -16,6 +16,7 @@ class AIModel {
   final int contextWindow;
   final bool isActive;
   final bool isPremium;
+  final bool canAccess; // Whether current user can use this model
 
   AIModel({
     required this.id,
@@ -28,6 +29,7 @@ class AIModel {
     this.contextWindow = 0,
     this.isActive = true,
     this.isPremium = false,
+    this.canAccess = true, // Default to true for backward compatibility
   });
 
   factory AIModel.fromMap(Map<String, dynamic> map) {
@@ -37,11 +39,15 @@ class AIModel {
       modelId: map['model_id'] ?? map['modelId'] ?? '',
       provider: map['provider'] ?? '',
       description: map['description'],
-      costInput: (map['cost_input'] ?? map['costInput'] as num?)?.toDouble() ?? 0.0,
-      costOutput: (map['cost_output'] ?? map['costOutput'] as num?)?.toDouble() ?? 0.0,
-      contextWindow: (map['context_window'] ?? map['contextWindow'] as num?)?.toInt() ?? 0,
+      costInput:
+          (map['cost_input'] ?? map['costInput'] as num?)?.toDouble() ?? 0.0,
+      costOutput:
+          (map['cost_output'] ?? map['costOutput'] as num?)?.toDouble() ?? 0.0,
+      contextWindow:
+          (map['context_window'] ?? map['contextWindow'] as num?)?.toInt() ?? 0,
       isActive: map['is_active'] ?? map['isActive'] ?? true,
       isPremium: map['is_premium'] ?? map['isPremium'] ?? false,
+      canAccess: map['can_access'] ?? map['canAccess'] ?? true,
     );
   }
 

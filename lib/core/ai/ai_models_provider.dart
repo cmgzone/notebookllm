@@ -21,6 +21,7 @@ final availableModelsProvider =
         name: m.name,
         provider: m.provider,
         isPremium: m.isPremium,
+        canAccess: m.canAccess,
         contextWindow: m.contextWindow > 0
             ? m.contextWindow
             : _getDefaultContextWindow(m.modelId),
@@ -158,6 +159,7 @@ class AIModelOption {
   final String name;
   final String provider;
   final bool isPremium;
+  final bool canAccess; // Whether current user can use this model
   final int contextWindow;
 
   AIModelOption({
@@ -165,6 +167,7 @@ class AIModelOption {
     required this.name,
     required this.provider,
     required this.isPremium,
+    this.canAccess = true,
     this.contextWindow = 8192,
   });
 }

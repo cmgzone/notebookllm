@@ -142,6 +142,35 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
     }
   }
 
+  void _showUpgradeDialog(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: Icon(Icons.lock_open, size: 48, color: scheme.primary),
+        title: const Text('Premium Model'),
+        content: const Text(
+          'This AI model is only available to paid subscribers.\n\n'
+          'Upgrade your plan to unlock access to premium models with enhanced capabilities.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              context.push('/subscription');
+            },
+            icon: const Icon(Icons.upgrade),
+            label: const Text('Upgrade Plan'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -235,21 +264,53 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
                               ? current
                               : null,
                           items: openRouterModels.map((m) {
+                            final isLocked = m.isPremium && !m.canAccess;
                             return DropdownMenuItem(
-                              value: m.id,
-                              child: Text(
-                                m.name + (m.isPremium ? ' (Paid)' : ''),
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    color: m.isPremium
-                                        ? Colors.amber[800]
-                                        : Colors.green),
+                              value: isLocked
+                                  ? null
+                                  : m.id, // Prevent selection of locked models
+                              enabled: !isLocked,
+                              child: Row(
+                                children: [
+                                  if (isLocked) ...[
+                                    Icon(Icons.lock,
+                                        size: 14, color: Colors.grey),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Expanded(
+                                    child: Text(
+                                      m.name + (m.isPremium ? ' ★' : ''),
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: isLocked
+                                            ? Colors.grey
+                                            : (m.isPremium
+                                                ? Colors.amber[800]
+                                                : Colors.green),
+                                      ),
+                                    ),
+                                  ),
+                                  if (isLocked)
+                                    Text(' (Upgrade)',
+                                        style: TextStyle(
+                                            fontSize: 10, color: Colors.grey)),
+                                ],
                               ),
                             );
                           }).toList(),
                           onChanged: (val) async {
                             if (val != null) {
+                              // Check if model is accessible
+                              final selected = openRouterModels.firstWhere(
+                                (m) => m.id == val,
+                                orElse: () => openRouterModels.first,
+                              );
+                              if (selected.isPremium && !selected.canAccess) {
+                                // Show upgrade dialog
+                                _showUpgradeDialog(context);
+                                return;
+                              }
                               ref.read(selectedAIModelProvider.notifier).state =
                                   val;
                               // Auto-save when model changes
@@ -282,17 +343,51 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
                               ? current
                               : null,
                           items: geminiModels.map((m) {
+                            final isLocked = m.isPremium && !m.canAccess;
                             return DropdownMenuItem(
-                              value: m.id,
-                              child: Text(m.name,
-                                  style: const TextStyle(fontSize: 13)),
+                              value: isLocked ? null : m.id,
+                              enabled: !isLocked,
+                              child: Row(
+                                children: [
+                                  if (isLocked) ...[
+                                    const Icon(Icons.lock,
+                                        size: 14, color: Colors.grey),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Expanded(
+                                    child: Text(
+                                      m.name + (m.isPremium ? ' ★' : ''),
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: isLocked
+                                            ? Colors.grey
+                                            : (m.isPremium
+                                                ? Colors.amber[800]
+                                                : null),
+                                      ),
+                                    ),
+                                  ),
+                                  if (isLocked)
+                                    const Text(' (Upgrade)',
+                                        style: TextStyle(
+                                            fontSize: 10, color: Colors.grey)),
+                                ],
+                              ),
                             );
                           }).toList(),
                           onChanged: (val) async {
                             if (val != null) {
+                              final selected = geminiModels.firstWhere(
+                                (m) => m.id == val,
+                                orElse: () => geminiModels.first,
+                              );
+                              if (selected.isPremium && !selected.canAccess) {
+                                _showUpgradeDialog(context);
+                                return;
+                              }
                               ref.read(selectedAIModelProvider.notifier).state =
                                   val;
-                              // Auto-save when model changes
                               await _saveSettings();
                             }
                           },

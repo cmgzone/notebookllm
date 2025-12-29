@@ -13,13 +13,51 @@ import pool from '../config/database.js';
 
 const router = express.Router();
 
-// Public endpoint - list available AI models (no admin required)
+// Helper function to check if user has premium access
+async function userHasPremiumAccess(userId: string): Promise<boolean> {
+    try {
+        const result = await pool.query(`
+            SELECT sp.is_free_plan
+            FROM user_subscriptions us
+            JOIN subscription_plans sp ON us.plan_id = sp.id
+            WHERE us.user_id = $1
+        `, [userId]);
+
+        if (result.rows.length === 0) {
+            return false; // No subscription = no premium access
+        }
+
+        // User has premium access if they're NOT on the free plan
+        return !result.rows[0].is_free_plan;
+    } catch (error) {
+        console.error('Error checking premium access:', error);
+        return false;
+    }
+}
+
+// List available AI models with access control
 router.get('/models', authenticateToken, async (req: AuthRequest, res: Response) => {
     try {
+        const userId = req.userId;
+
+        // Get user's subscription status
+        const hasPremiumAccess = userId ? await userHasPremiumAccess(userId) : false;
+
         const result = await pool.query(
             'SELECT id, name, model_id, provider, description, context_window, is_active, is_premium FROM ai_models WHERE is_active = true ORDER BY provider, name'
         );
-        res.json({ success: true, models: result.rows });
+
+        // Add can_access field to each model based on user's subscription
+        const modelsWithAccess = result.rows.map(model => ({
+            ...model,
+            can_access: !model.is_premium || hasPremiumAccess
+        }));
+
+        res.json({
+            success: true,
+            models: modelsWithAccess,
+            has_premium_access: hasPremiumAccess
+        });
     } catch (error) {
         console.error('Error listing AI models:', error);
         res.status(500).json({ error: 'Failed to list AI models' });
@@ -28,7 +66,7 @@ router.get('/models', authenticateToken, async (req: AuthRequest, res: Response)
 
 router.use(authenticateToken);
 
-// Chat completion endpoint
+// Chat completion endpoint with premium model validation
 router.post('/chat', async (req: AuthRequest, res: Response) => {
     try {
         let { messages, provider = 'gemini', model } = req.body;
@@ -41,6 +79,25 @@ router.post('/chat', async (req: AuthRequest, res: Response) => {
 
         if (!messages || !Array.isArray(messages)) {
             return res.status(400).json({ error: 'messages array is required' });
+        }
+
+        // Check if the requested model is premium and if user has access
+        if (model) {
+            const modelResult = await pool.query(
+                'SELECT is_premium FROM ai_models WHERE model_id = $1 AND is_active = true',
+                [model]
+            );
+
+            if (modelResult.rows.length > 0 && modelResult.rows[0].is_premium) {
+                const hasPremiumAccess = await userHasPremiumAccess(req.userId!);
+                if (!hasPremiumAccess) {
+                    return res.status(403).json({
+                        error: 'Premium model access required',
+                        message: 'This model is only available to paid subscribers. Please upgrade your plan to access premium AI models.',
+                        upgrade_required: true
+                    });
+                }
+            }
         }
 
         let response: string;
@@ -57,7 +114,7 @@ router.post('/chat', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Stream chat completion endpoint (SSE)
+// Stream chat completion endpoint (SSE) with premium model validation
 router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
     try {
         let { messages, provider = 'gemini', model } = req.body;
@@ -69,6 +126,25 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
 
         if (!messages || !Array.isArray(messages)) {
             return res.status(400).json({ error: 'messages array is required' });
+        }
+
+        // Check if the requested model is premium and if user has access
+        if (model) {
+            const modelResult = await pool.query(
+                'SELECT is_premium FROM ai_models WHERE model_id = $1 AND is_active = true',
+                [model]
+            );
+
+            if (modelResult.rows.length > 0 && modelResult.rows[0].is_premium) {
+                const hasPremiumAccess = await userHasPremiumAccess(req.userId!);
+                if (!hasPremiumAccess) {
+                    return res.status(403).json({
+                        error: 'Premium model access required',
+                        message: 'This model is only available to paid subscribers. Please upgrade your plan to access premium AI models.',
+                        upgrade_required: true
+                    });
+                }
+            }
         }
 
         // Set up SSE headers
