@@ -5,10 +5,8 @@ import 'package:speech_to_text/speech_recognition_result.dart';
 
 import 'source_provider.dart';
 import 'source.dart';
-import '../../core/ai/openrouter_service.dart';
-import '../../core/ai/gemini_service.dart';
-import '../../core/security/global_credentials_service.dart';
 import '../../core/ai/ai_settings_service.dart';
+import '../../core/api/api_service.dart';
 
 /// AI Writing Tools available for text notes
 enum AIWritingTool {
@@ -60,10 +58,6 @@ class _EnhancedTextNoteSheetState extends ConsumerState<EnhancedTextNoteSheet>
   final SpeechToText _speech = SpeechToText();
   bool _speechAvailable = false;
 
-  // AI Services
-  late final OpenRouterService _openRouter;
-  late final GeminiService _gemini;
-
   // Undo/Redo stack
   final List<String> _undoStack = [];
   final List<String> _redoStack = [];
@@ -88,9 +82,6 @@ class _EnhancedTextNoteSheetState extends ConsumerState<EnhancedTextNoteSheet>
     _contentController = TextEditingController(
       text: widget.existingSource?.content ?? '',
     );
-
-    _openRouter = OpenRouterService();
-    _gemini = GeminiService();
 
     _contentController.addListener(_updateCounts);
     _updateCounts();
@@ -201,7 +192,7 @@ class _EnhancedTextNoteSheetState extends ConsumerState<EnhancedTextNoteSheet>
     }
   }
 
-  // Helper to call AI with proper settings
+  // Helper to call AI with proper settings via Backend Proxy
   Future<String> _callAI(String prompt) async {
     final settings = await AISettingsService.getSettings();
     final model = settings.model;
@@ -211,28 +202,20 @@ class _EnhancedTextNoteSheetState extends ConsumerState<EnhancedTextNoteSheet>
           'No AI model selected. Please configure a model in settings.');
     }
 
-    final creds = ref.read(globalCredentialsServiceProvider);
-
     debugPrint(
         '[EnhancedTextNote] Using AI provider: ${settings.provider}, model: $model');
 
-    if (settings.provider == 'openrouter') {
-      final apiKey = await creds.getApiKey('openrouter');
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception(
-            'OpenRouter API key not found. Please configure it in Settings.');
-      }
-      return await _openRouter.generateContent(prompt,
-          model: model, apiKey: apiKey, maxTokens: 4096);
-    } else {
-      final apiKey = await creds.getApiKey('gemini');
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception(
-            'Gemini API key not found. Please configure it in Settings.');
-      }
-      return await _gemini.generateContent(prompt,
-          apiKey: apiKey, model: model, maxTokens: 4096);
-    }
+    // Use Backend Proxy for all AI calls (uses Admin's API keys)
+    final apiService = ref.read(apiServiceProvider);
+    final messages = [
+      {'role': 'user', 'content': prompt}
+    ];
+
+    return await apiService.chatWithAI(
+      messages: messages,
+      provider: settings.provider,
+      model: model,
+    );
   }
 
   // AI Writing Tools

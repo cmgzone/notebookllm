@@ -37,34 +37,85 @@ class GeminiImageService {
     }
   }
 
+  /// Generate image using OpenRouter's chat completions with image-capable models
+  /// Models like google/gemini-2.0-flash-exp:free can generate images
   Future<String> _generateImageOpenRouter(String prompt, String model) async {
     try {
+      // Use an image-capable model. Gemini 2.0 Flash can generate images.
+      final imageModel = model.contains('gemini') || model.contains('dall-e')
+          ? model
+          : 'google/gemini-2.0-flash-exp:free'; // Default to free Gemini model
+
       final response = await http.post(
-        Uri.parse('https://openrouter.ai/api/v1/images/generations'),
+        Uri.parse('https://openrouter.ai/api/v1/chat/completions'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $apiKey',
-          'HTTP-Referer': 'https://notbook-llm.app', // Optional
-          'X-Title': 'NotBook LLM', // Optional
+          'HTTP-Referer': 'https://notebookllm.app',
+          'X-Title': 'NotBook LLM',
         },
         body: jsonEncode({
-          'prompt': prompt,
-          'model': model,
-          'n': 1,
-          'size': '1024x1024',
+          'model': imageModel,
+          'messages': [
+            {
+              'role': 'user',
+              'content':
+                  'Generate an image of: $prompt. Return the image directly without any text explanation.'
+            }
+          ],
+          'max_tokens': 1024,
         }),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final images = data['data'] as List?;
-        if (images != null && images.isNotEmpty) {
-          return images[0]['url'] ?? _generatePlaceholderImage(prompt);
+        final content = data['choices']?[0]?['message']?['content'];
+
+        // Check if response contains an image URL or base64 data
+        if (content != null) {
+          // Look for image URLs in the response
+          final urlRegex = RegExp(
+              r'https?://[^\s\)\"]+\.(png|jpg|jpeg|gif|webp)',
+              caseSensitive: false);
+          final match = urlRegex.firstMatch(content);
+          if (match != null) {
+            return match.group(0)!;
+          }
+
+          // Look for base64 image data
+          final base64Regex =
+              RegExp(r'data:image/[^;]+;base64,[A-Za-z0-9+/=]+');
+          final base64Match = base64Regex.firstMatch(content);
+          if (base64Match != null) {
+            return base64Match.group(0)!;
+          }
+
+          // If response contains inline_data (Gemini format)
+          if (data['choices']?[0]?['message']?['content'] is List) {
+            final parts = data['choices'][0]['message']['content'] as List;
+            for (final part in parts) {
+              if (part['type'] == 'image_url') {
+                return part['image_url']['url'];
+              }
+            }
+          }
         }
+
+        debugPrint(
+            '[GeminiImageService] Model response did not contain image. Using placeholder.');
+        return _generatePlaceholderImage(prompt);
       }
-      debugPrint(
-          'OpenRouter Image Error: ${response.statusCode} ${response.body}');
-      throw Exception('OpenRouter Image Generation failed: ${response.body}');
+
+      final errorBody = response.body;
+      debugPrint('OpenRouter Image Error: ${response.statusCode} $errorBody');
+
+      // Check for credit/quota errors
+      if (errorBody.contains('credits') || errorBody.contains('quota')) {
+        throw Exception(
+            'OpenRouter credits exhausted. Please add credits to your account.');
+      }
+
+      throw Exception('OpenRouter Image Generation failed: $errorBody');
     } catch (e) {
       debugPrint('OpenRouter generation error: $e');
       rethrow;
