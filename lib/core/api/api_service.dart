@@ -634,7 +634,7 @@ class ApiService {
   // ============ AI ============
 
   Future<String> chatWithAI({
-    required List<Map<String, String>> messages,
+    required List<Map<String, dynamic>> messages,
     String provider = 'gemini',
     String? model,
   }) async {
@@ -647,7 +647,7 @@ class ApiService {
   }
 
   Stream<String> chatWithAIStream({
-    required List<Map<String, String>> messages,
+    required List<Map<String, dynamic>> messages,
     String provider = 'gemini',
     String? model,
   }) async* {

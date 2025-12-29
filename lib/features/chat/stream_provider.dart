@@ -1,10 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'stream_token.dart';
-import '../../core/ai/gemini_service.dart';
-import '../../core/ai/openrouter_service.dart';
-import '../../core/security/global_credentials_service.dart';
 import '../../core/ai/ai_settings_service.dart';
 import '../../core/services/wakelock_service.dart';
 import '../sources/source_provider.dart';
@@ -17,8 +15,6 @@ import '../../core/api/api_service.dart';
 class StreamNotifier extends StateNotifier<List<StreamToken>> {
   StreamNotifier(this.ref) : super([]);
   final Ref ref;
-  final GeminiService _geminiService = GeminiService();
-  final OpenRouterService _openRouterService = OpenRouterService();
   late final SerperService _serperService = SerperService(ref);
 
   Future<String> _getSelectedProvider() async {
@@ -168,15 +164,6 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
     return buffer.toString();
   }
 
-  Future<String?> _getApiKey(String provider) async {
-    try {
-      final creds = ref.read(globalCredentialsServiceProvider);
-      return await creds.getApiKey(provider);
-    } catch (e) {
-      return null;
-    }
-  }
-
   /// Ask a question and get a stream of tokens back
   Stream<List<StreamToken>> ask(String query,
       {List<Message> chatHistory = const [],
@@ -243,73 +230,40 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
       final contextualPrompt = _buildContextualPrompt(query, chatHistory,
           webResults: webResults, maxContextChars: maxContextChars);
 
-      String response = '';
-      bool streamed = false;
+      List<Map<String, dynamic>> messages;
 
       // Handle image input
       if (imageBytes != null) {
         yield [const StreamToken.text(text: '🖼️ *Analyzing image...*\n\n')];
-
-        if (provider == 'openrouter') {
-          final apiKey = await _getApiKey('openrouter');
-          // Use vision-capable model for images
-          final visionModel = model.contains('gemini') ||
-                  model.contains('gpt-4') ||
-                  model.contains('claude')
-              ? model
-              : (await _getSelectedModel()); // Use current model and hope it's vision capable
-          response = await _openRouterService.generateWithImage(
-            contextualPrompt,
-            imageBytes,
-            model: visionModel,
-            apiKey: apiKey,
-          );
-        } else {
-          // Gemini with image
-          final apiKey = await _getApiKey('gemini');
-          response = await _geminiService.generateContentWithImage(
-            contextualPrompt,
-            imageBytes,
-            apiKey: apiKey,
-            model: model,
-          );
-        }
+        final base64Image = base64Encode(imageBytes);
+        final content = [
+          {'type': 'text', 'text': contextualPrompt},
+          {
+            'type': 'image_url',
+            'image_url': {'url': 'data:image/jpeg;base64,$base64Image'}
+          }
+        ];
+        messages = [
+          {'role': 'user', 'content': content}
+        ];
       } else {
-        // Text generation - Always use Backend Proxy for custom models compliance
-        // We wrap the contextual prompt as a single user message
-        final messages = [
+        // Text generation
+        messages = [
           {'role': 'user', 'content': contextualPrompt}
         ];
-
-        final stream = ref.read(apiServiceProvider).chatWithAIStream(
-              messages: messages,
-              provider: provider,
-              model: model,
-            );
-
-        await for (final chunk in stream) {
-          response += chunk;
-          final tokens = [StreamToken.text(text: chunk)];
-          state = [...state, ...tokens];
-          yield tokens;
-        }
-        streamed = true;
       }
 
-      if (!streamed && response.isNotEmpty) {
-        // Stream the response word by word for smooth UI updates
-        final words = response.split(' ');
-        for (int i = 0; i < words.length; i++) {
-          final chunk = i == 0 ? words[i] : ' ${words[i]}';
-          final tokens = <StreamToken>[
-            StreamToken.text(text: chunk),
-          ];
-          state = [...state, ...tokens];
-          yield tokens;
+      // Always use Backend Proxy Stream
+      final stream = ref.read(apiServiceProvider).chatWithAIStream(
+            messages: messages,
+            provider: provider,
+            model: model,
+          );
 
-          // Small delay for smooth streaming effect
-          await Future.delayed(const Duration(milliseconds: 30));
-        }
+      await for (final chunk in stream) {
+        final tokens = [StreamToken.text(text: chunk)];
+        state = [...state, ...tokens];
+        yield tokens;
       }
 
       // Signal completion

@@ -11,7 +11,7 @@ const genAI = process.env.GEMINI_API_KEY
 
 export interface ChatMessage {
     role: 'user' | 'assistant' | 'system';
-    content: string;
+    content: string | Array<any>;
 }
 
 /**
@@ -28,10 +28,24 @@ export async function generateWithGemini(
     try {
         const geminiModel = genAI.getGenerativeModel({ model });
 
+        // Helper to convert content to Gemini parts
+        const convertContent = (content: string | Array<any>) => {
+            if (typeof content === 'string') return [{ text: content }];
+            return content.map(part => {
+                if (part.type === 'image_url') {
+                    const matches = part.image_url.url.match(/^data:(.+);base64,(.+)$/);
+                    if (matches) {
+                        return { inlineData: { mimeType: matches[1], data: matches[2] } };
+                    }
+                }
+                return { text: part.text || '' };
+            });
+        };
+
         // Convert messages to Gemini format
         const history = messages.slice(0, -1).map(msg => ({
             role: msg.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: msg.content }]
+            parts: convertContent(msg.content)
         }));
 
         const lastMessage = messages[messages.length - 1];
@@ -40,7 +54,7 @@ export async function generateWithGemini(
             history: history.length > 0 ? history : undefined,
         });
 
-        const result = await chat.sendMessage(lastMessage.content);
+        const result = await chat.sendMessage(convertContent(lastMessage.content));
         return result.response.text();
     } catch (error: any) {
         console.error('Gemini error:', error);
@@ -102,9 +116,33 @@ export async function* streamWithGemini(
 
     try {
         const geminiModel = genAI.getGenerativeModel({ model });
-        const prompt = messages.map(msg => `${msg.role}: ${msg.content}`).join('\n\n');
 
-        const result = await geminiModel.generateContentStream(prompt);
+        // Helper to convert content to Gemini parts
+        const convertContent = (content: string | Array<any>) => {
+            if (typeof content === 'string') return [{ text: content }];
+            return content.map(part => {
+                if (part.type === 'image_url') {
+                    const matches = part.image_url.url.match(/^data:(.+);base64,(.+)$/);
+                    if (matches) {
+                        return { inlineData: { mimeType: matches[1], data: matches[2] } };
+                    }
+                }
+                return { text: part.text || '' };
+            });
+        };
+
+        const history = messages.slice(0, -1).map(msg => ({
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: convertContent(msg.content)
+        }));
+
+        const lastMessage = messages[messages.length - 1];
+
+        const chat = geminiModel.startChat({
+            history: history.length > 0 ? history : undefined,
+        });
+
+        const result = await chat.sendMessageStream(convertContent(lastMessage.content));
 
         for await (const chunk of result.stream) {
             const text = chunk.text();
