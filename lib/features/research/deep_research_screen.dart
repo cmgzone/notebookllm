@@ -103,6 +103,8 @@ class _DeepResearchScreenState extends ConsumerState<DeepResearchScreen> {
         return 'How-To Guide';
       case ResearchTemplate.prosAndCons:
         return 'Pros & Cons';
+      case ResearchTemplate.shopping:
+        return 'Shopping Guide';
     }
   }
 
@@ -120,6 +122,8 @@ class _DeepResearchScreenState extends ConsumerState<DeepResearchScreen> {
         return LucideIcons.listChecks;
       case ResearchTemplate.prosAndCons:
         return LucideIcons.scale;
+      case ResearchTemplate.shopping:
+        return LucideIcons.shoppingBag;
     }
   }
 

@@ -35,6 +35,7 @@ enum ResearchTemplate {
   marketAnalysis,
   howToGuide,
   prosAndCons,
+  shopping,
 }
 
 /// Source credibility types
@@ -271,6 +272,22 @@ Structure your report as a balanced analysis:
 8. Sources
 
 Be balanced and objective. Support each point with evidence.
+''';
+      case ResearchTemplate.shopping:
+        return '''
+## SHOPPING RESEARCH FORMAT
+Structure your report as a comprehensive buying guide:
+1. Executive Summary & Top Picks
+2. Product Recommendations (Best Overall, Best Budget, Best Premium)
+3. Detailed Product Analysis (Specs, Price, Pros/Cons for each)
+4. User Reviews Sentiment Analysis
+5. Where to Buy & Price Comparison
+6. Buying Guide (What to look for)
+7. Conclusion
+8. Sources
+
+Focus on finding the best products, checking availability, and comparing prices.
+IMPORTANT: Provide direct purchase links or retailer links for recommended products where possible.
 ''';
       case ResearchTemplate.general:
         return '';
@@ -1094,6 +1111,16 @@ Focus on balanced analysis:
 - Disadvantages and drawbacks
 - User experiences
 - Expert opinions
+''';
+        break;
+      case ResearchTemplate.shopping:
+        templateGuidance = '''
+Focus on shopping and buying decisions:
+- Product specifications and features
+- Price comparisons and deals
+- Top rated products in category
+- "Best of" lists and reviews
+- Availability and retailers
 ''';
         break;
       default:
