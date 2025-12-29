@@ -275,42 +275,25 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
           );
         }
       } else {
-        // Text generation (fallback to Backend Proxy if no local key)
-        final apiKey = await _getApiKey(provider);
+        // Text generation - Always use Backend Proxy for custom models compliance
+        // We wrap the contextual prompt as a single user message
+        final messages = [
+          {'role': 'user', 'content': contextualPrompt}
+        ];
 
-        if (apiKey == null || apiKey.isEmpty) {
-          // Use Backend Proxy (Admin Keys from Server)
-          // We wrap the contextual prompt as a single user message
-          final messages = [
-            {'role': 'user', 'content': contextualPrompt}
-          ];
+        final stream = ref.read(apiServiceProvider).chatWithAIStream(
+              messages: messages,
+              provider: provider,
+              model: model,
+            );
 
-          final stream = ref.read(apiServiceProvider).chatWithAIStream(
-                messages: messages,
-                provider: provider,
-                model: model,
-              );
-
-          await for (final chunk in stream) {
-            response += chunk;
-            final tokens = [StreamToken.text(text: chunk)];
-            state = [...state, ...tokens];
-            yield tokens;
-          }
-          streamed = true;
-        } else {
-          // Use Client-Side Logic (Local Key)
-          if (provider == 'openrouter') {
-            response = await _openRouterService.generateContent(
-                contextualPrompt,
-                model: model,
-                apiKey: apiKey);
-          } else {
-            // Use Gemini's client API
-            response = await _geminiService.generateStream(contextualPrompt,
-                model: model, apiKey: apiKey);
-          }
+        await for (final chunk in stream) {
+          response += chunk;
+          final tokens = [StreamToken.text(text: chunk)];
+          state = [...state, ...tokens];
+          yield tokens;
         }
+        streamed = true;
       }
 
       if (!streamed && response.isNotEmpty) {
