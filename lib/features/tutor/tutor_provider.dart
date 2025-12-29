@@ -5,10 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'tutor_session.dart';
 import '../sources/source_provider.dart';
 import '../gamification/gamification_provider.dart';
-import '../../core/ai/gemini_service.dart';
-import '../../core/ai/openrouter_service.dart';
-
-import '../../core/security/global_credentials_service.dart';
 import '../../core/api/api_service.dart';
 import '../../core/ai/ai_settings_service.dart';
 
@@ -450,33 +446,17 @@ Keep it to 3-4 paragraphs.
             'No AI model selected. Please configure a model in settings.');
       }
 
-      final creds = ref.read(globalCredentialsServiceProvider);
+      // Use Backend Proxy (Admin's API keys)
+      final apiService = ref.read(apiServiceProvider);
+      final messages = [
+        {'role': 'user', 'content': prompt}
+      ];
 
-      if (settings.provider == 'openrouter') {
-        final apiKey = await creds.getApiKey('openrouter');
-        if (apiKey == null || apiKey.isEmpty) {
-          throw Exception('OpenRouter API key not configured');
-        }
-        final openRouter = OpenRouterService();
-        return await openRouter.generateContent(
-          prompt,
-          model: model,
-          apiKey: apiKey,
-          maxTokens: 2048,
-        );
-      } else {
-        final apiKey = await creds.getApiKey('gemini');
-        if (apiKey == null || apiKey.isEmpty) {
-          throw Exception('Gemini API key not configured');
-        }
-        final gemini = GeminiService();
-        return await gemini.generateContent(
-          prompt,
-          model: model,
-          apiKey: apiKey,
-          maxTokens: 2048,
-        );
-      }
+      return await apiService.chatWithAI(
+        messages: messages,
+        provider: settings.provider,
+        model: model,
+      );
     } catch (e) {
       debugPrint('[TutorProvider] AI call failed: $e');
       rethrow;

@@ -6,9 +6,6 @@ import 'package:uuid/uuid.dart';
 import 'flashcard.dart';
 import '../sources/source_provider.dart';
 import '../gamification/gamification_provider.dart';
-import '../../core/ai/gemini_service.dart';
-import '../../core/ai/openrouter_service.dart';
-import '../../core/security/global_credentials_service.dart';
 import '../../core/api/api_service.dart';
 import '../../core/ai/ai_settings_service.dart';
 
@@ -152,7 +149,6 @@ difficulty: 1=easy, 2=medium, 3=hard
   Future<String> _callAI(String prompt) async {
     try {
       final settings = await AISettingsService.getSettings();
-      final provider = settings.provider;
       final model = settings.model;
 
       if (model == null || model.isEmpty) {
@@ -160,30 +156,20 @@ difficulty: 1=easy, 2=medium, 3=hard
             'No AI model selected. Please configure a model in settings.');
       }
 
-      final creds = ref.read(globalCredentialsServiceProvider);
-
       debugPrint(
-          '[FlashcardProvider] Using AI provider: $provider, model: $model');
+          '[FlashcardProvider] Using AI provider: ${settings.provider}, model: $model');
 
-      if (settings.provider == 'openrouter') {
-        final apiKey = await creds.getApiKey('openrouter');
-        if (apiKey == null || apiKey.isEmpty) {
-          throw Exception(
-              'OpenRouter API key not found. Please configure it in Settings.');
-        }
-        final openRouter = OpenRouterService();
-        return await openRouter.generateContent(prompt,
-            model: model, apiKey: apiKey, maxTokens: 8192);
-      } else {
-        final apiKey = await creds.getApiKey('gemini');
-        if (apiKey == null || apiKey.isEmpty) {
-          throw Exception(
-              'Gemini API key not found. Please configure it in Settings.');
-        }
-        final gemini = GeminiService();
-        return await gemini.generateContent(prompt,
-            apiKey: apiKey, model: model, maxTokens: 8192);
-      }
+      // Use Backend Proxy (Admin's API keys)
+      final apiService = ref.read(apiServiceProvider);
+      final messages = [
+        {'role': 'user', 'content': prompt}
+      ];
+
+      return await apiService.chatWithAI(
+        messages: messages,
+        provider: settings.provider,
+        model: model,
+      );
     } catch (e) {
       debugPrint('[FlashcardProvider] AI call failed: $e');
       rethrow;

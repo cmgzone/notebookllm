@@ -3,9 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'language_session.dart';
-import '../../core/ai/gemini_service.dart';
-import '../../core/ai/openrouter_service.dart';
-import '../../core/security/global_credentials_service.dart';
 import '../../core/api/api_service.dart';
 import '../gamification/gamification_provider.dart';
 import '../../core/ai/ai_settings_service.dart';
@@ -216,25 +213,19 @@ $history
 
   Future<String> _callAI(String prompt) async {
     final settings = await AISettingsService.getSettings();
-    final provider = settings.provider;
     final model = settings.getEffectiveModel();
-    final creds = ref.read(globalCredentialsServiceProvider);
 
-    if (provider == 'openrouter') {
-      final apiKey = await creds.getApiKey('openrouter');
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('No OpenRouter Key');
-      }
-      return OpenRouterService()
-          .generateContent(prompt, model: model, apiKey: apiKey);
-    } else {
-      final apiKey = await creds.getApiKey('gemini');
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('No Gemini Key');
-      }
-      return GeminiService()
-          .generateContent(prompt, model: model, apiKey: apiKey);
-    }
+    // Use Backend Proxy (Admin's API keys)
+    final apiService = ref.read(apiServiceProvider);
+    final messages = [
+      {'role': 'user', 'content': prompt}
+    ];
+
+    return await apiService.chatWithAI(
+      messages: messages,
+      provider: settings.provider,
+      model: model,
+    );
   }
 }
 

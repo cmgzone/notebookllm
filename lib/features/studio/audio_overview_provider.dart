@@ -8,13 +8,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'audio_overview.dart';
 
-import '../../core/ai/gemini_service.dart';
-import '../../core/ai/openrouter_service.dart';
 import '../../core/audio/elevenlabs_service.dart';
 import '../../core/audio/google_cloud_tts_service.dart';
 import '../../core/audio/murf_service.dart';
 import '../../core/ai/ai_settings_service.dart';
-import '../../core/security/global_credentials_service.dart';
 import '../../core/services/wakelock_service.dart';
 import '../../core/services/overlay_bubble_service.dart';
 import '../../core/api/api_service.dart';
@@ -121,34 +118,23 @@ class AudioOverviewNotifier extends StateNotifier<AudioStudioState> {
           'No AI model selected. Please configure a model in settings.');
     }
 
-    final creds = ref.read(globalCredentialsServiceProvider);
-
     debugPrint(
         '[AudioOverviewProvider] Using AI provider: ${settings.provider}, model: $model');
 
     try {
-      if (settings.provider == 'openrouter') {
-        final apiKey = await creds.getApiKey('openrouter');
-        if (apiKey == null || apiKey.isEmpty) {
-          throw Exception(
-              'OpenRouter API key not found. Please configure it in Settings.');
-        }
-        final openRouter = OpenRouterService();
-        return await openRouter
-            .generateContent(prompt,
-                model: model, apiKey: apiKey, maxTokens: 8192)
-            .timeout(_aiTimeout);
-      } else {
-        final apiKey = await creds.getApiKey('gemini');
-        if (apiKey == null || apiKey.isEmpty) {
-          throw Exception(
-              'Gemini API key not found. Please configure it in Settings.');
-        }
-        final gemini = GeminiService(apiKey: apiKey);
-        return await gemini
-            .generateContent(prompt, model: model, maxTokens: 8192)
-            .timeout(_aiTimeout);
-      }
+      // Use Backend Proxy (Admin's API keys)
+      final apiService = ref.read(apiServiceProvider);
+      final messages = [
+        {'role': 'user', 'content': prompt}
+      ];
+
+      return await apiService
+          .chatWithAI(
+            messages: messages,
+            provider: settings.provider,
+            model: model,
+          )
+          .timeout(_aiTimeout);
     } on TimeoutException {
       throw Exception(
           'AI generation timed out after ${_aiTimeout.inSeconds}s. Try again with shorter content.');

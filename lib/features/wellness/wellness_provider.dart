@@ -2,9 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/ai/deep_research_service.dart';
 import '../../core/ai/ai_settings_service.dart';
-import '../../core/ai/gemini_service.dart';
-import '../../core/ai/openrouter_service.dart';
-import '../../core/security/global_credentials_service.dart';
+import '../../core/api/api_service.dart';
 import '../../core/audio/voice_service.dart';
 
 class WellnessState {
@@ -213,9 +211,7 @@ class WellnessNotifier extends StateNotifier<WellnessState> {
 
   Future<String> _getAIResponse(String userMessage,
       {required bool isMedical}) async {
-    final provider = await _getSelectedProvider();
     final model = await _getSelectedModel();
-    final creds = ref.read(globalCredentialsServiceProvider);
 
     final systemPrompt = isMedical
         ? "You are a medical research assistant. Provide accurate, citation-backed information. Always clarify you are an AI and not a doctor."
@@ -223,21 +219,18 @@ class WellnessNotifier extends StateNotifier<WellnessState> {
 
     final fullPrompt = "$systemPrompt\n\nUser: $userMessage";
 
-    if (provider == 'openrouter') {
-      final apiKey = await creds.getApiKey('openrouter');
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception(
-            'OpenRouter API Key not found. Please add it in Settings.');
-      }
+    // Use Backend Proxy (Admin's API keys)
+    final apiService = ref.read(apiServiceProvider);
+    final messages = [
+      {'role': 'user', 'content': fullPrompt}
+    ];
 
-      return await OpenRouterService(apiKey: apiKey)
-          .generateContent(fullPrompt, model: model);
-    } else {
-      final apiKey = await creds.getApiKey('gemini');
-
-      return await GeminiService(apiKey: apiKey)
-          .generateContent(fullPrompt, model: model);
-    }
+    final provider = await _getSelectedProvider();
+    return await apiService.chatWithAI(
+      messages: messages,
+      provider: provider,
+      model: model,
+    );
   }
 }
 

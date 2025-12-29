@@ -4,11 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/ai/ai_settings_service.dart';
 import 'package:uuid/uuid.dart';
 import 'story.dart';
-import '../../core/ai/gemini_service.dart';
-import '../../core/ai/openrouter_service.dart';
 import '../../core/ai/gemini_image_service.dart';
 import '../../core/search/serper_service.dart';
-import '../../core/security/global_credentials_service.dart';
 import '../../core/api/api_service.dart';
 
 class StoryGeneratorState {
@@ -280,27 +277,17 @@ class StoryGeneratorNotifier extends StateNotifier<StoryGeneratorState> {
           state.copyWith(status: 'Generating cover image...', progress: 0.5);
       yield state;
 
-      // Generate AI images
-      final creds = ref.read(globalCredentialsServiceProvider);
+      // Generate AI images - use environment API key from config
       final settings = await AISettingsService.getSettings();
-      final provider = settings.provider;
-
-      String? apiKey;
-      if (provider == 'openrouter') {
-        apiKey = await creds.getApiKey('openrouter');
-      } else {
-        apiKey = await creds.getApiKey('gemini');
-      }
-
-      final imageService = GeminiImageService(apiKey: apiKey);
+      final imageService = GeminiImageService();
 
       final imageUrls = <String>[];
 
       // Generate cover image
       final coverPrompt =
           'Book cover art for: ${storyData['title']}. ${storyData['coverDescription'] ?? prompt}. Digital art, cinematic, detailed.';
-      final coverUrl =
-          await imageService.generateImage(coverPrompt, provider: provider);
+      final coverUrl = await imageService.generateImage(coverPrompt,
+          provider: settings.provider);
       imageUrls.add(coverUrl);
 
       // Generate chapter images
@@ -318,8 +305,8 @@ class StoryGeneratorNotifier extends StateNotifier<StoryGeneratorState> {
         try {
           final imgPrompt =
               'Scene illustration: ${chapters[i].title}. Fantasy art style, detailed, atmospheric.';
-          chapterImageUrl =
-              await imageService.generateImage(imgPrompt, provider: provider);
+          chapterImageUrl = await imageService.generateImage(imgPrompt,
+              provider: settings.provider);
           imageUrls.add(chapterImageUrl);
         } catch (e) {
           debugPrint('Failed to generate chapter image: $e');
@@ -476,25 +463,19 @@ Return JSON format:
 
   Future<String> _callAI(String prompt) async {
     final settings = await AISettingsService.getSettings();
-    final provider = settings.provider;
     final model = settings.getEffectiveModel();
-    final creds = ref.read(globalCredentialsServiceProvider);
 
-    if (provider == 'openrouter') {
-      final apiKey = await creds.getApiKey('openrouter');
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('OpenRouter API key not found');
-      }
-      return await OpenRouterService().generateContent(prompt,
-          model: model, apiKey: apiKey, maxTokens: 16384);
-    } else {
-      final apiKey = await creds.getApiKey('gemini');
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('Gemini API key not found');
-      }
-      return await GeminiService().generateContent(prompt,
-          model: model, apiKey: apiKey, maxTokens: 16384);
-    }
+    // Use Backend Proxy (Admin's API keys)
+    final apiService = ref.read(apiServiceProvider);
+    final messages = [
+      {'role': 'user', 'content': prompt}
+    ];
+
+    return await apiService.chatWithAI(
+      messages: messages,
+      provider: settings.provider,
+      model: model,
+    );
   }
 
   Map<String, dynamic> _parseJsonResponse(String response) {

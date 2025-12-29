@@ -4,9 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/ai/ai_settings_service.dart';
 import 'package:uuid/uuid.dart';
 import 'meal.dart';
-import '../../core/ai/gemini_service.dart';
-import '../../core/ai/openrouter_service.dart';
-import '../../core/security/global_credentials_service.dart';
 import '../../core/api/api_service.dart';
 
 class MealPlannerState {
@@ -322,27 +319,19 @@ Return ONLY a JSON array with this format:
 
   Future<String> _callAI(String prompt) async {
     final settings = await AISettingsService.getSettings();
-    final provider = settings.provider;
     final model = settings.getEffectiveModel();
-    final creds = ref.read(globalCredentialsServiceProvider);
 
-    if (provider == 'openrouter') {
-      final apiKey = await creds.getApiKey('openrouter');
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('OpenRouter API key not found');
-      }
-      final openRouter = OpenRouterService();
-      return await openRouter.generateContent(prompt,
-          model: model, apiKey: apiKey, maxTokens: 8192);
-    } else {
-      final apiKey = await creds.getApiKey('gemini');
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('Gemini API key not found');
-      }
-      final gemini = GeminiService();
-      return await gemini.generateContent(prompt,
-          model: model, apiKey: apiKey, maxTokens: 8192);
-    }
+    // Use Backend Proxy (Admin's API keys)
+    final apiService = ref.read(apiServiceProvider);
+    final messages = [
+      {'role': 'user', 'content': prompt}
+    ];
+
+    return await apiService.chatWithAI(
+      messages: messages,
+      provider: settings.provider,
+      model: model,
+    );
   }
 
   WeeklyMealPlan _parseMealPlanFromResponse(

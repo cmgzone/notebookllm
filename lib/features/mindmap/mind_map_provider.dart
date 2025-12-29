@@ -6,9 +6,6 @@ import 'package:uuid/uuid.dart';
 import 'mind_map_node.dart';
 import '../sources/source_provider.dart';
 import '../gamification/gamification_provider.dart';
-import '../../core/ai/gemini_service.dart';
-import '../../core/ai/openrouter_service.dart';
-import '../../core/security/global_credentials_service.dart';
 import '../../core/api/api_service.dart';
 
 /// Provider for managing mind maps
@@ -165,35 +162,22 @@ Create 3-5 main branches with 2-4 sub-topics each.
   Future<String> _callAI(String prompt) async {
     try {
       final settings = await AISettingsService.getSettings();
-      final provider = settings.provider;
       final model = settings.getEffectiveModel();
 
       debugPrint(
-          '[MindMapProvider] Using AI provider: $provider, model: $model');
+          '[MindMapProvider] Using AI provider: ${settings.provider}, model: $model');
 
-      if (provider == 'openrouter') {
-        final openRouter = OpenRouterService();
-        // Get API key from credentials service
-        final creds = ref.read(globalCredentialsServiceProvider);
-        final apiKey = await creds.getApiKey('openrouter');
-        if (apiKey == null || apiKey.isEmpty) {
-          throw Exception(
-              'OpenRouter API key not found. Please configure it in Settings.');
-        }
-        return await openRouter.generateContent(prompt,
-            model: model, apiKey: apiKey, maxTokens: 8192);
-      } else {
-        final gemini = GeminiService();
-        // Get API key from credentials service
-        final creds = ref.read(globalCredentialsServiceProvider);
-        final apiKey = await creds.getApiKey('gemini');
-        if (apiKey == null || apiKey.isEmpty) {
-          throw Exception(
-              'Gemini API key not found. Please configure it in Settings.');
-        }
-        return await gemini.generateContent(prompt,
-            model: model, apiKey: apiKey, maxTokens: 8192);
-      }
+      // Use Backend Proxy (Admin's API keys)
+      final apiService = ref.read(apiServiceProvider);
+      final messages = [
+        {'role': 'user', 'content': prompt}
+      ];
+
+      return await apiService.chatWithAI(
+        messages: messages,
+        provider: settings.provider,
+        model: model,
+      );
     } catch (e) {
       debugPrint('[MindMapProvider] AI call failed: $e');
       rethrow;
