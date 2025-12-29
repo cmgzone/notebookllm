@@ -80,7 +80,7 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: selectedSport,
+                initialValue: selectedSport,
                 decoration: const InputDecoration(labelText: 'Sport'),
                 items: [
                   'Football',
@@ -115,7 +115,7 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
                   logoUrl: logoUrl,
                 );
                 ref.read(favoritesProvider.notifier).addFavorite(team);
-                Navigator.pop(context);
+                if (context.mounted) Navigator.pop(context);
               },
               child: const Text('Add'),
             ),
