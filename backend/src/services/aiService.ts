@@ -76,14 +76,34 @@ export async function generateWithOpenRouter(
     }
 
     try {
+        // Convert messages to OpenRouter format (supports multimodal)
+        const convertedMessages = messages.map(msg => {
+            // If content is already in multimodal format, keep it
+            if (Array.isArray(msg.content)) {
+                return {
+                    role: msg.role,
+                    content: msg.content.map(part => {
+                        // Convert image_url format for OpenRouter
+                        if (part.type === 'image_url') {
+                            return {
+                                type: 'image_url',
+                                image_url: part.image_url
+                            };
+                        }
+                        // Text part
+                        return { type: 'text', text: part.text || part };
+                    })
+                };
+            }
+            // Simple text content
+            return { role: msg.role, content: msg.content };
+        });
+
         const response = await axios.post(
             'https://openrouter.ai/api/v1/chat/completions',
             {
                 model,
-                messages: messages.map(msg => ({
-                    role: msg.role,
-                    content: msg.content
-                })),
+                messages: convertedMessages,
                 max_tokens: 4096,
             },
             {
@@ -170,14 +190,34 @@ export async function* streamWithOpenRouter(
     }
 
     try {
+        // Convert messages to OpenRouter format (supports multimodal)
+        const convertedMessages = messages.map(msg => {
+            // If content is already in multimodal format, keep it
+            if (Array.isArray(msg.content)) {
+                return {
+                    role: msg.role,
+                    content: msg.content.map(part => {
+                        // Convert image_url format for OpenRouter
+                        if (part.type === 'image_url') {
+                            return {
+                                type: 'image_url',
+                                image_url: part.image_url
+                            };
+                        }
+                        // Text part
+                        return { type: 'text', text: part.text || part };
+                    })
+                };
+            }
+            // Simple text content
+            return { role: msg.role, content: msg.content };
+        });
+
         const response = await axios.post(
             'https://openrouter.ai/api/v1/chat/completions',
             {
                 model,
-                messages: messages.map(msg => ({
-                    role: msg.role,
-                    content: msg.content
-                })),
+                messages: convertedMessages,
                 stream: true,
                 max_tokens: 4096,
             },

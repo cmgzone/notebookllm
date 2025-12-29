@@ -1,8 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
-import '../../core/ai/gemini_image_service.dart';
 import '../../core/ai/ai_settings_service.dart';
 import '../../core/api/api_service.dart';
 
@@ -91,6 +91,7 @@ class AdsGeneratorNotifier extends StateNotifier<AdsGeneratorState> {
             'No AI model selected. Please configure a model in settings.');
       }
 
+      final apiService = ref.read(apiServiceProvider);
       String content;
 
       final fullPrompt = '''
@@ -108,16 +109,33 @@ ${state.selectedImageBytes != null ? '\nTarget Audience Analysis: Briefly analyz
 ''';
 
       if (state.selectedImageBytes != null) {
-        // Multimodal generation (with image) - uses client side for now
-        final imageService = GeminiImageService();
-        content = await imageService.analyzeImage(
-          state.selectedImageBytes!,
-          fullPrompt,
+        // Multimodal generation (with image) - Use Backend Proxy
+        // Convert image to base64 data URL format
+        final base64Image = base64Encode(state.selectedImageBytes!);
+        final mimeType = _getMimeType(state.selectedImageName ?? 'image.jpg');
+        final dataUrl = 'data:$mimeType;base64,$base64Image';
+
+        // Build multimodal message content
+        final messages = [
+          {
+            'role': 'user',
+            'content': [
+              {'type': 'text', 'text': fullPrompt},
+              {
+                'type': 'image_url',
+                'image_url': {'url': dataUrl}
+              }
+            ]
+          }
+        ];
+
+        content = await apiService.chatWithAI(
+          messages: messages,
+          provider: provider,
           model: model,
         );
       } else {
-        // Text-only generation - Use Backend Proxy (Admin's API keys)
-        final apiService = ref.read(apiServiceProvider);
+        // Text-only generation - Use Backend Proxy
         final messages = [
           {'role': 'user', 'content': fullPrompt}
         ];
@@ -138,6 +156,22 @@ ${state.selectedImageBytes != null ? '\nTarget Audience Analysis: Briefly analyz
         isGenerating: false,
         error: 'Generation failed: $e',
       );
+    }
+  }
+
+  String _getMimeType(String filename) {
+    final ext = filename.toLowerCase().split('.').last;
+    switch (ext) {
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+      case 'bmp':
+        return 'image/bmp';
+      default:
+        return 'image/jpeg';
     }
   }
 }

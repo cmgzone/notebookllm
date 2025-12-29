@@ -1,9 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/ai/gemini_service.dart';
-import '../../../core/ai/openrouter_service.dart';
-import '../../../core/security/global_credentials_service.dart';
 import '../../../core/ai/ai_settings_service.dart';
+import '../../../core/api/api_service.dart';
 
 class EditorAgent {
   final Ref ref;
@@ -19,20 +17,17 @@ class EditorAgent {
           'No AI model selected. Please configure a model in settings.');
     }
 
-    final creds = ref.read(globalCredentialsServiceProvider);
+    // Use Backend Proxy (Admin's API keys)
+    final apiService = ref.read(apiServiceProvider);
+    final messages = [
+      {'role': 'user', 'content': prompt}
+    ];
 
-    if (settings.provider == 'openrouter') {
-      final apiKey = await creds.getApiKey('openrouter');
-      return await OpenRouterService()
-          .generateContent(prompt, model: model, apiKey: apiKey);
-    } else {
-      final apiKey = await creds.getApiKey('gemini');
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('Gemini API key not found');
-      }
-      return await GeminiService(apiKey: apiKey)
-          .generateContent(prompt, model: model);
-    }
+    return await apiService.chatWithAI(
+      messages: messages,
+      provider: settings.provider,
+      model: model,
+    );
   }
 
   Future<String> refineText(String text, String instruction) async {

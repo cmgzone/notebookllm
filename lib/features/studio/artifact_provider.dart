@@ -3,10 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/rag/vector_store.dart';
 import '../../core/rag/rag_provider.dart';
-import '../../core/ai/gemini_service.dart';
-import '../../core/ai/openrouter_service.dart';
 import '../../core/ai/ai_settings_service.dart';
-import '../../core/security/global_credentials_service.dart';
+import '../../core/api/api_service.dart';
 import '../../core/services/wakelock_service.dart';
 import '../../core/services/background_ai_service.dart';
 import '../../core/services/overlay_bubble_service.dart';
@@ -17,8 +15,6 @@ import 'artifact.dart';
 class ArtifactNotifier extends StateNotifier<List<Artifact>> {
   ArtifactNotifier(this.ref) : super([]);
   final Ref ref;
-  final GeminiService _geminiService = GeminiService();
-  final OpenRouterService _openRouterService = OpenRouterService();
 
   Future<String> _getSelectedProvider() async {
     final settings = await AISettingsService.getSettings();
@@ -30,54 +26,22 @@ class ArtifactNotifier extends StateNotifier<List<Artifact>> {
     return settings.getEffectiveModel();
   }
 
-  Future<String?> _getGeminiKey() async {
-    try {
-      final creds = ref.read(globalCredentialsServiceProvider);
-      final key = await creds.getApiKey('gemini');
-      debugPrint(
-          '[ArtifactProvider] Gemini key retrieved: ${key != null && key.isNotEmpty ? "yes (${key.length} chars)" : "no"}');
-      return key;
-    } catch (e) {
-      debugPrint('[ArtifactProvider] Error getting Gemini key: $e');
-      return null;
-    }
-  }
-
-  Future<String?> _getOpenRouterKey() async {
-    try {
-      final creds = ref.read(globalCredentialsServiceProvider);
-      final key = await creds.getApiKey('openrouter');
-      debugPrint(
-          '[ArtifactProvider] OpenRouter key retrieved: ${key != null && key.isNotEmpty ? "yes (${key.length} chars)" : "no"}');
-      return key;
-    } catch (e) {
-      debugPrint('[ArtifactProvider] Error getting OpenRouter key: $e');
-      return null;
-    }
-  }
-
   Future<String> _generateWithAI(String prompt) async {
     final provider = await _getSelectedProvider();
     final model = await _getSelectedModel();
 
     try {
-      if (provider == 'openrouter') {
-        final apiKey = await _getOpenRouterKey();
-        if (apiKey == null || apiKey.isEmpty) {
-          throw Exception(
-              'OpenRouter API key not found. Please configure it in Settings > AI Model Settings.');
-        }
-        return await _openRouterService.generateContent(prompt,
-            model: model, apiKey: apiKey, maxTokens: 8192);
-      } else {
-        final apiKey = await _getGeminiKey();
-        if (apiKey == null || apiKey.isEmpty) {
-          throw Exception(
-              'Gemini API key not found. Please configure it in Settings > AI Model Settings.');
-        }
-        return await _geminiService.generateContent(prompt,
-            model: model, apiKey: apiKey, maxTokens: 8192);
-      }
+      // Use Backend Proxy (Admin's API keys)
+      final apiService = ref.read(apiServiceProvider);
+      final messages = [
+        {'role': 'user', 'content': prompt}
+      ];
+
+      return await apiService.chatWithAI(
+        messages: messages,
+        provider: provider,
+        model: model,
+      );
     } catch (e) {
       debugPrint('[ArtifactProvider] AI generation failed: $e');
       rethrow;
@@ -171,12 +135,11 @@ class ArtifactNotifier extends StateNotifier<List<Artifact>> {
   }
 
   /// Start background generation (for when app may close)
+  /// Note: Background generation currently requires manual API key setup.
+  /// This feature may be deprecated in favor of standard generate() with Backend Proxy.
   Future<void> generateInBackground(String type, {String? notebookId}) async {
     final provider = await _getSelectedProvider();
     final model = await _getSelectedModel();
-    final apiKey = provider == 'openrouter'
-        ? await _getOpenRouterKey()
-        : await _getGeminiKey();
 
     final sources = ref.read(sourceProvider);
     final filteredSources = notebookId != null
@@ -195,11 +158,13 @@ class ArtifactNotifier extends StateNotifier<List<Artifact>> {
       await prefs.setString('bg_notebook_id', notebookId);
     }
 
+    // Note: Background generation uses legacy API key approach
+    // This feature should be migrated to use Backend Proxy in future
     await backgroundAIService.startGeneration(
       taskType: 'artifact',
       taskId: taskId,
       params: {
-        'apiKey': apiKey,
+        'apiKey': '', // Backend proxy handles keys now
         'provider': provider,
         'model': model,
         'prompt': prompt,

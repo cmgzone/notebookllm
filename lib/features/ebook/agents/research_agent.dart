@@ -1,8 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/ai/gemini_service.dart';
-import '../../../core/ai/openrouter_service.dart';
-import '../../../core/security/global_credentials_service.dart';
 import '../../../core/ai/ai_settings_service.dart';
+import '../../../core/api/api_service.dart';
 
 class ResearchAgent {
   final Ref ref;
@@ -10,8 +8,6 @@ class ResearchAgent {
   ResearchAgent(this.ref);
 
   Future<String> _generateContent(String prompt, {String? model}) async {
-    final creds = ref.read(globalCredentialsServiceProvider);
-
     // Determine provider and model
     String provider;
     String targetModel;
@@ -39,18 +35,17 @@ class ResearchAgent {
       targetModel = settings.getEffectiveModel();
     }
 
-    if (provider == 'openrouter') {
-      final apiKey = await creds.getApiKey('openrouter');
-      return await OpenRouterService()
-          .generateContent(prompt, model: targetModel, apiKey: apiKey);
-    } else {
-      final apiKey = await creds.getApiKey('gemini');
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('Gemini API key not found');
-      }
-      return await GeminiService(apiKey: apiKey)
-          .generateContent(prompt, model: targetModel);
-    }
+    // Use Backend Proxy (Admin's API keys)
+    final apiService = ref.read(apiServiceProvider);
+    final messages = [
+      {'role': 'user', 'content': prompt}
+    ];
+
+    return await apiService.chatWithAI(
+      messages: messages,
+      provider: provider,
+      model: targetModel,
+    );
   }
 
   Future<String> researchTopic(String topic,
