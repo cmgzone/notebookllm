@@ -86,9 +86,12 @@ class CreditManager {
   String? get _userId => _ref.read(legacyUserProvider)?.uid;
 
   /// Check if user has enough credits for a feature
+  /// This fetches fresh data from the API to ensure accuracy
   Future<bool> hasCredits(int amount) async {
     final userId = _userId;
     if (userId == null) return false;
+
+    // Always fetch fresh balance from API
     return await _service.hasEnoughCredits(userId, amount);
   }
 
@@ -117,8 +120,15 @@ class CreditManager {
     return success;
   }
 
-  /// Get current credit balance
+  /// Get current credit balance (from cache - may be stale)
   int get currentBalance => _ref.read(creditBalanceProvider);
+
+  /// Get fresh credit balance from API
+  Future<int> getFreshBalance() async {
+    final userId = _userId;
+    if (userId == null) return 0;
+    return await _service.getCreditBalance(userId);
+  }
 
   /// Show insufficient credits dialog
   static void showInsufficientCreditsDialog(
@@ -212,7 +222,8 @@ class CreditManager {
     required String feature,
     Map<String, dynamic>? metadata,
   }) async {
-    final balance = currentBalance;
+    // Fetch fresh balance from API to ensure accuracy
+    final balance = await getFreshBalance();
 
     if (balance < amount) {
       showInsufficientCreditsDialog(

@@ -57,8 +57,20 @@ final userSubscriptionProvider =
 
 // Credit Balance Provider (simplified access)
 final creditBalanceProvider = Provider<int>((ref) {
-  final subscription = ref.watch(userSubscriptionProvider).value;
-  return subscription?.currentCredits ?? 0;
+  final subscriptionAsync = ref.watch(userSubscriptionProvider);
+
+  // Return the actual credits if loaded, otherwise return a high number
+  // to avoid blocking users while subscription is loading
+  return subscriptionAsync.when(
+    data: (subscription) => subscription?.currentCredits ?? 0,
+    loading: () => 999999, // Don't block while loading
+    error: (_, __) => 0,
+  );
+});
+
+// Provider that indicates if subscription is still loading
+final isSubscriptionLoadingProvider = Provider<bool>((ref) {
+  return ref.watch(userSubscriptionProvider).isLoading;
 });
 
 // Active Credit Packages Provider
