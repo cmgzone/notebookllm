@@ -86,7 +86,7 @@ class SportsPredictorNotifier extends StateNotifier<SportsPredictorState> {
         sport: sport,
         league: league,
         specificMatch: specificMatch,
-      ).timeout(const Duration(seconds: 15));
+      );
 
       // Build fixture context for AI
       if (fixtureData.isNotEmpty) {
@@ -111,17 +111,12 @@ class SportsPredictorNotifier extends StateNotifier<SportsPredictorState> {
         final deepResearch = ref.read(deepResearchServiceProvider);
         final query = _buildSearchQuery(sport, league, specificMatch);
 
-        await for (final update in deepResearch
-            .research(
+        await for (final update in deepResearch.research(
           query: '$query betting odds predictions',
           notebookId: '',
           depth: ResearchDepth.quick,
           template: ResearchTemplate.general,
-        )
-            .timeout(const Duration(seconds: 20), onTimeout: (sink) {
-          debugPrint('[SportsPredictor] Research timed out');
-          sink.close();
-        })) {
+        )) {
           state = state.copyWith(
             currentStatus: update.status,
             progress: 0.4 + (update.progress * 0.2),
@@ -161,7 +156,7 @@ class SportsPredictorNotifier extends StateNotifier<SportsPredictorState> {
           league: league,
           researchReport: researchReport,
           sources: sources,
-        ).timeout(const Duration(seconds: 30));
+        );
 
         if (predictions.isEmpty) {
           debugPrint('[SportsPredictor] AI returned empty, using sample data');
@@ -182,10 +177,9 @@ class SportsPredictorNotifier extends StateNotifier<SportsPredictorState> {
       progress: 0.9,
     );
 
-    // Fetch logos with short timeout
+    // Fetch logos
     try {
-      predictions = await _fetchTeamLogos(predictions, sport.displayName)
-          .timeout(const Duration(seconds: 15));
+      predictions = await _fetchTeamLogos(predictions, sport.displayName);
     } catch (e) {
       debugPrint('[SportsPredictor] Logo fetch failed: $e');
     }
