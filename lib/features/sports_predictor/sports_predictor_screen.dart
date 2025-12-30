@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import 'prediction.dart';
 import 'sports_predictor_provider.dart';
 import 'predictor_chat_screen.dart';
+import 'virtual_betting_provider.dart';
+import 'screens/virtual_betting_screen.dart';
 
 class SportsPredictorScreen extends ConsumerStatefulWidget {
   const SportsPredictorScreen({super.key});
@@ -42,6 +44,24 @@ class _SportsPredictorScreenState extends ConsumerState<SportsPredictorScreen> {
           ],
         ),
         actions: [
+          // Virtual Betting button
+          IconButton(
+            icon: Badge(
+              label: Consumer(
+                builder: (context, ref, _) {
+                  final betSlip = ref.watch(virtualBettingProvider).betSlip;
+                  return Text('${betSlip.length}');
+                },
+              ),
+              isLabelVisible: true,
+              child: const Icon(LucideIcons.wallet),
+            ),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const VirtualBettingScreen()),
+            ),
+            tooltip: 'Virtual Betting',
+          ),
           // Chat with AI Agent button
           IconButton(
             icon: const Icon(LucideIcons.messageCircle),
@@ -372,13 +392,13 @@ class _LoadingCard extends StatelessWidget {
   }
 }
 
-class _PredictionCard extends StatelessWidget {
+class _PredictionCard extends ConsumerWidget {
   final SportsPrediction prediction;
 
   const _PredictionCard({required this.prediction});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final dateFormat = DateFormat('MMM d, yyyy • HH:mm');
@@ -489,10 +509,33 @@ class _PredictionCard extends StatelessWidget {
             ),
           ),
 
-          // Odds table
+          // Clickable Odds table for betting
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _OddsTable(odds: prediction.odds),
+            child: _BettableOddsTable(
+              prediction: prediction,
+              onBetSelected: (betType, odds) {
+                ref
+                    .read(virtualBettingProvider.notifier)
+                    .addToBetSlip(prediction, betType, odds);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Added to bet slip @ $odds'),
+                    action: SnackBarAction(
+                      label: 'View Slip',
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              VirtualBettingScreen(prediction: prediction),
+                        ),
+                      ),
+                    ),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
           ),
 
           // Analysis
@@ -528,6 +571,25 @@ class _PredictionCard extends StatelessWidget {
             ),
           ),
 
+          // Place Bet button
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        VirtualBettingScreen(prediction: prediction),
+                  ),
+                ),
+                icon: const Icon(LucideIcons.wallet, size: 18),
+                label: const Text('Place Virtual Bet'),
+              ),
+            ),
+          ),
+
           // Sources
           if (prediction.sources.isNotEmpty)
             ExpansionTile(
@@ -550,14 +612,19 @@ class _PredictionCard extends StatelessWidget {
   }
 }
 
-class _OddsTable extends StatelessWidget {
-  final PredictionOdds odds;
+class _BettableOddsTable extends StatelessWidget {
+  final SportsPrediction prediction;
+  final Function(String betType, double odds) onBetSelected;
 
-  const _OddsTable({required this.odds});
+  const _BettableOddsTable({
+    required this.prediction,
+    required this.onBetSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final odds = prediction.odds;
 
     return Container(
       decoration: BoxDecoration(
@@ -566,34 +633,37 @@ class _OddsTable extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Main odds row
+          // Main odds row - clickable
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                _OddsCell(
+                _ClickableOddsCell(
                   label: '1',
                   value: odds.homeWin,
                   isHighlighted:
                       odds.homeWin < odds.draw && odds.homeWin < odds.awayWin,
+                  onTap: () => onBetSelected('home', odds.homeWin),
                 ),
-                _OddsCell(
+                _ClickableOddsCell(
                   label: 'X',
                   value: odds.draw,
                   isHighlighted:
                       odds.draw < odds.homeWin && odds.draw < odds.awayWin,
+                  onTap: () => onBetSelected('draw', odds.draw),
                 ),
-                _OddsCell(
+                _ClickableOddsCell(
                   label: '2',
                   value: odds.awayWin,
                   isHighlighted:
                       odds.awayWin < odds.homeWin && odds.awayWin < odds.draw,
+                  onTap: () => onBetSelected('away', odds.awayWin),
                 ),
               ],
             ),
           ),
 
-          // Additional odds
+          // Additional odds - clickable
           if (odds.over25 != null || odds.btts != null)
             Container(
               padding: const EdgeInsets.all(12),
@@ -606,11 +676,23 @@ class _OddsTable extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   if (odds.over25 != null)
-                    _SmallOddsChip(label: 'Over 2.5', value: odds.over25!),
+                    _ClickableSmallOddsChip(
+                      label: 'Over 2.5',
+                      value: odds.over25!,
+                      onTap: () => onBetSelected('over25', odds.over25!),
+                    ),
                   if (odds.under25 != null)
-                    _SmallOddsChip(label: 'Under 2.5', value: odds.under25!),
+                    _ClickableSmallOddsChip(
+                      label: 'Under 2.5',
+                      value: odds.under25!,
+                      onTap: () => onBetSelected('under25', odds.under25!),
+                    ),
                   if (odds.btts != null)
-                    _SmallOddsChip(label: 'BTTS', value: odds.btts!),
+                    _ClickableSmallOddsChip(
+                      label: 'BTTS',
+                      value: odds.btts!,
+                      onTap: () => onBetSelected('btts', odds.btts!),
+                    ),
                 ],
               ),
             ),
@@ -620,15 +702,17 @@ class _OddsTable extends StatelessWidget {
   }
 }
 
-class _OddsCell extends StatelessWidget {
+class _ClickableOddsCell extends StatelessWidget {
   final String label;
   final double value;
   final bool isHighlighted;
+  final VoidCallback onTap;
 
-  const _OddsCell({
+  const _ClickableOddsCell({
     required this.label,
     required this.value,
     this.isHighlighted = false,
+    required this.onTap,
   });
 
   @override
@@ -637,55 +721,91 @@ class _OddsCell extends StatelessWidget {
     final text = Theme.of(context).textTheme;
 
     return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Material(
           color: isHighlighted ? scheme.primary : scheme.surface,
           borderRadius: BorderRadius.circular(8),
-          border: isHighlighted
-              ? null
-              : Border.all(color: scheme.outline.withValues(alpha: 0.3)),
-        ),
-        child: Column(
-          children: [
-            Text(
-              label,
-              style: text.labelSmall?.copyWith(
-                color: isHighlighted ? scheme.onPrimary : scheme.outline,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: isHighlighted
+                    ? null
+                    : Border.all(color: scheme.outline.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    label,
+                    style: text.labelSmall?.copyWith(
+                      color: isHighlighted ? scheme.onPrimary : scheme.outline,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    value.toStringAsFixed(2),
+                    style: text.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color:
+                          isHighlighted ? scheme.onPrimary : scheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Icon(
+                    LucideIcons.plus,
+                    size: 12,
+                    color: isHighlighted
+                        ? scheme.onPrimary.withValues(alpha: 0.7)
+                        : scheme.outline,
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              value.toStringAsFixed(2),
-              style: text.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: isHighlighted ? scheme.onPrimary : scheme.onSurface,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _SmallOddsChip extends StatelessWidget {
+class _ClickableSmallOddsChip extends StatelessWidget {
   final String label;
   final double value;
+  final VoidCallback onTap;
 
-  const _SmallOddsChip({required this.label, required this.value});
+  const _ClickableSmallOddsChip({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
 
-    return Column(
-      children: [
-        Text(label, style: text.labelSmall),
-        Text(value.toStringAsFixed(2),
-            style: text.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
-      ],
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            children: [
+              Text(label, style: text.labelSmall),
+              Text(value.toStringAsFixed(2),
+                  style:
+                      text.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+              Icon(LucideIcons.plus, size: 10, color: scheme.outline),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

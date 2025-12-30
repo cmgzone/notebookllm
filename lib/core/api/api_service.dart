@@ -134,10 +134,14 @@ class ApiService {
   // Generic GET request
   Future<Map<String, dynamic>> get(String endpoint) async {
     try {
-      final response = await http.get(
+      final response = await http
+          .get(
         Uri.parse('$_baseUrl$endpoint'),
         headers: await _getHeaders(),
-      );
+      )
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        throw Exception('Request timed out after 30s');
+      });
 
       return _handleResponse(response);
     } catch (e) {
@@ -151,11 +155,15 @@ class ApiService {
     Map<String, dynamic> body,
   ) async {
     try {
-      final response = await http.post(
+      final response = await http
+          .post(
         Uri.parse('$_baseUrl$endpoint'),
         headers: await _getHeaders(),
         body: jsonEncode(body),
-      );
+      )
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        throw Exception('Request timed out after 30s');
+      });
 
       return _handleResponse(response);
     } catch (e) {
@@ -169,11 +177,15 @@ class ApiService {
     Map<String, dynamic> body,
   ) async {
     try {
-      final response = await http.put(
+      final response = await http
+          .put(
         Uri.parse('$_baseUrl$endpoint'),
         headers: await _getHeaders(),
         body: jsonEncode(body),
-      );
+      )
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        throw Exception('Request timed out after 30s');
+      });
 
       return _handleResponse(response);
     } catch (e) {
@@ -184,10 +196,14 @@ class ApiService {
   // Generic DELETE request
   Future<Map<String, dynamic>> delete(String endpoint) async {
     try {
-      final response = await http.delete(
+      final response = await http
+          .delete(
         Uri.parse('$_baseUrl$endpoint'),
         headers: await _getHeaders(),
-      );
+      )
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        throw Exception('Request timed out after 30s');
+      });
 
       return _handleResponse(response);
     } catch (e) {

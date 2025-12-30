@@ -6,6 +6,9 @@ class SportsNews {
   final String content;
   final String category;
   final String? imageUrl;
+  final List<String> images; // Multiple images
+  final String? videoUrl; // Embedded video URL
+  final String? videoThumbnail;
   final String source;
   final String sourceUrl;
   final DateTime publishedAt;
@@ -19,6 +22,9 @@ class SportsNews {
     required this.content,
     required this.category,
     this.imageUrl,
+    this.images = const [],
+    this.videoUrl,
+    this.videoThumbnail,
     required this.source,
     required this.sourceUrl,
     required this.publishedAt,
@@ -34,6 +40,9 @@ class SportsNews {
       content: json['content'] ?? '',
       category: json['category'] ?? 'General',
       imageUrl: json['imageUrl'] ?? json['image_url'],
+      images: List<String>.from(json['images'] ?? []),
+      videoUrl: json['videoUrl'] ?? json['video_url'],
+      videoThumbnail: json['videoThumbnail'] ?? json['video_thumbnail'],
       source: json['source'] ?? 'Unknown',
       sourceUrl: json['sourceUrl'] ?? json['source_url'] ?? '',
       publishedAt: DateTime.tryParse(
@@ -54,6 +63,9 @@ class SportsNews {
         'content': content,
         'category': category,
         'imageUrl': imageUrl,
+        'images': images,
+        'videoUrl': videoUrl,
+        'videoThumbnail': videoThumbnail,
         'source': source,
         'sourceUrl': sourceUrl,
         'publishedAt': publishedAt.toIso8601String(),

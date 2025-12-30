@@ -93,11 +93,13 @@ class SportsNewsNotifier extends StateNotifier<SportsNewsState> {
       // Use deep research to gather news
       String researchReport = '';
       final sources = <Map<String, String>>[];
+      final images = <String>[];
+      final videos = <String>[];
 
       await for (final update in deepResearch.research(
-        query,
+        query: query,
         notebookId: '',
-        depth: ResearchDepth.quick,
+        depth: ResearchDepth.standard, // Use standard for more images/videos
         template: ResearchTemplate.general,
       )) {
         state = state.copyWith(
@@ -107,12 +109,28 @@ class SportsNewsNotifier extends StateNotifier<SportsNewsState> {
 
         if (update.result != null) {
           researchReport = update.result!;
-          for (final source in update.sources ?? []) {
-            sources.add({
-              'title': source.title,
-              'url': source.url,
-              'snippet': source.snippet ?? '',
-            });
+        }
+
+        // Collect sources
+        for (final source in update.sources ?? []) {
+          sources.add({
+            'title': source.title,
+            'url': source.url,
+            'snippet': source.snippet ?? '',
+          });
+        }
+
+        // Collect images
+        if (update.images != null) {
+          for (final img in update.images!) {
+            if (!images.contains(img)) images.add(img);
+          }
+        }
+
+        // Collect videos
+        if (update.videos != null) {
+          for (final vid in update.videos!) {
+            if (!videos.contains(vid)) videos.add(vid);
           }
         }
       }
@@ -127,6 +145,8 @@ class SportsNewsNotifier extends StateNotifier<SportsNewsState> {
         researchReport: researchReport,
         sources: sources,
         category: cat,
+        images: images,
+        videos: videos,
       );
 
       state = state.copyWith(
@@ -177,6 +197,8 @@ class SportsNewsNotifier extends StateNotifier<SportsNewsState> {
     required String researchReport,
     required List<Map<String, String>> sources,
     required NewsCategory category,
+    List<String>? images,
+    List<String>? videos,
   }) async {
     final settings = await AISettingsService.getSettings();
     final provider = settings.provider;
@@ -200,8 +222,15 @@ $researchReport
 ## SOURCES
 ${sources.map((s) => '- ${s['title']}: ${s['snippet']}').join('\n')}
 
+## AVAILABLE IMAGES
+${images?.take(10).join('\n') ?? 'None'}
+
+## AVAILABLE VIDEOS
+${videos?.take(5).join('\n') ?? 'None'}
+
 ## TASK
 Generate 6-8 sports news articles from the research. Each article should be unique and engaging.
+Assign relevant images and videos to articles where appropriate.
 
 ## OUTPUT FORMAT
 Return a valid JSON array. Each article should have:
@@ -209,7 +238,10 @@ Return a valid JSON array. Each article should have:
 - summary: string (2-3 sentences, engaging summary)
 - content: string (full article, 3-4 paragraphs)
 - category: string (Football, Basketball, Tennis, Formula 1, MMA, Transfers, Injuries, Results)
-- imageUrl: string or null (leave null, we'll generate)
+- imageUrl: string or null (main image from available images)
+- images: string[] (additional images, max 3)
+- videoUrl: string or null (YouTube/video URL if relevant)
+- videoThumbnail: string or null
 - source: string (news source name)
 - sourceUrl: string (URL)
 - publishedAt: ISO date string
@@ -222,6 +254,8 @@ Return a valid JSON array. Each article should have:
 - Vary the importance levels
 - Use current date for publishedAt
 - Be factual based on the research
+- Assign images that match the article topic
+- Include video URLs for highlight/match related articles
 
 Return ONLY the JSON array:
 ''';
@@ -262,6 +296,8 @@ Return ONLY the JSON array:
           sourceUrl: '',
           publishedAt: DateTime.now(),
           importance: NewsImportance.normal,
+          images: images?.take(3).toList() ?? [],
+          videoUrl: videos?.isNotEmpty == true ? videos!.first : null,
         ),
       ];
     }

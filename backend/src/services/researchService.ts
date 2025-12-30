@@ -96,7 +96,10 @@ async function searchWeb(query: string, num: number = 5): Promise<any[]> {
         const response = await axios.post(
             'https://google.serper.dev/search',
             { q: query, num },
-            { headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' } }
+            { 
+                headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+                timeout: 15000 // 15 second timeout
+            }
         );
         return response.data.organic || [];
     } catch (error: any) {
@@ -113,7 +116,10 @@ async function searchImages(query: string, num: number = 5): Promise<string[]> {
         const response = await axios.post(
             'https://google.serper.dev/images',
             { q: query, num },
-            { headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' } }
+            { 
+                headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+                timeout: 15000 // 15 second timeout
+            }
         );
         return (response.data.images || []).map((img: any) => img.imageUrl).filter(Boolean);
     } catch (error) {
@@ -129,7 +135,10 @@ async function searchVideos(query: string, num: number = 3): Promise<string[]> {
         const response = await axios.post(
             'https://google.serper.dev/videos',
             { q: query, num },
-            { headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' } }
+            { 
+                headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+                timeout: 15000 // 15 second timeout
+            }
         );
         return (response.data.videos || []).map((v: any) => v.link).filter(Boolean);
     } catch (error) {

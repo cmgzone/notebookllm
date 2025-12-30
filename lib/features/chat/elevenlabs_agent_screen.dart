@@ -403,7 +403,7 @@ class _MobileAgentScreenState extends ConsumerState<_MobileAgentScreen> {
       String? finalReport;
 
       await for (final update
-          in researchService.research(query, notebookId: '')) {
+          in researchService.research(query: query, notebookId: '')) {
         if (update.status != lastStatus) {
           lastStatus = update.status;
           if (mounted) {

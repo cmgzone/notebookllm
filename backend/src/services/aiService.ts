@@ -25,6 +25,11 @@ export async function generateWithGemini(
         throw new Error('Gemini API key not configured');
     }
 
+    // Create a timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Gemini request timed out after 120s')), 120000);
+    });
+
     try {
         const geminiModel = genAI.getGenerativeModel({ model });
 
@@ -54,7 +59,12 @@ export async function generateWithGemini(
             history: history.length > 0 ? history : undefined,
         });
 
-        const result = await chat.sendMessage(convertContent(lastMessage.content));
+        // Race between the actual request and timeout
+        const result = await Promise.race([
+            chat.sendMessage(convertContent(lastMessage.content)),
+            timeoutPromise
+        ]);
+        
         return result.response.text();
     } catch (error: any) {
         console.error('Gemini error:', error);
@@ -107,6 +117,7 @@ export async function generateWithOpenRouter(
                 max_tokens: 4096,
             },
             {
+                timeout: 120000, // 2 minute timeout
                 headers: {
                     'Authorization': `Bearer ${apiKey}`,
                     'Content-Type': 'application/json',
@@ -119,6 +130,9 @@ export async function generateWithOpenRouter(
         return response.data.choices[0].message.content;
     } catch (error: any) {
         console.error('OpenRouter error:', error.response?.data || error);
+        if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+            throw new Error('OpenRouter request timed out after 120s');
+        }
         throw new Error(`OpenRouter API error: ${error.response?.data?.error?.message || error.message}`);
     }
 }

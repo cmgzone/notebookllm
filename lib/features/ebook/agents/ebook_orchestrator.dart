@@ -59,9 +59,8 @@ class EbookOrchestrator extends StateNotifier<EbookProject?> {
           bool researchComplete = false;
           final researchFuture = () async {
             await for (final update in deepResearchService.research(
-              '${project.topic} for ${project.targetAudience}',
+              query: '${project.topic} for ${project.targetAudience}',
               notebookId: project.notebookId ?? '',
-              useContextEngineering: true,
             )) {
               if (researchComplete) break;
 
@@ -79,13 +78,6 @@ class EbookOrchestrator extends StateNotifier<EbookProject?> {
                 deepResearchSummary = update.result;
                 effectiveContext
                     .add('Deep Research Summary:\n${update.result}');
-
-                // Collect web images if using web search
-                if (update.images != null &&
-                    (project.imageSource == ImageSourceType.webSearch ||
-                        project.imageSource == ImageSourceType.both)) {
-                  webSearchedImages = update.images!;
-                }
                 researchComplete = true;
                 break;
               }

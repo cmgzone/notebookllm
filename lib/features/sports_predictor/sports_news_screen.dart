@@ -603,6 +603,31 @@ class _Interactive3DNewsCardState extends State<_Interactive3DNewsCard> {
                   ),
                 ),
 
+                // Featured Image (if available)
+                if (widget.news.imageUrl != null &&
+                    widget.news.imageUrl!.isNotEmpty)
+                  ClipRRect(
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(0)),
+                    child: Image.network(
+                      widget.news.imageUrl!,
+                      height: 180,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          height: 180,
+                          color: scheme.surfaceContainerHighest,
+                          child: const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
                 // Title
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -640,6 +665,19 @@ class _Interactive3DNewsCardState extends State<_Interactive3DNewsCard> {
                       children: [
                         const Divider(),
                         const SizedBox(height: 8),
+
+                        // Video embed (if available)
+                        if (widget.news.videoUrl != null &&
+                            widget.news.videoUrl!.isNotEmpty)
+                          _VideoEmbed(
+                            videoUrl: widget.news.videoUrl!,
+                            thumbnail: widget.news.videoThumbnail,
+                          ),
+
+                        // Image gallery (if multiple images)
+                        if (widget.news.images.isNotEmpty)
+                          _ImageGallery(images: widget.news.images),
+
                         Text(
                           widget.news.content,
                           style: text.bodyMedium,
@@ -812,6 +850,233 @@ class _EmptyState extends StatelessWidget {
             label: const Text('Load News'),
           ).animate().fadeIn(delay: 600.ms).scaleXY(),
         ],
+      ),
+    );
+  }
+}
+
+/// Video embed widget with play button overlay
+class _VideoEmbed extends StatelessWidget {
+  final String videoUrl;
+  final String? thumbnail;
+
+  const _VideoEmbed({
+    required this.videoUrl,
+    this.thumbnail,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    // Extract YouTube video ID if it's a YouTube URL
+    String? youtubeId;
+    if (videoUrl.contains('youtube.com') || videoUrl.contains('youtu.be')) {
+      final uri = Uri.tryParse(videoUrl);
+      if (uri != null) {
+        if (videoUrl.contains('youtu.be')) {
+          youtubeId =
+              uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
+        } else {
+          youtubeId = uri.queryParameters['v'];
+        }
+      }
+    }
+
+    final thumbnailUrl = thumbnail ??
+        (youtubeId != null
+            ? 'https://img.youtube.com/vi/$youtubeId/hqdefault.jpg'
+            : null);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: GestureDetector(
+        onTap: () => _launchVideo(videoUrl),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Thumbnail
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: thumbnailUrl != null
+                  ? Image.network(
+                      thumbnailUrl,
+                      height: 200,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _buildPlaceholder(scheme),
+                    )
+                  : _buildPlaceholder(scheme),
+            ),
+            // Play button overlay
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                LucideIcons.play,
+                color: Colors.white,
+                size: 32,
+              ),
+            ).animate().scale(delay: 200.ms),
+            // Video label
+            Positioned(
+              bottom: 8,
+              left: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.video, color: Colors.white, size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      'Watch Video',
+                      style: TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(ColorScheme scheme) {
+    return Container(
+      height: 200,
+      width: double.infinity,
+      color: scheme.surfaceContainerHighest,
+      child: const Center(
+        child: Icon(LucideIcons.video, size: 48),
+      ),
+    );
+  }
+
+  Future<void> _launchVideo(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri != null && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+}
+
+/// Image gallery widget for multiple images
+class _ImageGallery extends StatelessWidget {
+  final List<String> images;
+
+  const _ImageGallery({required this.images});
+
+  @override
+  Widget build(BuildContext context) {
+    if (images.isEmpty) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '📸 Gallery',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 120,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: images.length,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: EdgeInsets.only(
+                    right: index < images.length - 1 ? 8 : 0,
+                  ),
+                  child: GestureDetector(
+                    onTap: () => _showFullImage(context, images[index]),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        images[index],
+                        width: 160,
+                        height: 120,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: 160,
+                          height: 120,
+                          color: scheme.surfaceContainerHighest,
+                          child: const Icon(LucideIcons.imageOff),
+                        ),
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            width: 160,
+                            height: 120,
+                            color: scheme.surfaceContainerHighest,
+                            child: const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ).animate().fadeIn(delay: Duration(milliseconds: index * 100));
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFullImage(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(LucideIcons.x, color: Colors.white),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black54,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -18,8 +18,7 @@ class OpenRouterService {
     String prompt, {
     required String model,
     double temperature = 0.7,
-    int maxTokens =
-        8192, // Increased for long outputs (will be capped by model if needed)
+    int maxTokens = 4000, // Reduced to avoid credit issues
     String? apiKey,
   }) async {
     try {
@@ -29,7 +28,11 @@ class OpenRouterService {
             'Missing or invalid OPENROUTER_API_KEY. Please set a valid key in .env or deploy it to the database.');
       }
 
-      final response = await http.post(
+      debugPrint(
+          '[OpenRouterService] generateContent starting for model: $model');
+
+      final response = await http
+          .post(
         Uri.parse('$baseUrl/chat/completions'),
         headers: {
           'Content-Type': 'application/json',
@@ -45,11 +48,17 @@ class OpenRouterService {
           'temperature': temperature,
           'max_tokens': maxTokens,
         }),
-      );
+      )
+          .timeout(const Duration(seconds: 60), onTimeout: () {
+        debugPrint('[OpenRouterService] HTTP request timed out after 60s');
+        throw Exception('OpenRouter HTTP request timed out');
+      });
+
+      debugPrint('[OpenRouterService] Response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        debugPrint('[OpenRouterService] Response data: ${response.body}');
+        debugPrint('[OpenRouterService] Response received, parsing...');
 
         final choices = data['choices'] as List<dynamic>?;
 
@@ -87,7 +96,7 @@ class OpenRouterService {
     String prompt, {
     required String model,
     double temperature = 0.7,
-    int maxTokens = 8192, // Increased for long outputs
+    int maxTokens = 4000, // Reduced to avoid credit issues
     String? apiKey,
   }) async {
     final key = apiKey ?? this.apiKey;
@@ -95,39 +104,100 @@ class OpenRouterService {
       throw Exception('Missing or invalid OPENROUTER_API_KEY');
     }
 
-    final request = http.Request(
-      'POST',
-      Uri.parse('$baseUrl/chat/completions'),
-    );
+    debugPrint('[OpenRouterService] Starting stream request to model: $model');
+    final client = http.Client();
 
-    request.headers.addAll({
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $key',
-      'HTTP-Referer': 'https://notebook-llm.app',
-      'X-Title': 'Notebook LLM',
-    });
+    try {
+      final request = http.Request(
+        'POST',
+        Uri.parse('$baseUrl/chat/completions'),
+      );
 
-    request.body = jsonEncode({
-      'model': model,
-      'messages': [
-        {'role': 'user', 'content': prompt}
-      ],
-      'temperature': temperature,
-      'max_tokens': maxTokens,
-      'stream': true,
-    });
+      request.headers.addAll({
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $key',
+        'HTTP-Referer': 'https://notebook-llm.app',
+        'X-Title': 'Notebook LLM',
+      });
 
-    final streamedResponse = await request.send();
+      request.body = jsonEncode({
+        'model': model,
+        'messages': [
+          {'role': 'user', 'content': prompt}
+        ],
+        'temperature': temperature,
+        'max_tokens': maxTokens,
+        'stream': true,
+      });
 
-    return streamedResponse.stream
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .where((line) => line.startsWith('data: ') && line != 'data: [DONE]')
-        .map((line) {
-      final jsonStr = line.substring(6);
-      final data = jsonDecode(jsonStr);
-      return data['choices'][0]['delta']['content'] as String? ?? '';
-    }).where((content) => content.isNotEmpty);
+      debugPrint('[OpenRouterService] Sending request...');
+      final streamedResponse = await client.send(request).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          debugPrint('[OpenRouterService] Connection timeout after 30s');
+          client.close();
+          throw Exception(
+              'OpenRouter connection timeout - server took too long to respond');
+        },
+      );
+
+      debugPrint(
+          '[OpenRouterService] Response status: ${streamedResponse.statusCode}');
+
+      if (streamedResponse.statusCode != 200) {
+        final body = await streamedResponse.stream.bytesToString().timeout(
+              const Duration(seconds: 10),
+              onTimeout: () => 'Timeout reading error response',
+            );
+        client.close();
+        throw Exception(
+            'OpenRouter API error (${streamedResponse.statusCode}): $body');
+      }
+
+      return streamedResponse.stream
+          .timeout(
+            const Duration(seconds: 45),
+            onTimeout: (sink) {
+              debugPrint(
+                  '[OpenRouterService] Stream timeout - no data for 45s');
+              client.close();
+              sink.close();
+            },
+          )
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .where((line) {
+            // Check for stream end
+            if (line == 'data: [DONE]') {
+              debugPrint('[OpenRouterService] Stream completed normally');
+              return false;
+            }
+            return line.startsWith('data: ');
+          })
+          .map((line) {
+            try {
+              final jsonStr = line.substring(6);
+              if (jsonStr.trim().isEmpty) return '';
+              final data = jsonDecode(jsonStr);
+              final content =
+                  data['choices']?[0]?['delta']?['content'] as String? ?? '';
+              return content;
+            } catch (e) {
+              debugPrint(
+                  '[OpenRouterService] Stream parse error: $e, line: $line');
+              return '';
+            }
+          })
+          .where((content) => content.isNotEmpty)
+          .handleError((error) {
+            debugPrint('[OpenRouterService] Stream error: $error');
+            client.close();
+          }, test: (e) => true);
+    } catch (e) {
+      debugPrint('[OpenRouterService] generateStream error: $e');
+      client.close();
+      rethrow;
+    }
   }
 
   Future<String> generateWithImage(
@@ -135,7 +205,7 @@ class OpenRouterService {
     Uint8List imageBytes, {
     required String model,
     double temperature = 0.7,
-    int maxTokens = 8192,
+    int maxTokens = 4000, // Reduced to avoid credit issues
     String? apiKey,
   }) async {
     final key = apiKey ?? this.apiKey;

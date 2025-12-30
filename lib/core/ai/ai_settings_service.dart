@@ -89,6 +89,60 @@ class AISettingsService {
     await prefs.setString(_modelKey, model);
   }
 
+  /// Get the context window for a specific model
+  /// Returns a safe max_tokens value (typically 1/4 of context window, capped)
+  static Future<int> getMaxTokensForModel(String modelId, Ref ref) async {
+    try {
+      final service = ref.read(aiModelServiceProvider);
+      final models = await service.listModels();
+      final model = models.where((m) => m.modelId == modelId).firstOrNull;
+
+      if (model != null && model.contextWindow > 0) {
+        // Use 1/4 of context window for output, capped at reasonable limits
+        final contextWindow = model.contextWindow;
+        int maxTokens = (contextWindow / 4).floor();
+
+        // Cap based on provider to avoid credit issues
+        if (model.provider == 'openrouter' ||
+            model.provider == 'openai' ||
+            model.provider == 'anthropic') {
+          // OpenRouter: cap at 4000 to avoid credit issues
+          maxTokens = maxTokens.clamp(1000, 4000);
+        } else {
+          // Gemini: can handle higher limits
+          maxTokens = maxTokens.clamp(1000, 8192);
+        }
+
+        return maxTokens;
+      }
+    } catch (e) {
+      // Fallback on error
+    }
+
+    // Default fallback
+    return 4000;
+  }
+
+  /// Get context window for current model
+  static Future<int> getCurrentModelContextWindow(Ref ref) async {
+    final modelId = await getModel();
+    if (modelId == null || modelId.isEmpty) return 32768;
+
+    try {
+      final service = ref.read(aiModelServiceProvider);
+      final models = await service.listModels();
+      final model = models.where((m) => m.modelId == modelId).firstOrNull;
+
+      if (model != null && model.contextWindow > 0) {
+        return model.contextWindow;
+      }
+    } catch (e) {
+      // Fallback
+    }
+
+    return 32768; // Default fallback
+  }
+
   /// Check if a model supports vision (image input)
   static bool isVisionCapable(String modelId) {
     final lower = modelId.toLowerCase();

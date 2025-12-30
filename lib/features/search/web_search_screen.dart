@@ -23,10 +23,9 @@ class _WebSearchScreenState extends ConsumerState<WebSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
   bool _isDeepResearch = false;
-  final bool _useContextEngineering = false;
   bool _isResearching = false;
-  List<DeepResearchUpdate> _researchUpdates = [];
-  DeepResearchUpdate? _finalResult;
+  List<ResearchUpdate> _researchUpdates = [];
+  ResearchUpdate? _finalResult;
   SearchType _searchType = SearchType.web;
 
   // New feature states
@@ -102,9 +101,8 @@ class _WebSearchScreenState extends ConsumerState<WebSearchScreen> {
     ref
         .read(deepResearchServiceProvider)
         .research(
-          query,
+          query: query,
           notebookId: '',
-          useContextEngineering: _useContextEngineering,
           depth: _selectedDepth,
           template: _selectedTemplate,
         )
@@ -138,8 +136,8 @@ class _WebSearchScreenState extends ConsumerState<WebSearchScreen> {
             _finalResult = update;
           }
 
-          // Mark complete when not streaming anymore
-          if (update.progress >= 1.0 && !update.isStreaming) {
+          // Mark complete when done
+          if (update.isComplete) {
             _finalResult = update;
             _isResearching = false;
           }
@@ -987,66 +985,6 @@ $content''',
             const SizedBox(height: 24),
             const Divider(),
             const SizedBox(height: 8),
-            if (_researchUpdates.isNotEmpty &&
-                _researchUpdates.last.images != null &&
-                _researchUpdates.last.images!.isNotEmpty) ...[
-              Text('Visual Findings', style: text.titleSmall),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 100,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _researchUpdates.last.images!.length,
-                  itemBuilder: (context, index) {
-                    final imageUrl = _researchUpdates.last.images![index];
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          imageUrl,
-                          width: 100,
-                          height: 100,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                            width: 100,
-                            height: 100,
-                            color: scheme.surfaceContainerHighest,
-                            child: const Icon(Icons.broken_image),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-            if (_researchUpdates.isNotEmpty &&
-                _researchUpdates.last.videos != null &&
-                _researchUpdates.last.videos!.isNotEmpty) ...[
-              Text('Video Findings', style: text.titleSmall),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 120,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _researchUpdates.last.videos!.length,
-                  itemBuilder: (context, index) {
-                    final videoUrl = _researchUpdates.last.videos![index];
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: SizedBox(
-                        width: 160,
-                        child: _buildVideoCard(videoUrl, isPreview: true),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
             Text('Research Log', style: text.titleSmall),
             const SizedBox(height: 8),
           ],
@@ -1113,7 +1051,7 @@ $content''',
     );
   }
 
-  void _addReportAsSource(DeepResearchUpdate result) async {
+  void _addReportAsSource(ResearchUpdate result) async {
     await ref.read(sourceProvider.notifier).addSource(
           title: 'Research: ${_searchController.text}',
           type: 'report',

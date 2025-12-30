@@ -65,15 +65,16 @@ class SportsPredictorNotifier extends StateNotifier<SportsPredictorState> {
     state = state.copyWith(
       isLoading: true,
       error: null,
-      currentStatus: 'Starting deep research...',
+      currentStatus: 'Starting research...',
       progress: 0.1,
       researchSources: [],
     );
 
+    final sources = <PredictionSource>[];
+    String researchReport = '';
+
     try {
       final deepResearch = ref.read(deepResearchServiceProvider);
-
-      // Build search query
       final query = _buildSearchQuery(sport, league, specificMatch);
 
       state = state.copyWith(
@@ -81,96 +82,112 @@ class SportsPredictorNotifier extends StateNotifier<SportsPredictorState> {
         progress: 0.2,
       );
 
-      // Use deep research to gather information
-      final sources = <PredictionSource>[];
-      String researchReport = '';
-      bool researchCompleted = false;
-
+      // Quick research with 30 second timeout - don't block on this
       try {
-        await for (final update in deepResearch.research(
-          query,
+        await for (final update in deepResearch
+            .research(
+          query: query,
           notebookId: '',
-          depth: ResearchDepth.standard,
+          depth: ResearchDepth.quick,
           template: ResearchTemplate.general,
-        )) {
+        )
+            .timeout(const Duration(seconds: 30), onTimeout: (sink) {
+          debugPrint(
+              '[SportsPredictor] Research timed out - using sample data');
+          sink.close();
+        })) {
           state = state.copyWith(
             currentStatus: update.status,
-            progress: update.progress * 0.6, // 60% for research
+            progress: 0.2 + (update.progress * 0.4),
             researchSources: update.sources?.map((s) => s.title).toList() ?? [],
           );
 
-          if (update.result != null) {
+          if (update.result != null && update.result!.isNotEmpty) {
             researchReport = update.result!;
-            researchCompleted = true;
             sources.addAll(update.sources?.map((s) => PredictionSource(
                       title: s.title,
                       url: s.url,
                       snippet: s.snippet ?? '',
                     )) ??
                 []);
+            break;
           }
         }
       } catch (researchError) {
         debugPrint('[SportsPredictor] Research error: $researchError');
-        // Continue with sample data if research fails
       }
+    } catch (e) {
+      debugPrint('[SportsPredictor] Research setup error: $e');
+    }
 
-      state = state.copyWith(
-        currentStatus: 'Analyzing data and generating predictions...',
-        progress: 0.7,
-      );
+    // Always continue to generate predictions (sample or from research)
+    state = state.copyWith(
+      currentStatus: 'Generating predictions...',
+      progress: 0.7,
+    );
 
-      // Generate predictions from research (or use sample data if research failed)
-      List<SportsPrediction> predictions;
-      if (researchCompleted && researchReport.isNotEmpty) {
+    List<SportsPrediction> predictions;
+
+    if (researchReport.isNotEmpty) {
+      try {
         predictions = await _generatePredictionsFromResearch(
           sport: sport,
           league: league,
           researchReport: researchReport,
           sources: sources,
-        );
-      } else {
-        // Use sample predictions if research didn't complete
-        debugPrint(
-            '[SportsPredictor] Using sample predictions (research incomplete)');
+        ).timeout(const Duration(seconds: 30));
+
+        if (predictions.isEmpty) {
+          debugPrint('[SportsPredictor] AI returned empty, using sample data');
+          predictions = _getSamplePredictions(sport, league, sources);
+        }
+      } catch (e) {
+        debugPrint('[SportsPredictor] AI prediction failed: $e');
         predictions = _getSamplePredictions(sport, league, sources);
       }
-
-      state = state.copyWith(
-        currentStatus: 'Fetching team logos...',
-        progress: 0.9,
-      );
-
-      // Fetch team logos
-      predictions = await _fetchTeamLogos(predictions, sport.displayName);
-
-      state = state.copyWith(
-        predictions: predictions,
-        isLoading: false,
-        currentStatus: 'Predictions ready!',
-        progress: 1.0,
-      );
-    } catch (e) {
-      debugPrint('[SportsPredictor] Error: $e');
-      state = state.copyWith(
-        isLoading: false,
-        error: e.toString(),
-        currentStatus: null,
-      );
+    } else {
+      debugPrint(
+          '[SportsPredictor] No research data, using sample predictions');
+      predictions = _getSamplePredictions(sport, league, sources);
     }
+
+    state = state.copyWith(
+      currentStatus: 'Fetching team logos...',
+      progress: 0.9,
+    );
+
+    // Fetch logos with short timeout
+    try {
+      predictions = await _fetchTeamLogos(predictions, sport.displayName)
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      debugPrint('[SportsPredictor] Logo fetch failed: $e');
+    }
+
+    // Final state - always show predictions
+    state = state.copyWith(
+      predictions: predictions,
+      isLoading: false,
+      currentStatus: 'Predictions ready!',
+      progress: 1.0,
+    );
   }
 
   String _buildSearchQuery(
       SportType sport, String? league, String? specificMatch) {
     final buffer = StringBuffer();
+    final today = DateTime.now();
+    final dateStr =
+        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
     buffer.write('${sport.displayName} predictions odds betting analysis ');
 
     if (specificMatch != null && specificMatch.isNotEmpty) {
       buffer.write('$specificMatch match prediction ');
     } else if (league != null && league.isNotEmpty) {
-      buffer.write('$league upcoming matches predictions ');
+      buffer.write('$league upcoming matches predictions $dateStr ');
     } else {
-      buffer.write('upcoming matches this week predictions ');
+      buffer.write('upcoming matches this week predictions $dateStr ');
     }
 
     buffer.write('team form statistics head to head recent results');
@@ -211,6 +228,10 @@ class SportsPredictorNotifier extends StateNotifier<SportsPredictorState> {
     final prompt = '''
 You are a sports analyst AI. Based on the following research about ${sport.displayName}${league != null ? ' ($league)' : ''}, extract and analyze upcoming matches to generate predictions.
 
+## IMPORTANT: CURRENT DATE
+Today's date is: ${DateTime.now().toIso8601String().split('T')[0]}
+Only include matches that are scheduled AFTER today. Do not include past matches.
+
 ## RESEARCH DATA
 $researchReport
 
@@ -222,7 +243,7 @@ Return a valid JSON array of predictions. Each prediction should have:
 - homeTeam: string
 - awayTeam: string  
 - league: string
-- matchDate: ISO date string (estimate if not exact)
+- matchDate: ISO date string (MUST be after ${DateTime.now().toIso8601String().split('T')[0]})
 - odds: { homeWin: number, draw: number, awayWin: number, over25?: number, under25?: number, btts?: number }
 - analysis: string (2-3 sentences explaining the prediction)
 - keyFactors: string[] (3-5 key factors)
@@ -232,7 +253,8 @@ Return a valid JSON array of predictions. Each prediction should have:
 - Odds should be in decimal format (e.g., 1.85, 2.10, 3.50)
 - Lower odds = more likely outcome
 - Be realistic with confidence scores
-- If no specific matches found, create predictions based on top teams mentioned
+- Match dates MUST be in the future (after ${DateTime.now().toIso8601String().split('T')[0]})
+- If no specific matches found, create predictions based on top teams mentioned with dates in the next 7 days
 
 Return ONLY the JSON array, no other text:
 ''';

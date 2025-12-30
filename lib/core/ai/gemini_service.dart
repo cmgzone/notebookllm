@@ -21,6 +21,8 @@ class GeminiService {
             'Missing GEMINI_API_KEY. Set it in .env or deploy to database.');
       }
 
+      debugPrint('[GeminiService] generateContent starting for model: $model');
+
       final genModel = GenerativeModel(
         model: model,
         apiKey: key,
@@ -41,9 +43,16 @@ class GeminiService {
       );
 
       final content = [Content.text(prompt)];
-      final response = await genModel.generateContent(content);
+      final response = await genModel.generateContent(content).timeout(
+        const Duration(seconds: 60),
+        onTimeout: () {
+          debugPrint('[GeminiService] generateContent timed out after 60s');
+          throw Exception('Gemini request timed out after 60s');
+        },
+      );
 
-      debugPrint('[GeminiService] Response: ${response.text}');
+      debugPrint(
+          '[GeminiService] Response received: ${response.text?.length ?? 0} chars');
 
       if (response.text == null || response.text!.isEmpty) {
         final reason = response.candidates.firstOrNull?.finishReason;
@@ -103,27 +112,82 @@ Please provide a comprehensive and accurate response based on the given context.
   }) async* {
     final key = apiKey ?? this.apiKey;
     if (key.isEmpty) {
-      throw Exception('Missing GEMINI_API_KEY');
+      throw Exception(
+          'Missing GEMINI_API_KEY. Set it in .env or deploy to database.');
     }
 
-    final genModel = GenerativeModel(
-      model: model,
-      apiKey: key,
-      generationConfig: GenerationConfig(
-        temperature: temperature,
-        maxOutputTokens: maxTokens,
-        topP: GeminiConfig.defaultTopP,
-        topK: GeminiConfig.defaultTopK,
-      ),
-    );
+    debugPrint('[GeminiService] Starting stream request to model: $model');
 
-    final content = [Content.text(prompt)];
-    final response = genModel.generateContentStream(content);
+    try {
+      final genModel = GenerativeModel(
+        model: model,
+        apiKey: key,
+        generationConfig: GenerationConfig(
+          temperature: temperature,
+          maxOutputTokens: maxTokens,
+          topP: GeminiConfig.defaultTopP,
+          topK: GeminiConfig.defaultTopK,
+        ),
+        safetySettings: [
+          SafetySetting(HarmCategory.harassment, HarmBlockThreshold.medium),
+          SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.medium),
+          SafetySetting(
+              HarmCategory.sexuallyExplicit, HarmBlockThreshold.medium),
+          SafetySetting(
+              HarmCategory.dangerousContent, HarmBlockThreshold.medium),
+        ],
+      );
 
-    await for (final chunk in response) {
-      if (chunk.text != null) {
-        yield chunk.text!;
+      final content = [Content.text(prompt)];
+      final response = genModel.generateContentStream(content);
+
+      bool hasContent = false;
+      final startTime = DateTime.now();
+      const maxDuration = Duration(minutes: 4);
+
+      // Add timeout to the stream iteration
+      await for (final chunk in response.timeout(
+        const Duration(seconds: 45),
+        onTimeout: (sink) {
+          debugPrint('[GeminiService] Stream timeout - no data for 45s');
+          sink.close();
+        },
+      )) {
+        // Check overall duration
+        if (DateTime.now().difference(startTime) > maxDuration) {
+          debugPrint('[GeminiService] Stream exceeded max duration');
+          break;
+        }
+
+        if (chunk.text != null && chunk.text!.isNotEmpty) {
+          hasContent = true;
+          yield chunk.text!;
+        }
       }
+
+      if (!hasContent) {
+        throw Exception(
+            'Empty response from Gemini streaming. The model may have blocked the content.');
+      }
+
+      debugPrint('[GeminiService] Stream completed successfully');
+    } on GenerativeAIException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('quota') || msg.contains('rate')) {
+        throw Exception(
+            'API quota exceeded. Try: 1) Wait a minute, 2) Use a different model, 3) Check billing at console.cloud.google.com');
+      }
+      if (msg.contains('not found') || msg.contains('invalid')) {
+        throw Exception(
+            'Model "$model" not available. Try a different model instead.');
+      }
+      throw Exception('Gemini streaming error: ${e.message}');
+    } catch (e) {
+      debugPrint('[GeminiService] Stream error: $e');
+      if (e.toString().contains('Empty response')) {
+        rethrow;
+      }
+      throw Exception('Failed to stream content: $e');
     }
   }
 

@@ -78,6 +78,10 @@ class ContextEngineeringService {
     final provider = await _getSelectedProvider();
     final model = await _getSelectedModel();
 
+    // Get dynamic max_tokens based on model's context window if not specified
+    final effectiveMaxTokens =
+        maxTokens ?? await AISettingsService.getMaxTokensForModel(model, ref);
+
     try {
       if (provider == 'openrouter') {
         final apiKey = await _getOpenRouterKey();
@@ -86,7 +90,7 @@ class ContextEngineeringService {
               prompt,
               model: model,
               apiKey: apiKey,
-              maxTokens: maxTokens ?? 8192,
+              maxTokens: effectiveMaxTokens,
             )
             .timeout(const Duration(seconds: 60));
       } else {
@@ -96,7 +100,7 @@ class ContextEngineeringService {
               prompt,
               model: model,
               apiKey: apiKey,
-              maxTokens: maxTokens ?? 16384,
+              maxTokens: effectiveMaxTokens,
             )
             .timeout(const Duration(seconds: 60));
       }
