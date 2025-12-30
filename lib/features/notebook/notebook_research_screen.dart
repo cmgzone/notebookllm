@@ -4,7 +4,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import '../../core/ai/deep_research_service.dart';
 import '../sources/source_provider.dart';
 import '../subscription/services/credit_manager.dart';
@@ -590,13 +589,11 @@ class _NotebookResearchScreenState
   }
 
   void _showVideoPlayer(String videoId) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: const EdgeInsets.all(16),
-        child: _InlineYouTubePlayer(videoId: videoId),
-      ),
+    // Open YouTube video in app or browser
+    final youtubeUrl = 'https://www.youtube.com/watch?v=$videoId';
+    launchUrl(
+      Uri.parse(youtubeUrl),
+      mode: LaunchMode.externalApplication,
     );
   }
 }
@@ -695,66 +692,6 @@ class _VideoCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _InlineYouTubePlayer extends StatefulWidget {
-  final String videoId;
-
-  const _InlineYouTubePlayer({required this.videoId});
-
-  @override
-  State<_InlineYouTubePlayer> createState() => _InlineYouTubePlayerState();
-}
-
-class _InlineYouTubePlayerState extends State<_InlineYouTubePlayer> {
-  late YoutubePlayerController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = YoutubePlayerController(
-      initialVideoId: widget.videoId,
-      flags: const YoutubePlayerFlags(
-        autoPlay: true,
-        mute: false,
-        enableCaption: true,
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Close button
-        Align(
-          alignment: Alignment.topRight,
-          child: IconButton(
-            icon: const Icon(Icons.close, color: Colors.white, size: 28),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        // YouTube Player
-        YoutubePlayer(
-          controller: _controller,
-          showVideoProgressIndicator: true,
-          progressIndicatorColor: Colors.red,
-          progressColors: const ProgressBarColors(
-            playedColor: Colors.red,
-            handleColor: Colors.redAccent,
-          ),
-        ),
-        const SizedBox(height: 16),
-      ],
     );
   }
 }
