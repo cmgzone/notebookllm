@@ -271,7 +271,8 @@ Return only the queries, one per line, no bullets or numbers.''';
 
   /// Build report prompt
   String _buildReportPrompt(
-      String query, List<ResearchSource> sources, ResearchTemplate template) {
+      String query, List<ResearchSource> sources, ResearchTemplate template,
+      {List<String>? images}) {
     final sourcesText = sources.take(10).map((s) => '''
 Source: ${s.title} [${s.credibility.name.toUpperCase()}]
 URL: ${s.url}
@@ -295,16 +296,117 @@ Content: ${s.content.length > 2000 ? s.content.substring(0, 2000) : s.content}
         'Structure: Executive Summary, Introduction, Analysis, Key Findings, Conclusion, Sources.',
     };
 
+    // Build image references for the AI to use
+    String imageInstructions = '';
+    if (images != null && images.isNotEmpty) {
+      final validImages = images
+          .where((url) =>
+              url.startsWith('http') &&
+              (url.contains('.jpg') ||
+                  url.contains('.jpeg') ||
+                  url.contains('.png') ||
+                  url.contains('.gif') ||
+                  url.contains('.webp') ||
+                  url.contains('image')))
+          .take(5)
+          .toList();
+
+      if (validImages.isNotEmpty) {
+        imageInstructions = '''
+
+IMPORTANT: Include relevant images in your report using markdown image syntax.
+Available images (use these URLs directly in your report where appropriate):
+${validImages.asMap().entries.map((e) => '- Image ${e.key + 1}: ${e.value}').join('\n')}
+
+Insert images at relevant sections using: ![Description](URL)
+Place at least 2-3 images throughout the report to make it visually engaging.''';
+      }
+    }
+
     return '''Create a comprehensive research report on: "$query"
 
 $templateGuide
 
-Use markdown formatting. Cite sources with [Title](URL). Be thorough and informative.
+Use markdown formatting. Cite sources with [Title](URL). Be thorough and informative.$imageInstructions
 
 SOURCES:
 $sourcesText
 
 Write the complete report:''';
+  }
+
+  /// Enhance report with images if AI didn't include them
+  String _enhanceReportWithImages(String report, List<String> images) {
+    if (images.isEmpty) return report;
+
+    // Check if report already has images
+    if (report.contains('![')) return report;
+
+    // Filter valid image URLs
+    final validImages = images
+        .where((url) =>
+            url.startsWith('http') &&
+            (url.contains('.jpg') ||
+                url.contains('.jpeg') ||
+                url.contains('.png') ||
+                url.contains('.gif') ||
+                url.contains('.webp') ||
+                url.contains('image')))
+        .take(4)
+        .toList();
+
+    if (validImages.isEmpty) return report;
+
+    // Find good insertion points (after headers or paragraphs)
+    final lines = report.split('\n');
+    final result = <String>[];
+    int imageIndex = 0;
+    int lineCount = 0;
+
+    for (int i = 0; i < lines.length; i++) {
+      result.add(lines[i]);
+      lineCount++;
+
+      // Insert image after major sections (## headers) or every ~15 lines
+      final isHeader = lines[i].startsWith('## ');
+      final isGoodBreak = lineCount >= 15 && lines[i].isEmpty;
+
+      if (imageIndex < validImages.length && (isHeader || isGoodBreak)) {
+        // Add image after the next non-empty line following a header
+        if (isHeader && i + 1 < lines.length) {
+          continue; // Wait for content after header
+        }
+        result.add('');
+        result.add(
+            '![Research Image ${imageIndex + 1}](${validImages[imageIndex]})');
+        result.add('');
+        imageIndex++;
+        lineCount = 0;
+      }
+    }
+
+    // If we still have images and didn't insert any, add them at the end before sources
+    if (imageIndex == 0 && validImages.isNotEmpty) {
+      // Find "Sources" or "References" section
+      int insertIndex = result.length;
+      for (int i = result.length - 1; i >= 0; i--) {
+        if (result[i].toLowerCase().contains('## source') ||
+            result[i].toLowerCase().contains('## reference')) {
+          insertIndex = i;
+          break;
+        }
+      }
+
+      // Insert images before sources section
+      final imagesToAdd = <String>['', '## Visual References', ''];
+      for (int j = 0; j < validImages.length && j < 3; j++) {
+        imagesToAdd.add('![Research Image ${j + 1}](${validImages[j]})');
+        imagesToAdd.add('');
+      }
+      result.insertAll(insertIndex, imagesToAdd);
+    }
+
+    return result.join('\n');
   }
 
   /// Main research method - simple and reliable
@@ -449,14 +551,18 @@ Write the complete report:''';
 
       // Step 3: Generate report
       yield ResearchUpdate(
-          status: 'Writing report...',
+          status: 'Writing report with images...',
           progress: 0.75,
           sources: sources,
           images: images,
           videos: videos);
 
-      final prompt = _buildReportPrompt(query, sources, template);
-      final report = await _generateAI(prompt);
+      final prompt =
+          _buildReportPrompt(query, sources, template, images: images);
+      var report = await _generateAI(prompt);
+
+      // Enhance report with images if AI didn't include them
+      report = _enhanceReportWithImages(report, images);
 
       if (report.isEmpty) {
         yield ResearchUpdate(
