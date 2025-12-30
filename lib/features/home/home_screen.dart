@@ -172,9 +172,9 @@ class HomeScreen extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/voice-mode'),
-        icon: const Icon(Icons.mic),
-        label: const Text('Voice Mode'),
+        onPressed: () => context.push('/chat'),
+        icon: const Icon(Icons.chat),
+        label: const Text('AI Chat'),
         backgroundColor: scheme.primary,
         foregroundColor: scheme.onPrimary,
       ).animate().scale(delay: 500.ms),
@@ -312,22 +312,6 @@ class _AppDrawer extends ConsumerWidget {
                       const Divider(height: 32),
                       const _DrawerSection(title: 'Tools'),
                       _DrawerItem(
-                        icon: LucideIcons.mic,
-                        label: 'Voice Mode',
-                        onTap: () {
-                          Navigator.pop(context);
-                          context.push('/voice-mode');
-                        },
-                      ),
-                      _DrawerItem(
-                        icon: LucideIcons.users,
-                        label: 'Meeting Mode',
-                        onTap: () {
-                          Navigator.pop(context);
-                          context.push('/meeting-mode');
-                        },
-                      ),
-                      _DrawerItem(
                         icon: LucideIcons.search,
                         label: 'Web Search',
                         onTap: () {
@@ -341,14 +325,6 @@ class _AppDrawer extends ConsumerWidget {
                         onTap: () {
                           Navigator.pop(context);
                           context.push('/research');
-                        },
-                      ),
-                      _DrawerItem(
-                        icon: LucideIcons.trophy,
-                        label: 'Sports Hub',
-                        onTap: () {
-                          Navigator.pop(context);
-                          context.push('/sports-hub');
                         },
                       ),
                       _DrawerItem(
