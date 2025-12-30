@@ -19,6 +19,7 @@ import '../features/settings/privacy_policy_screen.dart';
 import '../features/settings/migrate_agent_id_screen.dart';
 import '../features/notebook/notebook_detail_screen.dart';
 import '../features/notebook/notebook_chat_screen.dart';
+import '../features/notebook/notebook_research_screen.dart';
 import '../features/chat/context_profile_screen.dart';
 import '../ui/app_scaffold.dart';
 import '../features/auth/custom_login_screen.dart';
@@ -188,6 +189,16 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
               final id = state.pathParameters['id'] ?? '';
               return buildTransitionPage(
                 child: StudioScreen(notebookId: id),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/notebook/:id/research',
+            name: 'notebook-research',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return buildTransitionPage(
+                child: NotebookResearchScreen(notebookId: id),
               );
             },
           ),

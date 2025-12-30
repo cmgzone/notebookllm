@@ -153,7 +153,7 @@ class NotebookDetailScreen extends ConsumerWidget {
                     icon: Icons.search,
                     label: 'Research',
                     color: const Color(0xFF0EA5E9),
-                    onTap: () => context.push('/search'),
+                    onTap: () => context.push('/notebook/$notebookId/research'),
                   ),
                   const SizedBox(width: 16),
                   _QuickActionItem(
