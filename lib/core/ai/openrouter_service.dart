@@ -131,39 +131,19 @@ class OpenRouterService {
       });
 
       debugPrint('[OpenRouterService] Sending request...');
-      final streamedResponse = await client.send(request).timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          debugPrint('[OpenRouterService] Connection timeout after 30s');
-          client.close();
-          throw Exception(
-              'OpenRouter connection timeout - server took too long to respond');
-        },
-      );
+      final streamedResponse = await client.send(request);
 
       debugPrint(
           '[OpenRouterService] Response status: ${streamedResponse.statusCode}');
 
       if (streamedResponse.statusCode != 200) {
-        final body = await streamedResponse.stream.bytesToString().timeout(
-              const Duration(seconds: 10),
-              onTimeout: () => 'Timeout reading error response',
-            );
+        final body = await streamedResponse.stream.bytesToString();
         client.close();
         throw Exception(
             'OpenRouter API error (${streamedResponse.statusCode}): $body');
       }
 
       return streamedResponse.stream
-          .timeout(
-            const Duration(seconds: 45),
-            onTimeout: (sink) {
-              debugPrint(
-                  '[OpenRouterService] Stream timeout - no data for 45s');
-              client.close();
-              sink.close();
-            },
-          )
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .where((line) {
