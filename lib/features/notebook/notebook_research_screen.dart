@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/ai/deep_research_service.dart';
 import '../sources/source_provider.dart';
 import '../subscription/services/credit_manager.dart';
@@ -589,11 +590,88 @@ class _NotebookResearchScreenState
   }
 
   void _showVideoPlayer(String videoId) {
-    // Open YouTube video in app or browser
-    final youtubeUrl = 'https://www.youtube.com/watch?v=$videoId';
-    launchUrl(
-      Uri.parse(youtubeUrl),
-      mode: LaunchMode.externalApplication,
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(16),
+        child: _YouTubeWebViewPlayer(videoId: videoId),
+      ),
+    );
+  }
+}
+
+class _YouTubeWebViewPlayer extends StatefulWidget {
+  final String videoId;
+
+  const _YouTubeWebViewPlayer({required this.videoId});
+
+  @override
+  State<_YouTubeWebViewPlayer> createState() => _YouTubeWebViewPlayerState();
+}
+
+class _YouTubeWebViewPlayerState extends State<_YouTubeWebViewPlayer> {
+  late final WebViewController _controller;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (url) {
+            setState(() => _isLoading = false);
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(
+        'https://www.youtube.com/embed/${widget.videoId}?autoplay=1&rel=0',
+      ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Header with close button
+        Container(
+          color: Colors.black,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'YouTube Video',
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        ),
+        // Video player
+        AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Stack(
+            children: [
+              WebViewWidget(controller: _controller),
+              if (_isLoading)
+                Container(
+                  color: Colors.black,
+                  child: const Center(
+                    child: CircularProgressIndicator(color: Colors.red),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
