@@ -14,7 +14,6 @@ import '../features/studio/artifact_viewer_screen.dart';
 import '../features/studio/artifact.dart';
 import '../features/search/web_search_screen.dart';
 import '../features/studio/visual_studio_screen.dart';
-import '../features/research/deep_research_screen.dart';
 import '../features/settings/ai_model_settings_screen.dart';
 import '../features/settings/privacy_policy_screen.dart';
 import '../features/settings/migrate_agent_id_screen.dart';
@@ -141,12 +140,6 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             name: 'search',
             pageBuilder: (context, state) =>
                 buildTransitionPage(child: const WebSearchScreen()),
-          ),
-          GoRoute(
-            path: '/research',
-            name: 'research',
-            pageBuilder: (context, state) =>
-                buildTransitionPage(child: const DeepResearchScreen()),
           ),
           GoRoute(
             path: '/settings',

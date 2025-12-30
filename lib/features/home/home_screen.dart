@@ -313,18 +313,10 @@ class _AppDrawer extends ConsumerWidget {
                       const _DrawerSection(title: 'Tools'),
                       _DrawerItem(
                         icon: LucideIcons.search,
-                        label: 'Web Search',
+                        label: 'Search & Research',
                         onTap: () {
                           Navigator.pop(context);
                           context.push('/search');
-                        },
-                      ),
-                      _DrawerItem(
-                        icon: LucideIcons.microscope,
-                        label: 'Deep Research',
-                        onTap: () {
-                          Navigator.pop(context);
-                          context.push('/research');
                         },
                       ),
                       _DrawerItem(
