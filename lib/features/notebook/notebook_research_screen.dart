@@ -415,6 +415,7 @@ class _NotebookResearchScreenState
                   }
                 },
                 imageBuilder: (uri, title, alt) {
+                  // ignore: deprecated_member_use
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     child: ClipRRect(
