@@ -1,7 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/sports_models.dart';
 import '../../../core/api/api_service.dart';
+import '../../../core/search/serper_service.dart';
+import '../../../core/ai/ai_settings_service.dart';
+import '../../../core/ai/openrouter_service.dart';
+import '../../../core/ai/gemini_service.dart';
+import '../../../core/security/global_credentials_service.dart';
 
 // ============ LIVE SCORES PROVIDER ============
 class LiveScoresState {
@@ -46,14 +53,15 @@ class LiveScoresState {
 }
 
 class LiveScoresNotifier extends StateNotifier<LiveScoresState> {
+  final Ref _ref;
   final ApiService _api;
   Timer? _refreshTimer;
 
-  LiveScoresNotifier(this._api) : super(LiveScoresState());
+  LiveScoresNotifier(this._ref, this._api) : super(LiveScoresState());
 
   void startAutoRefresh() {
     _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+    _refreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       if (state.matches.any((m) => m.isLive)) {
         fetchLiveScores();
       }
@@ -71,73 +79,191 @@ class LiveScoresNotifier extends StateNotifier<LiveScoresState> {
     try {
       final sportFilter = sport ?? state.selectedSport ?? 'Football';
 
-      // Fetch from backend (SportRadar)
-      final data = await _api.getLiveMatches();
+      // First try backend API
+      try {
+        final data = await _api.getLiveMatches();
+        if (data.isNotEmpty) {
+          final matches = data
+              .map((m) => LiveMatch(
+                    id: m['id'] ?? '',
+                    homeTeam: m['homeTeam'] ?? '',
+                    awayTeam: m['awayTeam'] ?? '',
+                    league: m['league'] ?? '',
+                    sport: m['sport'] ?? sportFilter,
+                    homeScore: m['homeScore'] ?? 0,
+                    awayScore: m['awayScore'] ?? 0,
+                    status: _mapStatus(m['status']),
+                    minute: m['minute'],
+                    kickoff: m['kickoff'] != null
+                        ? DateTime.tryParse(m['kickoff'].toString()) ??
+                            DateTime.now()
+                        : DateTime.now(),
+                    events: (m['events'] as List?)
+                            ?.map((e) => MatchEvent(
+                                  type: e['type'] ?? '',
+                                  team: e['team'] ?? '',
+                                  player: e['player'] ?? '',
+                                  minute: e['minute'] ?? '',
+                                ))
+                            .toList() ??
+                        const [],
+                    currentOdds: m['odds'] != null
+                        ? LiveOdds(
+                            homeWin: (m['odds']['homeWin'] ?? 2.0).toDouble(),
+                            draw: (m['odds']['draw'] ?? 3.5).toDouble(),
+                            awayWin: (m['odds']['awayWin'] ?? 3.0).toDouble(),
+                            updatedAt: DateTime.now(),
+                          )
+                        : null,
+                  ))
+              .toList();
 
-      if (data.isEmpty) {
-        // Use sample data if API returns empty
-        final matches = _getSampleMatches(sportFilter);
-        state = state.copyWith(
-          matches: matches,
-          isLoading: false,
-          selectedSport: sportFilter,
-          selectedLeague: league,
-          lastUpdated: DateTime.now(),
-        );
-        return;
+          state = state.copyWith(
+            matches: matches,
+            isLoading: false,
+            selectedSport: sportFilter,
+            selectedLeague: league,
+            lastUpdated: DateTime.now(),
+          );
+          return;
+        }
+      } catch (e) {
+        debugPrint('[LiveScores] Backend API failed: $e');
       }
 
-      final matches = data
-          .map((m) => LiveMatch(
-                id: m['id'] ?? '',
-                homeTeam: m['homeTeam'] ?? '',
-                awayTeam: m['awayTeam'] ?? '',
-                league: m['league'] ?? '',
-                sport: m['sport'] ?? sportFilter,
-                homeScore: m['homeScore'] ?? 0,
-                awayScore: m['awayScore'] ?? 0,
-                status: _mapStatus(m['status']),
-                minute: m['minute'],
-                kickoff: m['kickoff'] != null
-                    ? DateTime.tryParse(m['kickoff'].toString()) ??
-                        DateTime.now()
-                    : DateTime.now(),
-                events: (m['events'] as List?)
-                        ?.map((e) => MatchEvent(
-                              type: e['type'] ?? '',
-                              team: e['team'] ?? '',
-                              player: e['player'] ?? '',
-                              minute: e['minute'] ?? '',
-                            ))
-                        .toList() ??
-                    const [],
-                currentOdds: m['odds'] != null
-                    ? LiveOdds(
-                        homeWin: (m['odds']['homeWin'] ?? 2.0).toDouble(),
-                        draw: (m['odds']['draw'] ?? 3.5).toDouble(),
-                        awayWin: (m['odds']['awayWin'] ?? 3.0).toDouble(),
-                        updatedAt: DateTime.now(),
-                      )
-                    : null,
-              ))
-          .toList();
+      // Fallback: Search for live scores using web search
+      final matches = await _fetchLiveScoresFromWeb(sportFilter);
 
       state = state.copyWith(
-        matches: matches.isNotEmpty ? matches : _getSampleMatches(sportFilter),
+        matches: matches,
         isLoading: false,
         selectedSport: sportFilter,
         selectedLeague: league,
         lastUpdated: DateTime.now(),
       );
     } catch (e) {
-      // Fallback to sample data
-      final matches = _getSampleMatches(sport ?? 'Football');
+      debugPrint('[LiveScores] Error: $e');
       state = state.copyWith(
-        matches: matches,
+        matches: [],
         isLoading: false,
-        selectedSport: sport,
+        error: 'Failed to load live scores',
         lastUpdated: DateTime.now(),
       );
+    }
+  }
+
+  Future<List<LiveMatch>> _fetchLiveScoresFromWeb(String sport) async {
+    try {
+      final serper = _ref.read(serperServiceProvider);
+      final today = DateTime.now();
+
+      // Search for live scores
+      final query =
+          '$sport live scores today ${today.day}/${today.month}/${today.year}';
+      debugPrint('[LiveScores] Searching: $query');
+
+      final results = await serper.search(query, type: 'search', num: 10);
+
+      if (results.isEmpty) {
+        debugPrint('[LiveScores] No search results');
+        return [];
+      }
+
+      // Build context from search results
+      final searchContext =
+          results.map((r) => '${r.title}: ${r.snippet}').join('\n');
+
+      // Use AI to extract match data
+      final settings = await AISettingsService.getSettings();
+      final provider = settings.provider;
+      final model = settings.getEffectiveModel();
+
+      final creds = _ref.read(globalCredentialsServiceProvider);
+      String? apiKey;
+
+      if (provider == 'openrouter') {
+        apiKey = await creds.getApiKey('openrouter');
+      } else {
+        apiKey = await creds.getApiKey('gemini');
+      }
+
+      if (apiKey == null || apiKey.isEmpty) {
+        debugPrint('[LiveScores] No API key available');
+        return [];
+      }
+
+      final todayStr =
+          '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
+      final prompt = '''
+Extract live and today's $sport match scores from this data.
+
+SEARCH RESULTS:
+$searchContext
+
+TODAY'S DATE: $todayStr
+
+Return a JSON array of matches. Each match:
+{
+  "id": "unique_id",
+  "homeTeam": "Team Name",
+  "awayTeam": "Team Name", 
+  "league": "League Name",
+  "homeScore": 0,
+  "awayScore": 0,
+  "status": "live" | "scheduled" | "finished",
+  "minute": "45'" (if live),
+  "kickoff": "$todayStr T15:00:00" (ISO format)
+}
+
+Rules:
+- Only include REAL matches from the data
+- Status "live" for ongoing matches
+- Status "scheduled" for upcoming today
+- Status "finished" for completed matches
+- Return empty array [] if no matches found
+
+Return ONLY the JSON array:
+''';
+
+      String response;
+      if (provider == 'openrouter') {
+        final service = OpenRouterService(apiKey: apiKey);
+        response = await service.generateContent(prompt, model: model);
+      } else {
+        final service = GeminiService(apiKey: apiKey);
+        response = await service.generateContent(prompt, model: model);
+      }
+
+      // Parse JSON
+      String jsonStr = response;
+      final jsonMatch = RegExp(r'\[[\s\S]*?\]').firstMatch(response);
+      if (jsonMatch != null) {
+        jsonStr = jsonMatch.group(0)!;
+      }
+
+      final List<dynamic> parsed = jsonDecode(jsonStr);
+
+      return parsed.map((m) {
+        final map = m as Map<String, dynamic>;
+        return LiveMatch(
+          id: map['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+          homeTeam: map['homeTeam'] ?? 'Unknown',
+          awayTeam: map['awayTeam'] ?? 'Unknown',
+          league: map['league'] ?? sport,
+          sport: sport,
+          homeScore: map['homeScore'] ?? 0,
+          awayScore: map['awayScore'] ?? 0,
+          status: _mapStatus(map['status']),
+          minute: map['minute'],
+          kickoff: DateTime.tryParse(map['kickoff'] ?? '') ?? DateTime.now(),
+          events: const [],
+          currentOdds: null,
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('[LiveScores] Web fetch error: $e');
+      return [];
     }
   }
 
@@ -154,92 +280,6 @@ class LiveScoresNotifier extends StateNotifier<LiveScoresState> {
       default:
         return MatchStatus.scheduled;
     }
-  }
-
-  List<LiveMatch> _getSampleMatches(String sport) {
-    final now = DateTime.now();
-    return [
-      LiveMatch(
-        id: '1',
-        homeTeam: 'Manchester United',
-        awayTeam: 'Liverpool',
-        league: 'Premier League',
-        sport: sport,
-        homeScore: 2,
-        awayScore: 1,
-        status: MatchStatus.live,
-        minute: '67\'',
-        kickoff: now.subtract(const Duration(hours: 1)),
-        events: [
-          MatchEvent(
-              type: 'goal',
-              team: 'Manchester United',
-              player: 'Rashford',
-              minute: '23\''),
-          MatchEvent(
-              type: 'goal', team: 'Liverpool', player: 'Salah', minute: '45\''),
-          MatchEvent(
-              type: 'goal',
-              team: 'Manchester United',
-              player: 'Bruno',
-              minute: '56\''),
-        ],
-        currentOdds: LiveOdds(
-          homeWin: 1.45,
-          draw: 4.50,
-          awayWin: 6.00,
-          updatedAt: now,
-          homeWinChange: -0.15,
-          awayWinChange: 0.50,
-        ),
-      ),
-      LiveMatch(
-        id: '2',
-        homeTeam: 'Arsenal',
-        awayTeam: 'Chelsea',
-        league: 'Premier League',
-        sport: sport,
-        homeScore: 0,
-        awayScore: 0,
-        status: MatchStatus.scheduled,
-        kickoff: now.add(const Duration(hours: 2)),
-        currentOdds: LiveOdds(
-          homeWin: 2.10,
-          draw: 3.40,
-          awayWin: 3.20,
-          updatedAt: now,
-        ),
-      ),
-      LiveMatch(
-        id: '3',
-        homeTeam: 'Real Madrid',
-        awayTeam: 'Barcelona',
-        league: 'La Liga',
-        sport: sport,
-        homeScore: 3,
-        awayScore: 2,
-        status: MatchStatus.finished,
-        kickoff: now.subtract(const Duration(hours: 3)),
-      ),
-      LiveMatch(
-        id: '4',
-        homeTeam: 'Bayern Munich',
-        awayTeam: 'Dortmund',
-        league: 'Bundesliga',
-        sport: sport,
-        homeScore: 1,
-        awayScore: 1,
-        status: MatchStatus.live,
-        minute: '34\'',
-        kickoff: now.subtract(const Duration(minutes: 40)),
-        currentOdds: LiveOdds(
-          homeWin: 2.20,
-          draw: 3.10,
-          awayWin: 3.50,
-          updatedAt: now,
-        ),
-      ),
-    ];
   }
 
   void setSport(String sport) {
@@ -261,7 +301,7 @@ class LiveScoresNotifier extends StateNotifier<LiveScoresState> {
 
 final liveScoresProvider =
     StateNotifierProvider<LiveScoresNotifier, LiveScoresState>((ref) {
-  return LiveScoresNotifier(ref.watch(apiServiceProvider));
+  return LiveScoresNotifier(ref, ref.watch(apiServiceProvider));
 });
 
 // ============ LEADERBOARD PROVIDER ============
@@ -308,102 +348,40 @@ class LeaderboardNotifier extends StateNotifier<LeaderboardState> {
         limit: 50,
       );
 
-      final entries = data
-          .map((e) => LeaderboardEntry(
-                oderId: e['user_id'] ?? e['id'] ?? '',
-                username: e['display_name'] ?? e['username'] ?? 'Anonymous',
-                avatarUrl: e['avatar_url'],
-                totalPredictions: e['total_predictions'] ?? 0,
-                wins: e['wins'] ?? 0,
-                losses: e['losses'] ?? 0,
-                winRate: (e['win_rate'] ?? 0).toDouble(),
-                profit: (e['total_profit'] ?? 0).toDouble(),
-                roi: (e['roi'] ?? 0).toDouble(),
-                rank: e['rank'] ?? 0,
-                streak: e['current_streak'] ?? 0,
-                badges: List<String>.from(e['badges'] ?? []),
-              ))
-          .toList();
+      if (data.isNotEmpty) {
+        final entries = data
+            .map((e) => LeaderboardEntry(
+                  oderId: e['user_id'] ?? e['id'] ?? '',
+                  username: e['display_name'] ?? e['username'] ?? 'Anonymous',
+                  avatarUrl: e['avatar_url'],
+                  totalPredictions: e['total_predictions'] ?? 0,
+                  wins: e['wins'] ?? 0,
+                  losses: e['losses'] ?? 0,
+                  winRate: (e['win_rate'] ?? 0).toDouble(),
+                  profit: (e['total_profit'] ?? 0).toDouble(),
+                  roi: (e['roi'] ?? 0).toDouble(),
+                  rank: e['rank'] ?? 0,
+                  streak: e['current_streak'] ?? 0,
+                  badges: List<String>.from(e['badges'] ?? []),
+                ))
+            .toList();
 
-      state = state.copyWith(entries: entries, isLoading: false);
+        state = state.copyWith(entries: entries, isLoading: false);
+      } else {
+        // No data available - show empty state
+        state = state.copyWith(
+          entries: [],
+          isLoading: false,
+          error: 'No leaderboard data yet. Start making predictions!',
+        );
+      }
     } catch (e) {
-      // Fallback to sample data if API fails
       state = state.copyWith(
-        entries: _generateSampleLeaderboard(),
+        entries: [],
         isLoading: false,
-        error: null, // Don't show error, just use sample data
+        error: 'Be the first to join the leaderboard!',
       );
     }
-  }
-
-  List<LeaderboardEntry> _generateSampleLeaderboard() {
-    return [
-      LeaderboardEntry(
-        oderId: '1',
-        username: 'ProTipster99',
-        totalPredictions: 156,
-        wins: 98,
-        losses: 58,
-        winRate: 62.8,
-        profit: 2450.50,
-        roi: 24.5,
-        rank: 1,
-        streak: 7,
-        badges: ['🏆', '🔥', '💎'],
-      ),
-      LeaderboardEntry(
-        oderId: '2',
-        username: 'BetMaster',
-        totalPredictions: 203,
-        wins: 118,
-        losses: 85,
-        winRate: 58.1,
-        profit: 1890.00,
-        roi: 18.9,
-        rank: 2,
-        streak: 4,
-        badges: ['🥈', '⚡'],
-      ),
-      LeaderboardEntry(
-        oderId: '3',
-        username: 'OddsKing',
-        totalPredictions: 89,
-        wins: 52,
-        losses: 37,
-        winRate: 58.4,
-        profit: 1650.75,
-        roi: 22.1,
-        rank: 3,
-        streak: 3,
-        badges: ['🥉'],
-      ),
-      LeaderboardEntry(
-        oderId: '4',
-        username: 'ValueHunter',
-        totalPredictions: 145,
-        wins: 78,
-        losses: 67,
-        winRate: 53.8,
-        profit: 1200.00,
-        roi: 15.2,
-        rank: 4,
-        streak: 2,
-        badges: [],
-      ),
-      LeaderboardEntry(
-        oderId: '5',
-        username: 'SharpBettor',
-        totalPredictions: 112,
-        wins: 61,
-        losses: 51,
-        winRate: 54.5,
-        profit: 980.25,
-        roi: 12.8,
-        rank: 5,
-        streak: 1,
-        badges: [],
-      ),
-    ];
   }
 
   void setTimeframe(String timeframe) {

@@ -77,17 +77,48 @@ class LeaderboardScreen extends ConsumerWidget {
           Expanded(
             child: state.isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount:
-                        state.entries.length > 3 ? state.entries.length - 3 : 0,
-                    itemBuilder: (context, index) {
-                      final entry = state.entries[index + 3];
-                      return _LeaderboardTile(entry: entry)
-                          .animate()
-                          .fadeIn(delay: Duration(milliseconds: index * 50));
-                    },
-                  ),
+                : state.entries.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(LucideIcons.trophy,
+                                size: 64,
+                                color: Theme.of(context).colorScheme.outline),
+                            const SizedBox(height: 16),
+                            Text(
+                              state.error ?? 'No leaderboard data yet',
+                              style: Theme.of(context).textTheme.titleMedium,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Start making predictions to climb the ranks!',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color:
+                                        Theme.of(context).colorScheme.outline,
+                                  ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: state.entries.length > 3
+                            ? state.entries.length - 3
+                            : 0,
+                        itemBuilder: (context, index) {
+                          final entry = state.entries[index + 3];
+                          return _LeaderboardTile(entry: entry)
+                              .animate()
+                              .fadeIn(
+                                  delay: Duration(milliseconds: index * 50));
+                        },
+                      ),
           ),
         ],
       ),
