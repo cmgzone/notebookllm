@@ -381,9 +381,10 @@ class StoryGeneratorNotifier extends StateNotifier<StoryGeneratorState> {
     List<String>? imageUrls,
   }) async {
     var sourcesText = sources.join('\n\n---\n\n');
-    // Hard limit sources text to 25,000 chars (approx 6-8k tokens) to prevent overflow
-    if (sourcesText.length > 25000) {
-      sourcesText = sourcesText.substring(0, 25000);
+    // Limit sources text to 500,000 chars (approx 125k tokens) to prevent overflow on smaller models
+    // But allow enough for large context models like DeepSeek/Gemini
+    if (sourcesText.length > 500000) {
+      sourcesText = sourcesText.substring(0, 500000);
       sourcesText += '\n...(truncated)...';
     }
 

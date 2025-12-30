@@ -115,6 +115,168 @@ router.get('/seed-defaults', async (req: Request, res: Response) => {
     }
 });
 
+// Create Stripe Checkout Session (requires auth)
+router.post('/create-checkout-session', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const { planId } = req.body;
+        const userId = req.userId!;
+
+        if (!planId) {
+            return res.status(400).json({ error: 'Plan ID is required' });
+        }
+
+        // Get the plan details
+        const planResult = await pool.query(
+            'SELECT * FROM subscription_plans WHERE id = $1 AND is_active = true',
+            [planId]
+        );
+
+        if (planResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Plan not found' });
+        }
+
+        const plan = planResult.rows[0];
+
+        // Check if Stripe is configured
+        const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+        if (!stripeSecretKey) {
+            return res.status(500).json({ error: 'Stripe is not configured' });
+        }
+
+        // Dynamic import of Stripe
+        const Stripe = (await import('stripe')).default;
+        const stripe = new Stripe(stripeSecretKey);
+
+        // Determine the success and cancel URLs
+        const baseUrl = process.env.WEB_APP_URL || 'http://localhost:3001';
+
+        // Create a Stripe Checkout Session
+        const session = await stripe.checkout.sessions.create({
+            payment_method_types: ['card'],
+            mode: 'subscription',
+            line_items: [
+                {
+                    price_data: {
+                        currency: 'usd',
+                        product_data: {
+                            name: `${plan.name} Plan`,
+                            description: plan.description || `${plan.credits_per_month} credits per month`,
+                        },
+                        unit_amount: Math.round(parseFloat(plan.price) * 100), // Convert to cents
+                        recurring: {
+                            interval: 'month',
+                        },
+                    },
+                    quantity: 1,
+                },
+            ],
+            success_url: `${baseUrl}/plans/success?session_id={CHECKOUT_SESSION_ID}&plan_id=${planId}`,
+            cancel_url: `${baseUrl}/plans?cancelled=true`,
+            metadata: {
+                userId: userId,
+                planId: planId,
+            },
+            client_reference_id: userId,
+        });
+
+        console.log(`[STRIPE] Created checkout session ${session.id} for user ${userId}, plan ${plan.name}`);
+
+        res.json({
+            sessionId: session.id,
+            url: session.url
+        });
+    } catch (error: any) {
+        console.error('Stripe checkout error:', error);
+        res.status(500).json({ error: 'Failed to create checkout session: ' + error.message });
+    }
+});
+
+// Stripe Webhook for payment confirmation
+router.post('/webhook/stripe', express.raw({ type: 'application/json' }), async (req: Request, res: Response) => {
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!stripeSecretKey) {
+        return res.status(500).json({ error: 'Stripe not configured' });
+    }
+
+    try {
+        const Stripe = (await import('stripe')).default;
+        const stripe = new Stripe(stripeSecretKey);
+
+        let event;
+
+        if (webhookSecret) {
+            const sig = req.headers['stripe-signature'] as string;
+            event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+        } else {
+            // For testing without webhook secret
+            event = req.body;
+        }
+
+        if (event.type === 'checkout.session.completed') {
+            const session = event.data.object;
+            const userId = session.metadata?.userId || session.client_reference_id;
+            const planId = session.metadata?.planId;
+
+            if (userId && planId) {
+                // Get the plan
+                const planResult = await pool.query(
+                    'SELECT * FROM subscription_plans WHERE id = $1',
+                    [planId]
+                );
+
+                if (planResult.rows.length > 0) {
+                    const plan = planResult.rows[0];
+
+                    // Update user subscription
+                    const subResult = await pool.query(
+                        'SELECT * FROM user_subscriptions WHERE user_id = $1',
+                        [userId]
+                    );
+
+                    const currentCredits = subResult.rows[0]?.current_credits || 0;
+                    const newBalance = currentCredits + plan.credits_per_month;
+
+                    await pool.query(`
+                        UPDATE user_subscriptions
+                        SET plan_id = $1,
+                            current_credits = $2,
+                            credits_consumed_this_month = 0,
+                            last_renewal_date = CURRENT_TIMESTAMP,
+                            next_renewal_date = CURRENT_TIMESTAMP + INTERVAL '1 month',
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE user_id = $3
+                    `, [planId, newBalance, userId]);
+
+                    // Record transaction
+                    await pool.query(`
+                        INSERT INTO credit_transactions 
+                        (user_id, amount, transaction_type, description, balance_after, metadata)
+                        VALUES ($1, $2, 'plan_upgrade', $3, $4, $5)
+                    `, [
+                        userId,
+                        plan.credits_per_month,
+                        `Upgraded to ${plan.name} via Stripe`,
+                        newBalance,
+                        JSON.stringify({
+                            stripe_session_id: session.id,
+                            plan_id: planId
+                        })
+                    ]);
+
+                    console.log(`[STRIPE WEBHOOK] Successfully upgraded user ${userId} to ${plan.name}`);
+                }
+            }
+        }
+
+        res.json({ received: true });
+    } catch (error: any) {
+        console.error('Stripe webhook error:', error);
+        res.status(400).json({ error: 'Webhook error: ' + error.message });
+    }
+});
+
 // Protected routes
 router.use(authenticateToken);
 
@@ -433,8 +595,8 @@ router.post('/add-credits', async (req: AuthRequest, res: Response) => {
 
         console.log(`[CREDITS] Added ${amount} credits for user ${req.userId}. New balance: ${newBalance}`);
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             newBalance,
             message: `Successfully added ${amount} credits`
         });

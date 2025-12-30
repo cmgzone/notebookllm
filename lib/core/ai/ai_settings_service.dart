@@ -103,15 +103,12 @@ class AISettingsService {
         int maxTokens = (contextWindow / 4).floor();
 
         // Cap based on provider to avoid credit issues
-        if (model.provider == 'openrouter' ||
-            model.provider == 'openai' ||
-            model.provider == 'anthropic') {
-          // OpenRouter: cap at 4000 to avoid credit issues
-          maxTokens = maxTokens.clamp(1000, 4000);
-        } else {
-          // Gemini: can handle higher limits
-          maxTokens = maxTokens.clamp(1000, 8192);
-        }
+        // Cap max output tokens to reasonable limits to prevent excessive costs/timeouts
+        // but allow higher limits if the model supports it (based on context window calculation)
+        // Cap max output tokens to reasonable limits (128k)
+        // This allows very large context models (like 1M context) to output significant content
+        if (maxTokens > 131072) maxTokens = 131072;
+        if (maxTokens < 2000) maxTokens = 2000;
 
         return maxTokens;
       }

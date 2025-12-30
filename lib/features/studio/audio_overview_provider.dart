@@ -242,12 +242,12 @@ class AudioOverviewNotifier extends StateNotifier<AudioStudioState> {
       if (sources.isEmpty) throw Exception('No sources available');
 
       // 1. Generate Script using configured AI provider
-      // Limit content to avoid token limits (approx 30k chars for safety)
+      // Limit content to avoid token limits (approx 500k chars for safety with large models)
       String context = sources.map((s) => s.content).join('\n\n');
-      if (context.length > 30000) {
+      if (context.length > 500000) {
         debugPrint(
-            '[AudioOverview] Content too long (${context.length} chars), truncating to 30k');
-        context = context.substring(0, 30000);
+            '[AudioOverview] Content too long (${context.length} chars), truncating to 500k');
+        context = context.substring(0, 500000);
       }
 
       String script;

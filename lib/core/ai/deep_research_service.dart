@@ -230,10 +230,17 @@ class DeepResearchService {
       // Check for credit/quota errors and provide helpful message
       if (errorStr.contains('credit') ||
           errorStr.contains('quota') ||
-          errorStr.contains('afford') ||
-          errorStr.contains('max_tokens')) {
+          errorStr.contains('afford')) {
         throw Exception(
             'Out of API credits. Please add credits at openrouter.ai/settings/credits or switch to Gemini in AI Settings.');
+      }
+
+      // Check for context length errors
+      if (errorStr.contains('max_tokens') ||
+          errorStr.contains('context length') ||
+          errorStr.contains('context_length')) {
+        throw Exception(
+            'Context limit exceeded. The research gathered too much information for this model. Try reducing "Depth", switching to a model with a larger context window (like Gemini 1.5 Pro or Claude 3 Opus), or try again.');
       }
       rethrow;
     }

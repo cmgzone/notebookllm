@@ -64,7 +64,7 @@ export async function generateWithGemini(
             chat.sendMessage(convertContent(lastMessage.content)),
             timeoutPromise
         ]);
-        
+
         return result.response.text();
     } catch (error: any) {
         console.error('Gemini error:', error);
@@ -77,7 +77,8 @@ export async function generateWithGemini(
  */
 export async function generateWithOpenRouter(
     messages: ChatMessage[],
-    model: string = 'meta-llama/llama-3.3-70b-instruct'
+    model: string = 'meta-llama/llama-3.3-70b-instruct',
+    maxTokens: number = 4096
 ): Promise<string> {
     const apiKey = process.env.OPENROUTER_API_KEY;
 
@@ -114,7 +115,7 @@ export async function generateWithOpenRouter(
             {
                 model,
                 messages: convertedMessages,
-                max_tokens: 4096,
+                max_tokens: maxTokens,
             },
             {
                 timeout: 120000, // 2 minute timeout
@@ -195,7 +196,8 @@ export async function* streamWithGemini(
  */
 export async function* streamWithOpenRouter(
     messages: ChatMessage[],
-    model: string = 'meta-llama/llama-3.3-70b-instruct'
+    model: string = 'meta-llama/llama-3.3-70b-instruct',
+    maxTokens: number = 4096
 ): AsyncGenerator<string> {
     const apiKey = process.env.OPENROUTER_API_KEY;
 
@@ -233,7 +235,7 @@ export async function* streamWithOpenRouter(
                 model,
                 messages: convertedMessages,
                 stream: true,
-                max_tokens: 4096,
+                max_tokens: maxTokens,
             },
             {
                 responseType: 'stream',
@@ -295,7 +297,7 @@ export async function generateSummary(
         },
         {
             role: 'user',
-            content: `Please create a comprehensive summary of the following content:\n\n${content.substring(0, 15000)}`
+            content: `Please create a comprehensive summary of the following content:\n\n${content.substring(0, 500000)}`
         }
     ];
 
@@ -320,7 +322,7 @@ export async function generateQuestions(
         },
         {
             role: 'user',
-            content: `Generate ${count} thoughtful questions that could be asked about the following content. Return only the questions, one per line, without numbering:\n\n${content.substring(0, 10000)}`
+            content: `Generate ${count} thoughtful questions that could be asked about the following content. Return only the questions, one per line, without numbering:\n\n${content.substring(0, 500000)}`
         }
     ];
 
@@ -346,7 +348,7 @@ export async function generateFlashcards(
         },
         {
             role: 'user',
-            content: `Create ${count} flashcards from this content. Return as JSON array with "question" and "answer" fields:\n\n${content.substring(0, 10000)}`
+            content: `Create ${count} flashcards from this content. Return as JSON array with "question" and "answer" fields:\n\n${content.substring(0, 500000)}`
         }
     ];
 
@@ -383,7 +385,7 @@ export async function generateQuiz(
         },
         {
             role: 'user',
-            content: `Create ${count} multiple-choice questions from this content. Each should have 4 options. Return as JSON array with fields: "question", "options" (array of 4 strings), "correctIndex" (0-3), "explanation":\n\n${content.substring(0, 10000)}`
+            content: `Create ${count} multiple-choice questions from this content. Each should have 4 options. Return as JSON array with fields: "question", "options" (array of 4 strings), "correctIndex" (0-3), "explanation":\n\n${content.substring(0, 500000)}`
         }
     ];
 

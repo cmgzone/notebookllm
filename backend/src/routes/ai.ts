@@ -82,27 +82,38 @@ router.post('/chat', async (req: AuthRequest, res: Response) => {
         }
 
         // Check if the requested model is premium and if user has access
+        let maxTokens = 4096;
         if (model) {
             const modelResult = await pool.query(
-                'SELECT is_premium FROM ai_models WHERE model_id = $1 AND is_active = true',
+                'SELECT is_premium, context_window FROM ai_models WHERE model_id = $1 AND is_active = true',
                 [model]
             );
 
-            if (modelResult.rows.length > 0 && modelResult.rows[0].is_premium) {
-                const hasPremiumAccess = await userHasPremiumAccess(req.userId!);
-                if (!hasPremiumAccess) {
-                    return res.status(403).json({
-                        error: 'Premium model access required',
-                        message: 'This model is only available to paid subscribers. Please upgrade your plan to access premium AI models.',
-                        upgrade_required: true
-                    });
+            if (modelResult.rows.length > 0) {
+                const modelData = modelResult.rows[0];
+
+                // Calculate max output tokens from context window
+                if (modelData.context_window) {
+                    maxTokens = Math.min(Math.floor(modelData.context_window / 4), 131072);
+                    if (maxTokens < 2000) maxTokens = 2000;
+                }
+
+                if (modelData.is_premium) {
+                    const hasPremiumAccess = await userHasPremiumAccess(req.userId!);
+                    if (!hasPremiumAccess) {
+                        return res.status(403).json({
+                            error: 'Premium model access required',
+                            message: 'This model is only available to paid subscribers. Please upgrade your plan to access premium AI models.',
+                            upgrade_required: true
+                        });
+                    }
                 }
             }
         }
 
         let response: string;
         if (provider === 'openrouter') {
-            response = await generateWithOpenRouter(messages, model);
+            response = await generateWithOpenRouter(messages, model, maxTokens);
         } else {
             response = await generateWithGemini(messages, model);
         }
@@ -129,20 +140,31 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
         }
 
         // Check if the requested model is premium and if user has access
+        let maxTokens = 4096;
         if (model) {
             const modelResult = await pool.query(
-                'SELECT is_premium FROM ai_models WHERE model_id = $1 AND is_active = true',
+                'SELECT is_premium, context_window FROM ai_models WHERE model_id = $1 AND is_active = true',
                 [model]
             );
 
-            if (modelResult.rows.length > 0 && modelResult.rows[0].is_premium) {
-                const hasPremiumAccess = await userHasPremiumAccess(req.userId!);
-                if (!hasPremiumAccess) {
-                    return res.status(403).json({
-                        error: 'Premium model access required',
-                        message: 'This model is only available to paid subscribers. Please upgrade your plan to access premium AI models.',
-                        upgrade_required: true
-                    });
+            if (modelResult.rows.length > 0) {
+                const modelData = modelResult.rows[0];
+
+                // Calculate max output tokens from context window
+                if (modelData.context_window) {
+                    maxTokens = Math.min(Math.floor(modelData.context_window / 4), 131072);
+                    if (maxTokens < 2000) maxTokens = 2000;
+                }
+
+                if (modelData.is_premium) {
+                    const hasPremiumAccess = await userHasPremiumAccess(req.userId!);
+                    if (!hasPremiumAccess) {
+                        return res.status(403).json({
+                            error: 'Premium model access required',
+                            message: 'This model is only available to paid subscribers. Please upgrade your plan to access premium AI models.',
+                            upgrade_required: true
+                        });
+                    }
                 }
             }
         }
@@ -155,7 +177,7 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
 
         let generator;
         if (provider === 'openrouter') {
-            generator = streamWithOpenRouter(messages, model);
+            generator = streamWithOpenRouter(messages, model, maxTokens);
         } else {
             generator = streamWithGemini(messages, model);
         }
@@ -227,7 +249,7 @@ router.post('/questions', async (req: AuthRequest, res: Response) => {
         const content = sourcesResult.rows
             .map(s => `${s.title}: ${s.content || ''}`)
             .join('\n\n')
-            .substring(0, 8000);
+            .substring(0, 500000);
 
         const questions = await generateQuestions(content, count);
 
@@ -272,7 +294,7 @@ router.post('/notebook-summary', async (req: AuthRequest, res: Response) => {
             content = chunksResult.rows
                 .map(c => c.content_text)
                 .join(' ')
-                .substring(0, 15000);
+                .substring(0, 500000);
         } else {
             // Fall back to sources content
             const sourcesResult = await pool.query(
@@ -282,7 +304,7 @@ router.post('/notebook-summary', async (req: AuthRequest, res: Response) => {
             content = sourcesResult.rows
                 .map(s => `${s.title}: ${s.content || ''}`)
                 .join('\n\n')
-                .substring(0, 15000);
+                .substring(0, 500000);
         }
 
         const summary = await generateSummary(content);

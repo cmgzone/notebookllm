@@ -33,6 +33,7 @@ class _DeepResearchScreenState extends ConsumerState<DeepResearchScreen>
   double _progress = 0.0;
   String? _result;
   List<ResearchSource>? _sources;
+  List<String>? _images;
   String? _error;
   bool _showHistory = false;
 
@@ -75,6 +76,7 @@ class _DeepResearchScreenState extends ConsumerState<DeepResearchScreen>
       _isResearching = true;
       _result = null;
       _sources = null;
+      _images = null;
       _error = null;
       _status = 'Starting research...';
       _progress = 0.0;
@@ -95,6 +97,7 @@ class _DeepResearchScreenState extends ConsumerState<DeepResearchScreen>
           _status = update.status;
           _progress = update.progress;
           if (update.sources != null) _sources = update.sources;
+          if (update.images != null) _images = update.images;
           if (update.result != null) _result = update.result;
           if (update.error != null) _error = update.error;
           if (update.isComplete) _isResearching = false;
@@ -115,6 +118,7 @@ class _DeepResearchScreenState extends ConsumerState<DeepResearchScreen>
     setState(() {
       _result = null;
       _sources = null;
+      _images = null;
       _error = null;
       _status = '';
       _progress = 0.0;
@@ -133,8 +137,14 @@ class _DeepResearchScreenState extends ConsumerState<DeepResearchScreen>
       final dir = await getTemporaryDirectory();
       final file = File(
           '${dir.path}/research_${DateTime.now().millisecondsSinceEpoch}.md');
-      await file
-          .writeAsString('# Research: ${_queryController.text}\n\n$_result');
+      var content = '# Research: ${_queryController.text}\n\n$_result';
+      if (_images != null && _images!.isNotEmpty) {
+        content += '\n\n## Visual Results\n\n';
+        for (final img in _images!) {
+          content += '![]($img)\n\n';
+        }
+      }
+      await file.writeAsString(content);
       await Share.shareXFiles([XFile(file.path)]);
     } catch (e) {
       if (mounted) {
@@ -166,7 +176,12 @@ class _DeepResearchScreenState extends ConsumerState<DeepResearchScreen>
                     url: s['url'] ?? '',
                     content: s['content'] ?? '',
                     snippet: s['snippet'],
+                    imageUrl: s['imageUrl'],
                   ))
+              .toList();
+          _images = _sources
+              ?.where((s) => s.imageUrl != null && s.imageUrl!.isNotEmpty)
+              .map((s) => s.imageUrl!)
               .toList();
           _status = '';
         });
@@ -530,6 +545,65 @@ class _DeepResearchScreenState extends ConsumerState<DeepResearchScreen>
               ),
             ),
             const SizedBox(height: 24),
+
+            // Images section
+            if (_images != null && _images!.isNotEmpty) ...[
+              Text('Visual Results',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 180,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _images!.length,
+                  physics: const BouncingScrollPhysics(),
+                  itemBuilder: (context, index) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: InkWell(
+                        onTap: () => launchUrl(Uri.parse(_images![index])),
+                        borderRadius: BorderRadius.circular(12),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Stack(
+                            children: [
+                              Container(
+                                width: 280,
+                                height: 180,
+                                color: scheme.surfaceContainerHighest
+                                    .withValues(alpha: 0.3),
+                                child: Image.network(
+                                  _images![index],
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Center(
+                                    child: Icon(LucideIcons.image,
+                                        color: scheme.onSurfaceVariant),
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                bottom: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.5),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Icon(LucideIcons.externalLink,
+                                      color: Colors.white, size: 14),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 32),
+            ],
 
             // Sources section
             if (_sources != null && _sources!.isNotEmpty) ...[
