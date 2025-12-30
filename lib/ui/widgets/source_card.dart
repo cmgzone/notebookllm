@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../features/sources/source.dart';
 import '../../core/sources/source_icon_helper.dart';
+import '../../core/extensions/color_compat.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 class SourceCard extends StatelessWidget {
@@ -103,6 +104,7 @@ class SourceCard extends StatelessWidget {
                             source.title,
                             style: text.titleMedium?.copyWith(
                               fontWeight: FontWeight.w600,
+                              color: scheme.onSurface,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -169,7 +171,7 @@ class SourceCard extends StatelessWidget {
                 Text(
                   source.content,
                   style: text.bodySmall?.copyWith(
-                    color: scheme.onSurface.withValues(alpha: 0.6),
+                    color: scheme.secondaryText,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -181,13 +183,13 @@ class SourceCard extends StatelessWidget {
                     Icon(
                       Icons.access_time,
                       size: 14,
-                      color: scheme.onSurface.withValues(alpha: 0.5),
+                      color: scheme.hintText,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       timeago.format(source.addedAt),
                       style: text.labelSmall?.copyWith(
-                        color: scheme.onSurface.withValues(alpha: 0.5),
+                        color: scheme.hintText,
                       ),
                     ),
                     const Spacer(),

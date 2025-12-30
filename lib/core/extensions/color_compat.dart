@@ -19,21 +19,21 @@ extension DarkModeAwareColor on ColorScheme {
   /// Use this instead of onSurface.withValues(alpha: 0.5-0.7)
   Color get secondaryText {
     return brightness == Brightness.dark
-        ? onSurface.withValues(alpha: 0.85) // Brighter in dark mode
-        : onSurface.withValues(alpha: 0.6); // Standard in light mode
+        ? const Color(0xFFCBD5E1) // Slate 300 - very visible in dark mode
+        : const Color(0xFF475569); // Slate 600 - good contrast in light mode
   }
 
   /// Returns a tertiary/hint text color visible in both modes
   Color get hintText {
     return brightness == Brightness.dark
-        ? onSurface.withValues(alpha: 0.7) // More visible in dark mode
-        : onSurface.withValues(alpha: 0.5); // Standard in light mode
+        ? const Color(0xFF94A3B8) // Slate 400 - visible hint in dark mode
+        : const Color(0xFF64748B); // Slate 500 - standard in light mode
   }
 
   /// Returns a disabled text color visible in both modes
   Color get disabledText {
     return brightness == Brightness.dark
-        ? onSurface.withValues(alpha: 0.5) // Visible but muted in dark mode
-        : onSurface.withValues(alpha: 0.38); // Standard in light mode
+        ? const Color(0xFF64748B) // Slate 500 - muted but visible
+        : const Color(0xFF94A3B8); // Slate 400 - standard in light mode
   }
 }

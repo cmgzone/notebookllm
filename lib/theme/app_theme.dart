@@ -43,16 +43,16 @@ class AppTheme {
           ? const Color(0xFF334155)
           : const Color(0xFFE2E8F0), // Slate 700 for inputs
 
-      // White text for dark mode as requested
+      // White text for dark mode - full opacity for readability
       onSurface: isDark ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A),
-      // White for secondary text as well (avoiding gray)
+      // Lighter gray for secondary text in dark mode (more visible)
       onSurfaceVariant:
-          isDark ? const Color(0xFFFFFFFF) : const Color(0xFF475569),
+          isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
 
       // Improved outline visibility
-      outline: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+      outline: isDark ? const Color(0xFF64748B) : const Color(0xFFCBD5E1),
       outlineVariant:
-          isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          isDark ? const Color(0xFF475569) : const Color(0xFFE2E8F0),
 
       // Tertiary colors for additional text
       onTertiary: isDark ? const Color(0xFFFFFFFF) : const Color(0xFF475569),
