@@ -618,18 +618,63 @@ class _YouTubeWebViewPlayerState extends State<_YouTubeWebViewPlayer> {
   @override
   void initState() {
     super.initState();
+
+    // Create HTML content with YouTube IFrame API for better compatibility
+    final htmlContent = '''
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+    #player { width: 100%; height: 100%; }
+    iframe { width: 100%; height: 100%; border: none; }
+  </style>
+</head>
+<body>
+  <div id="player"></div>
+  <script>
+    var tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    var firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    
+    var player;
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player('player', {
+        videoId: '${widget.videoId}',
+        playerVars: {
+          'autoplay': 1,
+          'playsinline': 1,
+          'rel': 0,
+          'modestbranding': 1,
+          'fs': 1
+        },
+        events: {
+          'onReady': function(event) { event.target.playVideo(); }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
+''';
+
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (url) {
             setState(() => _isLoading = false);
           },
+          onWebResourceError: (error) {
+            debugPrint('WebView error: ${error.description}');
+          },
         ),
       )
-      ..loadRequest(Uri.parse(
-        'https://www.youtube.com/embed/${widget.videoId}?autoplay=1&rel=0',
-      ));
+      ..loadHtmlString(htmlContent);
   }
 
   @override
