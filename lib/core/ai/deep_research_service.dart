@@ -7,7 +7,6 @@ import '../search/serper_service.dart';
 import '../api/api_service.dart';
 import '../security/global_credentials_service.dart';
 import '../../features/gamification/gamification_provider.dart';
-import '../../features/research/research_session_provider.dart';
 
 final deepResearchServiceProvider = Provider<DeepResearchService>((ref) {
   return DeepResearchService(ref);
@@ -483,7 +482,6 @@ Write the complete report:''';
           report: report,
           sources: sources.map((s) => s.toJson()).toList(),
         );
-        ref.invalidate(researchSessionProvider);
       } catch (e) {
         debugPrint('[Research] Failed to save: $e');
       }
