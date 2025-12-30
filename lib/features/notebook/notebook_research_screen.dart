@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import '../../core/ai/deep_research_service.dart';
 import '../sources/source_provider.dart';
 import '../subscription/services/credit_manager.dart';
@@ -456,6 +457,42 @@ class _NotebookResearchScreenState
             ),
           ],
 
+          // Related Videos section
+          if (_finalResult?.videos != null &&
+              _finalResult!.videos!.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Icon(Icons.video_library, color: scheme.primary),
+                const SizedBox(width: 8),
+                Text('Related Videos', style: text.titleMedium),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 200,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _finalResult!.videos!.length,
+                itemBuilder: (context, index) {
+                  final videoUrl = _finalResult!.videos![index];
+                  final videoId = _extractYouTubeId(videoUrl);
+                  if (videoId == null) return const SizedBox.shrink();
+
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      right: index < _finalResult!.videos!.length - 1 ? 12 : 0,
+                    ),
+                    child: _VideoCard(
+                      videoId: videoId,
+                      onPlay: () => _showVideoPlayer(videoId),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+
           // Error state
           if (_finalResult?.error != null && _finalResult?.result == null)
             Container(
@@ -531,5 +568,192 @@ class _NotebookResearchScreenState
         ],
       ),
     ).animate().fadeIn();
+  }
+
+  String? _extractYouTubeId(String url) {
+    // Handle various YouTube URL formats
+    final regexes = [
+      RegExp(r'youtube\.com/watch\?v=([a-zA-Z0-9_-]{11})'),
+      RegExp(r'youtu\.be/([a-zA-Z0-9_-]{11})'),
+      RegExp(r'youtube\.com/embed/([a-zA-Z0-9_-]{11})'),
+      RegExp(r'youtube\.com/v/([a-zA-Z0-9_-]{11})'),
+    ];
+
+    for (final regex in regexes) {
+      final match = regex.firstMatch(url);
+      if (match != null) {
+        return match.group(1);
+      }
+    }
+    return null;
+  }
+
+  void _showVideoPlayer(String videoId) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(16),
+        child: _InlineYouTubePlayer(videoId: videoId),
+      ),
+    );
+  }
+}
+
+class _VideoCard extends StatelessWidget {
+  final String videoId;
+  final VoidCallback onPlay;
+
+  const _VideoCard({required this.videoId, required this.onPlay});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/mqdefault.jpg';
+
+    return GestureDetector(
+      onTap: onPlay,
+      child: Container(
+        width: 280,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: scheme.shadow.withValues(alpha: 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CachedNetworkImage(
+                imageUrl: thumbnailUrl,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => Container(
+                  color: scheme.surfaceContainerHighest,
+                  child: const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  color: scheme.surfaceContainerHighest,
+                  child: Icon(Icons.video_library,
+                      color: scheme.outline, size: 48),
+                ),
+              ),
+              // Play button overlay
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                ),
+              ),
+              // Gradient overlay at bottom
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.7),
+                      ],
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.play_circle_outline,
+                          color: Colors.white, size: 16),
+                      SizedBox(width: 4),
+                      Text(
+                        'Tap to play',
+                        style: TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineYouTubePlayer extends StatefulWidget {
+  final String videoId;
+
+  const _InlineYouTubePlayer({required this.videoId});
+
+  @override
+  State<_InlineYouTubePlayer> createState() => _InlineYouTubePlayerState();
+}
+
+class _InlineYouTubePlayerState extends State<_InlineYouTubePlayer> {
+  late YoutubePlayerController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = YoutubePlayerController(
+      initialVideoId: widget.videoId,
+      flags: const YoutubePlayerFlags(
+        autoPlay: true,
+        mute: false,
+        enableCaption: true,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Close button
+        Align(
+          alignment: Alignment.topRight,
+          child: IconButton(
+            icon: const Icon(Icons.close, color: Colors.white, size: 28),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        // YouTube Player
+        YoutubePlayer(
+          controller: _controller,
+          showVideoProgressIndicator: true,
+          progressIndicatorColor: Colors.red,
+          progressColors: const ProgressBarColors(
+            playedColor: Colors.red,
+            handleColor: Colors.redAccent,
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
   }
 }
