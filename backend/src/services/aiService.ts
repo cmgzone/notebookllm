@@ -22,8 +22,10 @@ export async function generateWithGemini(
     model: string = 'gemini-2.0-flash'
 ): Promise<string> {
     if (!genAI) {
-        throw new Error('Gemini API key not configured');
+        throw new Error('Gemini API key not configured. Please add GEMINI_API_KEY to your environment.');
     }
+
+    console.log(`[Gemini] Generating response with model: ${model}`);
 
     // Create a timeout promise
     const timeoutPromise = new Promise<never>((_, reject) => {

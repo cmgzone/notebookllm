@@ -71,10 +71,20 @@ router.post('/chat', async (req: AuthRequest, res: Response) => {
     try {
         let { messages, provider = 'gemini', model } = req.body;
 
-        // Auto-detect provider. If model contains '/', it's definitely OpenRouter (or compatible).
+        console.log(`[AI Chat] Received request - provider: ${provider}, model: ${model}`);
+
+        // Auto-detect provider ONLY if provider is not explicitly set to 'gemini'
+        // If model contains '/', it's definitely OpenRouter (or compatible).
         // Also check for common OpenRouter prefixes.
-        if (model && (model.includes('/') || model.startsWith('gpt-') || model.startsWith('claude-') || model.startsWith('meta-'))) {
+        if (provider !== 'gemini' && model && (model.includes('/') || model.startsWith('gpt-') || model.startsWith('claude-') || model.startsWith('meta-'))) {
             provider = 'openrouter';
+            console.log(`[AI Chat] Auto-detected OpenRouter provider for model: ${model}`);
+        }
+        
+        // Force Gemini provider for Gemini models
+        if (model && model.toLowerCase().startsWith('gemini')) {
+            provider = 'gemini';
+            console.log(`[AI Chat] Forcing Gemini provider for model: ${model}`);
         }
 
         if (!messages || !Array.isArray(messages)) {
@@ -130,9 +140,19 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
     try {
         let { messages, provider = 'gemini', model } = req.body;
 
-        // Auto-detect provider. If model contains '/', it's definitely OpenRouter.
-        if (model && (model.includes('/') || model.startsWith('gpt-') || model.startsWith('claude-') || model.startsWith('meta-'))) {
+        console.log(`[AI Stream] Received request - provider: ${provider}, model: ${model}`);
+
+        // Auto-detect provider ONLY if provider is not explicitly set to 'gemini'
+        // If model contains '/', it's definitely OpenRouter.
+        if (provider !== 'gemini' && model && (model.includes('/') || model.startsWith('gpt-') || model.startsWith('claude-') || model.startsWith('meta-'))) {
             provider = 'openrouter';
+            console.log(`[AI Stream] Auto-detected OpenRouter provider for model: ${model}`);
+        }
+        
+        // Force Gemini provider for Gemini models
+        if (model && model.toLowerCase().startsWith('gemini')) {
+            provider = 'gemini';
+            console.log(`[AI Stream] Forcing Gemini provider for model: ${model}`);
         }
 
         if (!messages || !Array.isArray(messages)) {
