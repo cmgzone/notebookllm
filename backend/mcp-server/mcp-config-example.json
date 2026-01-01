@@ -1,20 +1,31 @@
 {
   "mcpServers": {
-    "coding-agent": {
+    "notebookllm": {
       "command": "node",
-      "args": ["./backend/mcp-server/dist/index.js"],
+      "args": ["~/.notebookllm-mcp/index.js"],
       "env": {
-        "BACKEND_URL": "http://localhost:3000",
-        "CODING_AGENT_API_KEY": "nllm_your-personal-api-token-here"
+        "BACKEND_URL": "https://notebookllm-ufj7.onrender.com",
+        "CODING_AGENT_API_KEY": "nllm_your-personal-api-token-here",
+        "WEBHOOK_URL": "",
+        "WEBHOOK_SECRET": ""
       },
       "disabled": false,
       "autoApprove": [
         "verify_code",
-        "analyze_code"
+        "analyze_code",
+        "get_followup_messages",
+        "get_websocket_info"
       ]
     }
   },
   "_comments": {
-    "CODING_AGENT_API_KEY": "Generate a personal API token from the NotebookLLM app: Settings → Agent Connections → Generate New Token. The token format is nllm_ followed by 43 random characters."
+    "CODING_AGENT_API_KEY": "Generate from NotebookLLM app: Settings → Agent Connections → Generate New Token",
+    "WEBHOOK_URL": "Optional: HTTPS URL to receive instant messages (e.g., https://your-server.com/webhook)",
+    "WEBHOOK_SECRET": "Optional: Shared secret for webhook authentication (min 16 characters)",
+    "communication_options": {
+      "polling": "Use get_followup_messages to check for new messages (always available)",
+      "webhook": "Set WEBHOOK_URL and WEBHOOK_SECRET for push notifications",
+      "websocket": "Use get_websocket_info for real-time bidirectional communication"
+    }
   }
 }
