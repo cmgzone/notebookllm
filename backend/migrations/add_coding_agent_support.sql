@@ -2,7 +2,7 @@
 -- Adds user_id to sources table and metadata column for verification data
 
 -- Add user_id column to sources (allows sources without notebooks)
-ALTER TABLE sources ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE sources ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
 
 -- Add metadata column for storing verification results
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';

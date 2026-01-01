@@ -13,9 +13,9 @@ async function runMigration() {
     
     await client.query('BEGIN');
     
-    // Add user_id column to sources
+    // Add user_id column to sources (TEXT type to match users.id)
     await client.query(`
-      ALTER TABLE sources ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE
+      ALTER TABLE sources ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE CASCADE
     `);
     console.log('✅ Added user_id column to sources');
     
