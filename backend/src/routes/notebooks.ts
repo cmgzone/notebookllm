@@ -11,7 +11,12 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     try {
         const result = await pool.query(
             `SELECT n.*, 
-                    (SELECT COUNT(*) FROM sources WHERE notebook_id = n.id) as source_count
+                    n.is_agent_notebook,
+                    n.agent_session_id,
+                    (SELECT COUNT(*) FROM sources WHERE notebook_id = n.id) as source_count,
+                    (SELECT agent_name FROM agent_sessions WHERE id = n.agent_session_id) as agent_name,
+                    (SELECT agent_identifier FROM agent_sessions WHERE id = n.agent_session_id) as agent_identifier,
+                    (SELECT status FROM agent_sessions WHERE id = n.agent_session_id) as agent_status
              FROM notebooks n 
              WHERE n.user_id = $1 
              ORDER BY n.updated_at DESC`,
