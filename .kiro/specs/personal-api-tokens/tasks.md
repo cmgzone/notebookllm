@@ -39,34 +39,34 @@ This plan implements a personal API token system for authenticating MCP servers 
     - **Property 5: Token Expiration Enforcement**
     - **Validates: Requirements 3.3**
 
-- [-] 4. Auth Middleware Enhancement
+- [x] 4. Auth Middleware Enhancement
   - [x] 4.1 Update auth middleware to detect and validate API tokens (Bearer nllm_xxx format)
     - _Requirements: 3.1, 3.5_
   - [x] 4.2 Add token usage logging on successful authentication
     - _Requirements: 3.2, 4.5_
-  - [ ] 4.3 Write property test for token usage logging
+  - [x] 4.3 Write property test for token usage logging
     - **Property 8: Token Usage Logging**
     - **Validates: Requirements 3.2, 4.5**
 
-- [ ] 5. Backend API Routes
-  - [ ] 5.1 Add POST /api/auth/tokens - Generate new token with name and optional expiration
+- [x] 5. Backend API Routes
+  - [x] 5.1 Add POST /api/auth/tokens - Generate new token with name and optional expiration
     - _Requirements: 1.1, 1.4, 1.5_
-  - [ ] 5.2 Add GET /api/auth/tokens - List user's tokens with metadata
+  - [x] 5.2 Add GET /api/auth/tokens - List user's tokens with metadata
     - _Requirements: 2.1_
-  - [ ] 5.3 Add DELETE /api/auth/tokens/:id - Revoke a token
+  - [x] 5.3 Add DELETE /api/auth/tokens/:id - Revoke a token
     - _Requirements: 2.2_
-  - [ ] 5.4 Add rate limiting for token generation (5 per hour)
+  - [x] 5.4 Add rate limiting for token generation (5 per hour)
     - _Requirements: 4.3_
-  - [ ] 5.5 Add max token limit check (10 per user)
+  - [x] 5.5 Add max token limit check (10 per user)
     - _Requirements: 2.4, 2.5_
-  - [ ] 5.6 Write property test for token list completeness
+  - [x] 5.6 Write property test for token list completeness
     - **Property 6: Token List Completeness**
     - **Validates: Requirements 2.1**
-  - [ ] 5.7 Write property test for multi-token independence
+  - [x] 5.7 Write property test for multi-token independence
     - **Property 7: Multi-Token Independence**
     - **Validates: Requirements 2.4**
 
-- [ ] 6. Checkpoint - Backend Complete
+- [x] 6. Checkpoint - Backend Complete
   - Ensure all backend tests pass, ask the user if questions arise.
 
 - [ ] 7. Flutter API Service Updates

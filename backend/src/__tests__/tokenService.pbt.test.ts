@@ -601,6 +601,334 @@ describe('Token Service - Property-Based Tests', () => {
   });
 
   /**
+   * Property 6: Token List Completeness
+   * 
+   * For any user with tokens, listing their tokens SHALL return all non-deleted tokens 
+   * with: name, creation date, last used date (if any), and the last 4 characters of the token.
+   * 
+   * **Validates: Requirements 2.1**
+   */
+  describe('Property 6: Token List Completeness', () => {
+    it('listing tokens returns all created tokens with required fields', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.array(tokenNameArb, { minLength: 1, maxLength: 5 }),
+          async (names) => {
+            const userId = await createTestUser();
+            const createdTokens: Array<{ token: string; record: any }> = [];
+            
+            // Create multiple tokens
+            for (const name of names) {
+              const { token, tokenRecord } = await tokenService.generateToken(userId, name);
+              createdTokenIds.push(tokenRecord.id);
+              createdTokens.push({ token, record: tokenRecord });
+            }
+            
+            // List tokens
+            const listedTokens = await tokenService.listTokens(userId);
+            
+            // Should return all created tokens
+            expect(listedTokens.length).toBe(names.length);
+            
+            // Verify each created token is in the list with required fields
+            for (const created of createdTokens) {
+              const found = listedTokens.find(t => t.id === created.record.id);
+              expect(found).toBeDefined();
+              
+              // Verify required fields are present
+              expect(found!.name).toBe(created.record.name);
+              expect(found!.createdAt).toBeDefined();
+              expect(found!.tokenSuffix).toBe(created.token.substring(created.token.length - 4));
+              expect(found!.tokenSuffix.length).toBe(4);
+              
+              // lastUsedAt can be null initially
+              expect('lastUsedAt' in found!).toBe(true);
+            }
+          }
+        ),
+        { numRuns: 20, timeout: 60000 }
+      );
+    }, 120000);
+
+    it('listing tokens excludes tokens from other users', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          tokenNameArb,
+          tokenNameArb,
+          async (name1, name2) => {
+            const userId1 = await createTestUser();
+            const userId2 = await createTestUser();
+            
+            // Create token for user1
+            const { tokenRecord: record1 } = await tokenService.generateToken(userId1, name1);
+            createdTokenIds.push(record1.id);
+            
+            // Create token for user2
+            const { tokenRecord: record2 } = await tokenService.generateToken(userId2, name2);
+            createdTokenIds.push(record2.id);
+            
+            // List tokens for user1
+            const user1Tokens = await tokenService.listTokens(userId1);
+            
+            // Should only contain user1's token
+            expect(user1Tokens.length).toBe(1);
+            expect(user1Tokens[0].id).toBe(record1.id);
+            expect(user1Tokens.find(t => t.id === record2.id)).toBeUndefined();
+            
+            // List tokens for user2
+            const user2Tokens = await tokenService.listTokens(userId2);
+            
+            // Should only contain user2's token
+            expect(user2Tokens.length).toBe(1);
+            expect(user2Tokens[0].id).toBe(record2.id);
+          }
+        ),
+        { numRuns: 20, timeout: 60000 }
+      );
+    }, 120000);
+
+    it('listing tokens includes revoked tokens', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          tokenNameArb,
+          tokenNameArb,
+          async (name1, name2) => {
+            const userId = await createTestUser();
+            
+            // Create two tokens
+            const { tokenRecord: record1 } = await tokenService.generateToken(userId, name1);
+            const { tokenRecord: record2 } = await tokenService.generateToken(userId, name2);
+            createdTokenIds.push(record1.id, record2.id);
+            
+            // Revoke one token
+            await tokenService.revokeToken(userId, record1.id);
+            
+            // List tokens
+            const tokens = await tokenService.listTokens(userId);
+            
+            // Should include both tokens (revoked and active)
+            expect(tokens.length).toBe(2);
+            
+            const revokedToken = tokens.find(t => t.id === record1.id);
+            const activeToken = tokens.find(t => t.id === record2.id);
+            
+            expect(revokedToken).toBeDefined();
+            expect(revokedToken!.revokedAt).not.toBeNull();
+            
+            expect(activeToken).toBeDefined();
+            expect(activeToken!.revokedAt).toBeNull();
+          }
+        ),
+        { numRuns: 20, timeout: 60000 }
+      );
+    }, 120000);
+
+    it('listing tokens shows last used date after token is used', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          tokenNameArb,
+          async (name) => {
+            const userId = await createTestUser();
+            
+            // Create a token
+            const { tokenRecord } = await tokenService.generateToken(userId, name);
+            createdTokenIds.push(tokenRecord.id);
+            
+            // Initially lastUsedAt should be null
+            let tokens = await tokenService.listTokens(userId);
+            expect(tokens[0].lastUsedAt).toBeNull();
+            
+            // Update last used
+            await tokenService.updateLastUsed(tokenRecord.id);
+            
+            // Now lastUsedAt should be set
+            tokens = await tokenService.listTokens(userId);
+            expect(tokens[0].lastUsedAt).not.toBeNull();
+          }
+        ),
+        { numRuns: 20, timeout: 60000 }
+      );
+    }, 120000);
+
+    it('empty user has empty token list', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.constant(null),
+          async () => {
+            const userId = await createTestUser();
+            
+            // List tokens for user with no tokens
+            const tokens = await tokenService.listTokens(userId);
+            
+            expect(tokens).toEqual([]);
+            expect(tokens.length).toBe(0);
+          }
+        ),
+        { numRuns: 20, timeout: 60000 }
+      );
+    }, 120000);
+  });
+
+  /**
+   * Property 7: Multi-Token Independence
+   * 
+   * For any user with multiple tokens, each token SHALL authenticate independently, 
+   * and revoking one token SHALL not affect the validity of other tokens.
+   * 
+   * **Validates: Requirements 2.4**
+   */
+  describe('Property 7: Multi-Token Independence', () => {
+    it('multiple tokens authenticate independently', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.array(tokenNameArb, { minLength: 2, maxLength: 5 }),
+          async (names) => {
+            const userId = await createTestUser();
+            const tokens: Array<{ token: string; record: any }> = [];
+            
+            // Create multiple tokens
+            for (const name of names) {
+              const { token, tokenRecord } = await tokenService.generateToken(userId, name);
+              createdTokenIds.push(tokenRecord.id);
+              tokens.push({ token, record: tokenRecord });
+            }
+            
+            // Each token should validate independently
+            for (const { token, record } of tokens) {
+              const result = await tokenService.validateToken(token);
+              expect(result.valid).toBe(true);
+              expect(result.userId).toBe(userId);
+              expect(result.tokenId).toBe(record.id);
+            }
+          }
+        ),
+        { numRuns: 20, timeout: 60000 }
+      );
+    }, 120000);
+
+    it('revoking one token does not affect other tokens', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.array(tokenNameArb, { minLength: 2, maxLength: 4 }),
+          fc.integer({ min: 0, max: 100 }),
+          async (names, revokeIndexSeed) => {
+            const userId = await createTestUser();
+            const tokens: Array<{ token: string; record: any }> = [];
+            
+            // Create multiple tokens
+            for (const name of names) {
+              const { token, tokenRecord } = await tokenService.generateToken(userId, name);
+              createdTokenIds.push(tokenRecord.id);
+              tokens.push({ token, record: tokenRecord });
+            }
+            
+            // Pick one token to revoke
+            const revokeIndex = revokeIndexSeed % tokens.length;
+            const tokenToRevoke = tokens[revokeIndex];
+            
+            // Revoke the selected token
+            await tokenService.revokeToken(userId, tokenToRevoke.record.id);
+            
+            // Verify the revoked token is invalid
+            const revokedResult = await tokenService.validateToken(tokenToRevoke.token);
+            expect(revokedResult.valid).toBe(false);
+            expect(revokedResult.error).toBe('Token revoked');
+            
+            // Verify all other tokens are still valid
+            for (let i = 0; i < tokens.length; i++) {
+              if (i !== revokeIndex) {
+                const result = await tokenService.validateToken(tokens[i].token);
+                expect(result.valid).toBe(true);
+                expect(result.userId).toBe(userId);
+              }
+            }
+          }
+        ),
+        { numRuns: 20, timeout: 60000 }
+      );
+    }, 120000);
+
+    it('tokens from different users are independent', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          tokenNameArb,
+          tokenNameArb,
+          async (name1, name2) => {
+            const userId1 = await createTestUser();
+            const userId2 = await createTestUser();
+            
+            // Create tokens for both users
+            const { token: token1, tokenRecord: record1 } = await tokenService.generateToken(userId1, name1);
+            const { token: token2, tokenRecord: record2 } = await tokenService.generateToken(userId2, name2);
+            createdTokenIds.push(record1.id, record2.id);
+            
+            // Both tokens should be valid
+            const result1 = await tokenService.validateToken(token1);
+            const result2 = await tokenService.validateToken(token2);
+            
+            expect(result1.valid).toBe(true);
+            expect(result1.userId).toBe(userId1);
+            
+            expect(result2.valid).toBe(true);
+            expect(result2.userId).toBe(userId2);
+            
+            // Revoke user1's token
+            await tokenService.revokeToken(userId1, record1.id);
+            
+            // User1's token should be invalid
+            const afterRevoke1 = await tokenService.validateToken(token1);
+            expect(afterRevoke1.valid).toBe(false);
+            
+            // User2's token should still be valid
+            const afterRevoke2 = await tokenService.validateToken(token2);
+            expect(afterRevoke2.valid).toBe(true);
+            expect(afterRevoke2.userId).toBe(userId2);
+          }
+        ),
+        { numRuns: 20, timeout: 60000 }
+      );
+    }, 120000);
+
+    it('each token has unique validation result', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.array(tokenNameArb, { minLength: 2, maxLength: 4 }),
+          async (names) => {
+            const userId = await createTestUser();
+            const tokens: Array<{ token: string; record: any }> = [];
+            
+            // Create multiple tokens
+            for (const name of names) {
+              const { token, tokenRecord } = await tokenService.generateToken(userId, name);
+              createdTokenIds.push(tokenRecord.id);
+              tokens.push({ token, record: tokenRecord });
+            }
+            
+            // Validate each token and collect results
+            const results: Array<{ tokenId: string; userId: string }> = [];
+            for (const { token, record } of tokens) {
+              const result = await tokenService.validateToken(token);
+              expect(result.valid).toBe(true);
+              results.push({ tokenId: result.tokenId!, userId: result.userId! });
+            }
+            
+            // Each token should have a unique tokenId
+            const tokenIds = results.map(r => r.tokenId);
+            const uniqueTokenIds = new Set(tokenIds);
+            expect(uniqueTokenIds.size).toBe(tokens.length);
+            
+            // All should have the same userId
+            for (const result of results) {
+              expect(result.userId).toBe(userId);
+            }
+          }
+        ),
+        { numRuns: 20, timeout: 60000 }
+      );
+    }, 120000);
+  });
+
+  /**
    * Property 8: Token Usage Logging
    * 
    * For any successful token authentication, a usage log entry SHALL be created 

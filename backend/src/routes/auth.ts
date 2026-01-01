@@ -4,8 +4,41 @@ import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import pool from '../config/database.js';
+import { tokenService, MAX_TOKENS_PER_USER } from '../services/tokenService.js';
+import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// ==================== RATE LIMITING ====================
+
+// In-memory rate limiter for token generation (5 per hour per user)
+// In production, use Redis or similar for distributed rate limiting
+const tokenGenerationRateLimits: Map<string, { count: number; resetAt: number }> = new Map();
+const TOKEN_RATE_LIMIT = 5;
+const TOKEN_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Check if user has exceeded token generation rate limit.
+ * Requirements: 4.3
+ */
+const checkTokenRateLimit = (userId: string): { allowed: boolean; retryAfter?: number } => {
+    const now = Date.now();
+    const userLimit = tokenGenerationRateLimits.get(userId);
+
+    if (!userLimit || now > userLimit.resetAt) {
+        // Reset or initialize
+        tokenGenerationRateLimits.set(userId, { count: 1, resetAt: now + TOKEN_RATE_WINDOW_MS });
+        return { allowed: true };
+    }
+
+    if (userLimit.count >= TOKEN_RATE_LIMIT) {
+        const retryAfter = Math.ceil((userLimit.resetAt - now) / 1000);
+        return { allowed: false, retryAfter };
+    }
+
+    userLimit.count++;
+    return { allowed: true };
+};
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
 const JWT_EXPIRES_SHORT = '1d';  // 1 day when not remembered
@@ -418,6 +451,184 @@ router.post('/change-password', async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Change password error:', error);
         res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ==================== API TOKEN MANAGEMENT ====================
+
+/**
+ * POST /api/auth/tokens - Generate a new personal API token
+ * 
+ * Requirements: 1.1, 1.4, 1.5, 2.4, 2.5, 4.3
+ * 
+ * Request body:
+ * - name: string (required) - Descriptive name for the token
+ * - expiresAt: string (optional) - ISO date string for expiration
+ * 
+ * Response:
+ * - token: string - The full token (only shown once!)
+ * - tokenRecord: object - Token metadata (without the full token)
+ */
+router.post('/tokens', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const { name, expiresAt } = req.body;
+
+        // Validate name
+        if (!name || typeof name !== 'string' || name.trim().length === 0) {
+            return res.status(400).json({ error: 'Token name is required' });
+        }
+
+        if (name.length > 100) {
+            return res.status(400).json({ error: 'Token name must be 100 characters or less' });
+        }
+
+        // Check rate limit (Requirements: 4.3)
+        const rateCheck = checkTokenRateLimit(userId);
+        if (!rateCheck.allowed) {
+            return res.status(429).json({
+                error: 'Too many token requests. Please try again later.',
+                retryAfter: rateCheck.retryAfter
+            });
+        }
+
+        // Check max tokens limit (Requirements: 2.4, 2.5)
+        const tokenCount = await tokenService.getTokenCount(userId);
+        if (tokenCount >= MAX_TOKENS_PER_USER) {
+            return res.status(400).json({
+                error: `Maximum tokens reached (${MAX_TOKENS_PER_USER}). Please revoke an existing token.`,
+                maxTokens: MAX_TOKENS_PER_USER,
+                currentCount: tokenCount
+            });
+        }
+
+        // Parse expiration date if provided
+        let parsedExpiresAt: Date | undefined;
+        if (expiresAt) {
+            parsedExpiresAt = new Date(expiresAt);
+            if (isNaN(parsedExpiresAt.getTime())) {
+                return res.status(400).json({ error: 'Invalid expiration date format' });
+            }
+            if (parsedExpiresAt <= new Date()) {
+                return res.status(400).json({ error: 'Expiration date must be in the future' });
+            }
+        }
+
+        // Generate the token
+        const result = await tokenService.generateToken(
+            userId,
+            name.trim(),
+            parsedExpiresAt
+        );
+
+        console.log(`[AUTH] API token generated for user ${userId}: ${result.tokenRecord.tokenPrefix}...${result.tokenRecord.tokenSuffix}`);
+
+        res.status(201).json({
+            success: true,
+            token: result.token,  // Only shown once!
+            tokenRecord: {
+                id: result.tokenRecord.id,
+                name: result.tokenRecord.name,
+                tokenPrefix: result.tokenRecord.tokenPrefix,
+                tokenSuffix: result.tokenRecord.tokenSuffix,
+                expiresAt: result.tokenRecord.expiresAt,
+                createdAt: result.tokenRecord.createdAt,
+            },
+            warning: 'This token will only be displayed once. Please copy it now.'
+        });
+    } catch (error: any) {
+        console.error('Token generation error:', error);
+        
+        if (error.message?.includes('Maximum tokens reached')) {
+            return res.status(400).json({ error: error.message });
+        }
+        
+        res.status(500).json({ error: 'Failed to generate token' });
+    }
+});
+
+/**
+ * GET /api/auth/tokens - List all tokens for the authenticated user
+ * 
+ * Requirements: 2.1
+ * 
+ * Response:
+ * - tokens: array of token metadata (without full token values)
+ */
+router.get('/tokens', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const tokens = await tokenService.listTokens(userId);
+
+        // Map to response format (exclude sensitive fields)
+        const tokenList = tokens.map(t => ({
+            id: t.id,
+            name: t.name,
+            tokenPrefix: t.tokenPrefix,
+            tokenSuffix: t.tokenSuffix,
+            expiresAt: t.expiresAt,
+            lastUsedAt: t.lastUsedAt,
+            createdAt: t.createdAt,
+            revokedAt: t.revokedAt,
+            isActive: !t.revokedAt && (!t.expiresAt || new Date(t.expiresAt) > new Date())
+        }));
+
+        res.json({
+            success: true,
+            tokens: tokenList,
+            count: tokenList.length,
+            maxTokens: MAX_TOKENS_PER_USER
+        });
+    } catch (error) {
+        console.error('List tokens error:', error);
+        res.status(500).json({ error: 'Failed to list tokens' });
+    }
+});
+
+/**
+ * DELETE /api/auth/tokens/:id - Revoke a token
+ * 
+ * Requirements: 2.2, 2.3
+ * 
+ * Response:
+ * - success: boolean
+ * - message: string
+ */
+router.delete('/tokens/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const tokenId = req.params.id;
+        if (!tokenId) {
+            return res.status(400).json({ error: 'Token ID is required' });
+        }
+
+        const revoked = await tokenService.revokeToken(userId, tokenId);
+
+        if (!revoked) {
+            return res.status(404).json({ error: 'Token not found or already revoked' });
+        }
+
+        console.log(`[AUTH] API token revoked for user ${userId}: ${tokenId}`);
+
+        res.json({
+            success: true,
+            message: 'Token revoked successfully'
+        });
+    } catch (error) {
+        console.error('Revoke token error:', error);
+        res.status(500).json({ error: 'Failed to revoke token' });
     }
 });
 
