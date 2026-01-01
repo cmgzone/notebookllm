@@ -1582,4 +1582,40 @@ class ApiService {
         await post('/coding-agent/sessions/$sessionId/disconnect', {});
     return response;
   }
+
+  // ============ PERSONAL API TOKENS ============
+
+  /// Generate a new personal API token for authenticating MCP servers
+  /// Requirements: 1.1, 1.4, 1.5
+  ///
+  /// Returns the full token (only shown once!) along with token metadata.
+  /// The token should be copied immediately as it cannot be retrieved later.
+  Future<Map<String, dynamic>> generateApiToken({
+    required String name,
+    DateTime? expiresAt,
+  }) async {
+    final response = await post('/auth/tokens', {
+      'name': name,
+      if (expiresAt != null) 'expiresAt': expiresAt.toIso8601String(),
+    });
+    return response;
+  }
+
+  /// List all API tokens for the current user
+  /// Requirements: 2.1
+  ///
+  /// Returns token metadata including name, creation date, last used date,
+  /// and partial token (prefix/suffix for identification).
+  Future<List<Map<String, dynamic>>> listApiTokens() async {
+    final response = await get('/auth/tokens');
+    return List<Map<String, dynamic>>.from(response['tokens'] ?? []);
+  }
+
+  /// Revoke an API token by ID
+  /// Requirements: 2.2
+  ///
+  /// Once revoked, the token is immediately invalidated for all future requests.
+  Future<void> revokeApiToken(String tokenId) async {
+    await delete('/auth/tokens/$tokenId');
+  }
 }

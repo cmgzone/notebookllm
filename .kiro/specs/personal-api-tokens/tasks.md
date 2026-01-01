@@ -69,12 +69,12 @@ This plan implements a personal API token system for authenticating MCP servers 
 - [x] 6. Checkpoint - Backend Complete
   - Ensure all backend tests pass, ask the user if questions arise.
 
-- [ ] 7. Flutter API Service Updates
-  - [ ] 7.1 Add generateApiToken(name, expiresAt?) method to ApiService
+- [x] 7. Flutter API Service Updates
+  - [x] 7.1 Add generateApiToken(name, expiresAt?) method to ApiService
     - _Requirements: 1.1, 1.4, 1.5_
-  - [ ] 7.2 Add listApiTokens() method
+  - [x] 7.2 Add listApiTokens() method
     - _Requirements: 2.1_
-  - [ ] 7.3 Add revokeApiToken(tokenId) method
+  - [x] 7.3 Add revokeApiToken(tokenId) method
     - _Requirements: 2.2_
 
 - [ ] 8. Flutter UI - API Tokens Section
