@@ -36,8 +36,6 @@ dotenv.config();
 // Configuration
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
 const API_KEY = process.env.CODING_AGENT_API_KEY || '';
-const WEBHOOK_URL = process.env.WEBHOOK_URL || '';
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
 
 // Axios instance for backend communication
 const api = axios.create({
@@ -48,9 +46,6 @@ const api = axios.create({
   },
   timeout: 30000,
 });
-
-// Store session info for webhook registration
-let currentSessionId: string | null = null;
 
 // Tool definitions
 const tools: Tool[] = [
@@ -614,48 +609,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
 
       case 'create_agent_notebook': {
         const input = CreateAgentNotebookSchema.parse(args);
-        
-        // Include webhook config from environment if available
-        const notebookInput = {
-          ...input,
-          webhookUrl: input.webhookUrl || WEBHOOK_URL || undefined,
-          webhookSecret: input.webhookSecret || WEBHOOK_SECRET || undefined,
-        };
-        
-        const response = await api.post('/notebooks', notebookInput);
-        
-        // Store session ID for later use
-        if (response.data?.session?.id) {
-          currentSessionId = response.data.session.id;
-          
-          // Auto-register webhook if configured in env but not in input
-          if (WEBHOOK_URL && WEBHOOK_SECRET && !input.webhookUrl) {
-            try {
-              await api.post('/webhook/register', {
-                agentSessionId: currentSessionId,
-                webhookUrl: WEBHOOK_URL,
-                webhookSecret: WEBHOOK_SECRET,
-              });
-              console.error(`[MCP] Webhook auto-registered for session ${currentSessionId}`);
-            } catch (webhookError) {
-              console.error('[MCP] Failed to auto-register webhook:', webhookError);
-            }
-          }
-        }
-        
+        const response = await api.post('/notebooks', input);
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify({
-                ...response.data,
-                webhookConfigured: !!(WEBHOOK_URL && WEBHOOK_SECRET),
-                communicationMethods: {
-                  polling: 'Always available via get_followup_messages',
-                  webhook: WEBHOOK_URL ? `Configured: ${WEBHOOK_URL}` : 'Not configured (set WEBHOOK_URL and WEBHOOK_SECRET)',
-                  websocket: `Available at wss://${BACKEND_URL.replace('https://', '').replace('http://', '')}/ws/agent`,
-                },
-              }, null, 2),
+              text: JSON.stringify(response.data, null, 2),
             },
           ],
         };
