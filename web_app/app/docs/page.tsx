@@ -182,18 +182,44 @@ function QuickStartSection() {
           </div>
         </Step>
 
-        <Step number={2} title="Configure Your MCP Client">
+        <Step number={2} title="Install the MCP Server">
           <p className="text-neutral-400 mb-4">
-            Add the following to your MCP configuration file (no installation needed):
+            Run the install script for your platform:
+          </p>
+          <div className="space-y-3 mb-4">
+            <div>
+              <span className="text-xs text-neutral-500">Windows (PowerShell):</span>
+              <CodeBlock
+                language="powershell"
+                code={`irm https://notebookllm-ufj7.onrender.com/api/mcp/install.ps1 | iex`}
+              />
+            </div>
+            <div>
+              <span className="text-xs text-neutral-500">Mac/Linux:</span>
+              <CodeBlock
+                language="bash"
+                code={`curl -fsSL https://notebookllm-ufj7.onrender.com/api/mcp/install.sh | bash`}
+              />
+            </div>
+          </div>
+          <p className="text-neutral-400 text-sm">
+            The script will download the MCP server and show you the configuration to add.
+          </p>
+        </Step>
+
+        <Step number={3} title="Configure Your MCP Client">
+          <p className="text-neutral-400 mb-4">
+            Add the configuration shown by the install script to your MCP config file:
           </p>
           <CodeBlock
             language="json"
             code={`{
   "mcpServers": {
     "notebookllm": {
-      "command": "npx",
-      "args": ["-y", "@notebookllm/mcp-server"],
+      "command": "node",
+      "args": ["~/.notebookllm-mcp/index.js"],
       "env": {
+        "BACKEND_URL": "https://notebookllm-ufj7.onrender.com",
         "CODING_AGENT_API_KEY": "nllm_your-token-here"
       }
     }
@@ -202,7 +228,7 @@ function QuickStartSection() {
           />
         </Step>
 
-        <Step number={3} title="Start Using the Tools">
+        <Step number={4} title="Start Using the Tools">
           <p className="text-neutral-400 mb-4">
             Once configured, your coding agent can use the MCP tools to verify code and save it to your notebooks.
             The server will automatically connect to the NotebookLM backend.
@@ -454,43 +480,52 @@ function ConfigurationSection() {
       <SectionHeader title="Configuration" icon={<Settings className="text-purple-400" size={20} />} />
       
       <div className="space-y-6">
-        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-6">
+        <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-6">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Zap className="text-blue-400" size={20} />
-            Recommended: NPX Configuration
+            <Zap className="text-green-400" size={20} />
+            Recommended: Self-Hosted Installation
           </h3>
           <p className="text-neutral-400 mb-4">
-            The easiest way to use the MCP server - no local installation required:
+            Install the MCP server directly from our backend - no npm account needed:
           </p>
-          <CodeBlock
-            language="json"
-            code={`{
-  "mcpServers": {
-    "notebookllm": {
-      "command": "npx",
-      "args": ["-y", "@notebookllm/mcp-server"],
-      "env": {
-        "CODING_AGENT_API_KEY": "nllm_your-personal-api-token-here"
-      }
-    }
-  }
-}`}
-          />
+          
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-sm font-medium text-neutral-300 mb-2">Windows (PowerShell):</h4>
+              <CodeBlock
+                language="powershell"
+                code={`irm https://notebookllm-ufj7.onrender.com/api/mcp/install.ps1 | iex`}
+              />
+            </div>
+            
+            <div>
+              <h4 className="text-sm font-medium text-neutral-300 mb-2">Mac/Linux:</h4>
+              <CodeBlock
+                language="bash"
+                code={`curl -fsSL https://notebookllm-ufj7.onrender.com/api/mcp/install.sh | bash`}
+              />
+            </div>
+          </div>
+          
+          <p className="text-neutral-400 mt-4 text-sm">
+            After installation, configure your MCP client with the path shown in the output.
+          </p>
         </div>
 
         <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
           <h3 className="text-lg font-semibold mb-4">Kiro Configuration</h3>
           <p className="text-neutral-400 mb-4">
-            Add to <code className="text-blue-400">.kiro/settings/mcp.json</code>:
+            Add to <code className="text-blue-400">.kiro/settings/mcp.json</code> (after running the install script):
           </p>
           <CodeBlock
             language="json"
             code={`{
   "mcpServers": {
     "notebookllm": {
-      "command": "npx",
-      "args": ["-y", "@notebookllm/mcp-server"],
+      "command": "node",
+      "args": ["C:/Users/YourName/.notebookllm-mcp/index.js"],
       "env": {
+        "BACKEND_URL": "https://notebookllm-ufj7.onrender.com",
         "CODING_AGENT_API_KEY": "nllm_your-personal-api-token-here"
       }
     }
@@ -509,9 +544,10 @@ function ConfigurationSection() {
             code={`{
   "mcpServers": {
     "notebookllm": {
-      "command": "npx",
-      "args": ["-y", "@notebookllm/mcp-server"],
+      "command": "node",
+      "args": ["~/.notebookllm-mcp/index.js"],
       "env": {
+        "BACKEND_URL": "https://notebookllm-ufj7.onrender.com",
         "CODING_AGENT_API_KEY": "nllm_your-personal-api-token-here"
       }
     }
@@ -521,29 +557,26 @@ function ConfigurationSection() {
         </div>
 
         <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
-          <h3 className="text-lg font-semibold mb-4">Alternative: Local Installation</h3>
+          <h3 className="text-lg font-semibold mb-4">Manual Download</h3>
           <p className="text-neutral-400 mb-4">
-            If you prefer to run the server locally:
+            If you prefer to download manually:
+          </p>
+          <div className="space-y-2 text-sm text-neutral-300">
+            <p>1. Download the server: <a href="https://notebookllm-ufj7.onrender.com/api/mcp/index.js" className="text-blue-400 hover:underline">index.js</a></p>
+            <p>2. Download package.json: <a href="https://notebookllm-ufj7.onrender.com/api/mcp/package.json" className="text-blue-400 hover:underline">package.json</a></p>
+            <p>3. Run <code className="text-purple-400">npm install --production</code> in the download folder</p>
+            <p>4. Configure your MCP client with the path to index.js</p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
+          <h3 className="text-lg font-semibold mb-4">Get Configuration Template</h3>
+          <p className="text-neutral-400 mb-4">
+            Get a ready-to-use configuration template:
           </p>
           <CodeBlock
             language="bash"
-            code={`# Clone and build
-cd backend/mcp-server
-npm install
-npm run build
-
-# Then configure with absolute path
-{
-  "mcpServers": {
-    "notebookllm": {
-      "command": "node",
-      "args": ["/path/to/backend/mcp-server/dist/index.js"],
-      "env": {
-        "CODING_AGENT_API_KEY": "nllm_your-token"
-      }
-    }
-  }
-}`}
+            code={`curl https://notebookllm-ufj7.onrender.com/api/mcp/config`}
           />
         </div>
       </div>
