@@ -81,38 +81,38 @@ This plan implements bidirectional communication between users and third-party c
   - [x] 8.5 Add register_webhook tool for webhook configuration
     - _Requirements: 5.1_
 
-- [ ] 9. Flutter API Service Updates
-  - [ ] 9.1 Add getAgentNotebooks() method to ApiService
+- [x] 9. Flutter API Service Updates
+  - [x] 9.1 Add getAgentNotebooks() method to ApiService
     - _Requirements: 4.1_
-  - [ ] 9.2 Add getSourceConversation(sourceId) method
+  - [x] 9.2 Add getSourceConversation(sourceId) method
     - _Requirements: 3.5_
-  - [ ] 9.3 Add sendFollowupMessage(sourceId, message) method
+  - [x] 9.3 Add sendFollowupMessage(sourceId, message) method
     - _Requirements: 3.2_
-  - [ ] 9.4 Add disconnectAgent(sessionId) method
+  - [x] 9.4 Add disconnectAgent(sessionId) method
     - _Requirements: 4.3_
 
-- [ ] 10. Flutter UI - Agent Notebook Badge
-  - [ ] 10.1 Create AgentNotebookBadge widget showing agent name and status
+- [x] 10. Flutter UI - Agent Notebook Badge
+  - [x] 10.1 Create AgentNotebookBadge widget showing agent name and status
     - _Requirements: 1.4, 4.1_
-  - [ ] 10.2 Update NotebookCard to display badge for agent notebooks
+  - [x] 10.2 Update NotebookCard to display badge for agent notebooks
     - _Requirements: 1.4_
 
-- [ ] 11. Flutter UI - Source Chat Interface
-  - [ ] 11.1 Create SourceChatSheet widget for viewing/sending messages
+- [x] 11. Flutter UI - Source Chat Interface
+  - [x] 11.1 Create SourceChatSheet widget for viewing/sending messages
     - _Requirements: 3.1, 3.2, 3.3_
-  - [ ] 11.2 Add "Chat with Agent" button to code source detail screen
+  - [x] 11.2 Add "Chat with Agent" button to code source detail screen
     - _Requirements: 3.1_
-  - [ ] 11.3 Create SourceConversationProvider for managing chat state
+  - [x] 11.3 Create SourceConversationProvider for managing chat state
     - _Requirements: 3.5_
-  - [ ] 11.4 Display agent responses with code highlighting if code is included
+  - [x] 11.4 Display agent responses with code highlighting if code is included
     - _Requirements: 3.3_
 
-- [ ] 12. Flutter UI - Agent Management
-  - [ ] 12.1 Create AgentConnectionsScreen showing all connected agents
+- [x] 12. Flutter UI - Agent Management
+  - [x] 12.1 Create AgentConnectionsScreen showing all connected agents
     - _Requirements: 4.1, 4.4_
-  - [ ] 12.2 Add disconnect/reconnect functionality
+  - [x] 12.2 Add disconnect/reconnect functionality
     - _Requirements: 4.2, 4.3_
-  - [ ] 12.3 Add route to agent connections from settings
+  - [x] 12.3 Add route to agent connections from settings
     - _Requirements: 4.1_
 
 - [ ] 13. Final Checkpoint

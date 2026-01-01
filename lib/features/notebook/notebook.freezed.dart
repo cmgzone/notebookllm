@@ -28,7 +28,13 @@ mixin _$Notebook {
       throw _privateConstructorUsedError; // Base64 encoded image or URL
   int get sourceCount => throw _privateConstructorUsedError;
   DateTime get createdAt => throw _privateConstructorUsedError;
-  DateTime get updatedAt => throw _privateConstructorUsedError;
+  DateTime get updatedAt =>
+      throw _privateConstructorUsedError; // Agent notebook fields (Requirements 1.4, 4.1)
+  bool get isAgentNotebook => throw _privateConstructorUsedError;
+  String? get agentSessionId => throw _privateConstructorUsedError;
+  String? get agentName => throw _privateConstructorUsedError;
+  String? get agentIdentifier => throw _privateConstructorUsedError;
+  String get agentStatus => throw _privateConstructorUsedError;
 
   /// Serializes this Notebook to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -53,7 +59,12 @@ abstract class $NotebookCopyWith<$Res> {
       String? coverImage,
       int sourceCount,
       DateTime createdAt,
-      DateTime updatedAt});
+      DateTime updatedAt,
+      bool isAgentNotebook,
+      String? agentSessionId,
+      String? agentName,
+      String? agentIdentifier,
+      String agentStatus});
 }
 
 /// @nodoc
@@ -79,6 +90,11 @@ class _$NotebookCopyWithImpl<$Res, $Val extends Notebook>
     Object? sourceCount = null,
     Object? createdAt = null,
     Object? updatedAt = null,
+    Object? isAgentNotebook = null,
+    Object? agentSessionId = freezed,
+    Object? agentName = freezed,
+    Object? agentIdentifier = freezed,
+    Object? agentStatus = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -113,6 +129,26 @@ class _$NotebookCopyWithImpl<$Res, $Val extends Notebook>
           ? _value.updatedAt
           : updatedAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      isAgentNotebook: null == isAgentNotebook
+          ? _value.isAgentNotebook
+          : isAgentNotebook // ignore: cast_nullable_to_non_nullable
+              as bool,
+      agentSessionId: freezed == agentSessionId
+          ? _value.agentSessionId
+          : agentSessionId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      agentName: freezed == agentName
+          ? _value.agentName
+          : agentName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      agentIdentifier: freezed == agentIdentifier
+          ? _value.agentIdentifier
+          : agentIdentifier // ignore: cast_nullable_to_non_nullable
+              as String?,
+      agentStatus: null == agentStatus
+          ? _value.agentStatus
+          : agentStatus // ignore: cast_nullable_to_non_nullable
+              as String,
     ) as $Val);
   }
 }
@@ -133,7 +169,12 @@ abstract class _$$NotebookImplCopyWith<$Res>
       String? coverImage,
       int sourceCount,
       DateTime createdAt,
-      DateTime updatedAt});
+      DateTime updatedAt,
+      bool isAgentNotebook,
+      String? agentSessionId,
+      String? agentName,
+      String? agentIdentifier,
+      String agentStatus});
 }
 
 /// @nodoc
@@ -157,6 +198,11 @@ class __$$NotebookImplCopyWithImpl<$Res>
     Object? sourceCount = null,
     Object? createdAt = null,
     Object? updatedAt = null,
+    Object? isAgentNotebook = null,
+    Object? agentSessionId = freezed,
+    Object? agentName = freezed,
+    Object? agentIdentifier = freezed,
+    Object? agentStatus = null,
   }) {
     return _then(_$NotebookImpl(
       id: null == id
@@ -191,6 +237,26 @@ class __$$NotebookImplCopyWithImpl<$Res>
           ? _value.updatedAt
           : updatedAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      isAgentNotebook: null == isAgentNotebook
+          ? _value.isAgentNotebook
+          : isAgentNotebook // ignore: cast_nullable_to_non_nullable
+              as bool,
+      agentSessionId: freezed == agentSessionId
+          ? _value.agentSessionId
+          : agentSessionId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      agentName: freezed == agentName
+          ? _value.agentName
+          : agentName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      agentIdentifier: freezed == agentIdentifier
+          ? _value.agentIdentifier
+          : agentIdentifier // ignore: cast_nullable_to_non_nullable
+              as String?,
+      agentStatus: null == agentStatus
+          ? _value.agentStatus
+          : agentStatus // ignore: cast_nullable_to_non_nullable
+              as String,
     ));
   }
 }
@@ -206,7 +272,12 @@ class _$NotebookImpl implements _Notebook {
       this.coverImage,
       required this.sourceCount,
       required this.createdAt,
-      required this.updatedAt});
+      required this.updatedAt,
+      this.isAgentNotebook = false,
+      this.agentSessionId,
+      this.agentName,
+      this.agentIdentifier,
+      this.agentStatus = 'active'});
 
   factory _$NotebookImpl.fromJson(Map<String, dynamic> json) =>
       _$$NotebookImplFromJson(json);
@@ -229,10 +300,23 @@ class _$NotebookImpl implements _Notebook {
   final DateTime createdAt;
   @override
   final DateTime updatedAt;
+// Agent notebook fields (Requirements 1.4, 4.1)
+  @override
+  @JsonKey()
+  final bool isAgentNotebook;
+  @override
+  final String? agentSessionId;
+  @override
+  final String? agentName;
+  @override
+  final String? agentIdentifier;
+  @override
+  @JsonKey()
+  final String agentStatus;
 
   @override
   String toString() {
-    return 'Notebook(id: $id, userId: $userId, title: $title, description: $description, coverImage: $coverImage, sourceCount: $sourceCount, createdAt: $createdAt, updatedAt: $updatedAt)';
+    return 'Notebook(id: $id, userId: $userId, title: $title, description: $description, coverImage: $coverImage, sourceCount: $sourceCount, createdAt: $createdAt, updatedAt: $updatedAt, isAgentNotebook: $isAgentNotebook, agentSessionId: $agentSessionId, agentName: $agentName, agentIdentifier: $agentIdentifier, agentStatus: $agentStatus)';
   }
 
   @override
@@ -252,13 +336,36 @@ class _$NotebookImpl implements _Notebook {
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt) &&
             (identical(other.updatedAt, updatedAt) ||
-                other.updatedAt == updatedAt));
+                other.updatedAt == updatedAt) &&
+            (identical(other.isAgentNotebook, isAgentNotebook) ||
+                other.isAgentNotebook == isAgentNotebook) &&
+            (identical(other.agentSessionId, agentSessionId) ||
+                other.agentSessionId == agentSessionId) &&
+            (identical(other.agentName, agentName) ||
+                other.agentName == agentName) &&
+            (identical(other.agentIdentifier, agentIdentifier) ||
+                other.agentIdentifier == agentIdentifier) &&
+            (identical(other.agentStatus, agentStatus) ||
+                other.agentStatus == agentStatus));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(runtimeType, id, userId, title, description,
-      coverImage, sourceCount, createdAt, updatedAt);
+  int get hashCode => Object.hash(
+      runtimeType,
+      id,
+      userId,
+      title,
+      description,
+      coverImage,
+      sourceCount,
+      createdAt,
+      updatedAt,
+      isAgentNotebook,
+      agentSessionId,
+      agentName,
+      agentIdentifier,
+      agentStatus);
 
   /// Create a copy of Notebook
   /// with the given fields replaced by the non-null parameter values.
@@ -285,7 +392,12 @@ abstract class _Notebook implements Notebook {
       final String? coverImage,
       required final int sourceCount,
       required final DateTime createdAt,
-      required final DateTime updatedAt}) = _$NotebookImpl;
+      required final DateTime updatedAt,
+      final bool isAgentNotebook,
+      final String? agentSessionId,
+      final String? agentName,
+      final String? agentIdentifier,
+      final String agentStatus}) = _$NotebookImpl;
 
   factory _Notebook.fromJson(Map<String, dynamic> json) =
       _$NotebookImpl.fromJson;
@@ -305,7 +417,17 @@ abstract class _Notebook implements Notebook {
   @override
   DateTime get createdAt;
   @override
-  DateTime get updatedAt;
+  DateTime get updatedAt; // Agent notebook fields (Requirements 1.4, 4.1)
+  @override
+  bool get isAgentNotebook;
+  @override
+  String? get agentSessionId;
+  @override
+  String? get agentName;
+  @override
+  String? get agentIdentifier;
+  @override
+  String get agentStatus;
 
   /// Create a copy of Notebook
   /// with the given fields replaced by the non-null parameter values.

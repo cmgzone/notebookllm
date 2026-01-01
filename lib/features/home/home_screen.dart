@@ -421,6 +421,14 @@ class _AppDrawer extends ConsumerWidget {
                         },
                       ),
                       _DrawerItem(
+                        icon: LucideIcons.terminal,
+                        label: 'Agent Connections',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/agent-connections');
+                        },
+                      ),
+                      _DrawerItem(
                         icon: LucideIcons.shield,
                         label: 'Security',
                         onTap: () {
@@ -634,6 +642,10 @@ class _NotebookGrid extends ConsumerWidget {
             sourceCount: n.sourceCount,
             notebookId: n.id,
             coverImage: n.coverImage,
+            // Agent notebook fields (Requirements 1.4, 4.1)
+            isAgentNotebook: n.isAgentNotebook,
+            agentName: n.agentName,
+            agentStatus: n.agentStatus,
           ).animate().fadeIn(delay: Duration(milliseconds: index * 50));
         },
         childCount: notebooks.length,

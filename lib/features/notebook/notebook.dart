@@ -14,6 +14,13 @@ class Notebook with _$Notebook {
     required int sourceCount,
     required DateTime createdAt,
     required DateTime updatedAt,
+    // Agent notebook fields (Requirements 1.4, 4.1)
+    @Default(false) bool isAgentNotebook,
+    String? agentSessionId,
+    String? agentName,
+    String? agentIdentifier,
+    @Default('active')
+    String agentStatus, // 'active', 'expired', 'disconnected'
   }) = _Notebook;
 
   factory Notebook.fromJson(Map<String, dynamic> json) =>

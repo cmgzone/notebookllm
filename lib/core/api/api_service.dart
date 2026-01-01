@@ -1542,4 +1542,44 @@ class ApiService {
     final response = await get('/sports/team/$teamId/injuries');
     return List<Map<String, dynamic>>.from(response['injuries'] ?? []);
   }
+
+  // ============ CODING AGENT COMMUNICATION ============
+
+  /// Get all agent notebooks for the current user
+  /// Requirements: 4.1
+  Future<List<Map<String, dynamic>>> getAgentNotebooks() async {
+    final response = await get('/coding-agent/notebooks');
+    return List<Map<String, dynamic>>.from(response['notebooks'] ?? []);
+  }
+
+  /// Get conversation history for a source
+  /// Requirements: 3.5
+  Future<Map<String, dynamic>> getSourceConversation(String sourceId) async {
+    final response = await get('/coding-agent/conversations/$sourceId');
+    return {
+      'conversation': response['conversation'],
+      'messages': List<Map<String, dynamic>>.from(response['messages'] ?? []),
+    };
+  }
+
+  /// Send a follow-up message to an agent for a specific source
+  /// Requirements: 3.2
+  Future<Map<String, dynamic>> sendFollowupMessage(
+    String sourceId,
+    String message,
+  ) async {
+    final response = await post('/coding-agent/followups/send', {
+      'sourceId': sourceId,
+      'message': message,
+    });
+    return response;
+  }
+
+  /// Disconnect an agent session
+  /// Requirements: 4.3
+  Future<Map<String, dynamic>> disconnectAgent(String sessionId) async {
+    final response =
+        await post('/coding-agent/sessions/$sessionId/disconnect', {});
+    return response;
+  }
 }

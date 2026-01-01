@@ -799,6 +799,94 @@ router.post('/followups/send', authenticateToken, async (req: Request, res: Resp
 });
 
 /**
+ * GET /api/coding-agent/notebooks
+ * Get all agent notebooks for the current user
+ * 
+ * Requirements: 4.1
+ */
+router.get('/notebooks', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+
+    // Get all agent notebooks for this user
+    const notebooks = await agentNotebookService.getAgentNotebooks(userId);
+
+    // Enrich with session info
+    const enrichedNotebooks = await Promise.all(
+      notebooks.map(async (notebook) => {
+        let sessionInfo = null;
+        if (notebook.agentSessionId) {
+          const session = await agentSessionService.getSession(notebook.agentSessionId);
+          if (session) {
+            sessionInfo = {
+              id: session.id,
+              agentName: session.agentName,
+              agentIdentifier: session.agentIdentifier,
+              status: session.status,
+              lastActivity: session.lastActivity,
+            };
+          }
+        }
+        return {
+          ...notebook,
+          session: sessionInfo,
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      notebooks: enrichedNotebooks,
+      count: enrichedNotebooks.length,
+    });
+  } catch (error: any) {
+    console.error('Get agent notebooks error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/coding-agent/sessions/:sessionId/disconnect
+ * Disconnect an agent session
+ * 
+ * Requirements: 4.3
+ */
+router.post('/sessions/:sessionId/disconnect', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { sessionId } = req.params;
+
+    // Get the session and verify ownership
+    const session = await agentSessionService.getSession(sessionId);
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (session.userId !== userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Disconnect the session
+    await agentSessionService.disconnectSession(sessionId);
+
+    console.log(`[Coding Agent] Session ${sessionId} disconnected by user ${userId}`);
+
+    res.json({
+      success: true,
+      message: 'Agent session disconnected',
+      session: {
+        id: sessionId,
+        status: 'disconnected',
+      },
+    });
+  } catch (error: any) {
+    console.error('Disconnect session error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/coding-agent/conversations/:sourceId
  * Get conversation history for a source
  * 

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/media/media_service.dart';
 import '../../core/api/api_service.dart';
 import 'dart:typed_data';
 import 'source.dart';
 import 'source_provider.dart';
+import 'source_chat_sheet.dart';
+import 'source_conversation_provider.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../../features/fact_check/fact_check_service.dart';
 import '../../theme/app_theme.dart';
@@ -31,6 +34,15 @@ class SourceDetailScreen extends ConsumerWidget {
     );
   }
 
+  void _showAgentChatSheet(
+      BuildContext context, Source source, String? agentName) {
+    showSourceChatSheet(
+      context,
+      source: source,
+      agentName: agentName,
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sources = ref.watch(sourceProvider);
@@ -44,7 +56,17 @@ class SourceDetailScreen extends ConsumerWidget {
             content: ''));
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
-    // final isStorage = source.content.startsWith('storage://');
+
+    // Check if this source has an agent session
+    final hasAgentAsync = ref.watch(sourceHasAgentProvider(sourceId));
+    final hasAgent = hasAgentAsync.valueOrNull ?? false;
+
+    // Get agent name from source metadata if available
+    String? agentName;
+    // Note: Source model doesn't have metadata field exposed,
+    // but we can check the type for code sources
+    final isCodeSource = source.type == 'code';
+
     return Scaffold(
       appBar: AppBar(
         flexibleSpace: Container(
@@ -57,6 +79,14 @@ class SourceDetailScreen extends ConsumerWidget {
                 color: Colors.white, fontWeight: FontWeight.bold)),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
+          // Chat with Agent button - only show for code sources with agent session
+          // Requirements: 3.1
+          if (isCodeSource || hasAgent)
+            IconButton(
+              icon: const Icon(LucideIcons.terminal),
+              tooltip: 'Chat with Agent',
+              onPressed: () => _showAgentChatSheet(context, source, agentName),
+            ),
           IconButton(
             icon: const Icon(Icons.fact_check_outlined),
             tooltip: 'Verify Facts',
@@ -83,19 +113,54 @@ class SourceDetailScreen extends ConsumerWidget {
                 Icon(
                   source.type == 'youtube'
                       ? Icons.play_circle_outline
-                      : Icons.article_outlined,
+                      : source.type == 'code'
+                          ? LucideIcons.code2
+                          : Icons.article_outlined,
                   size: 16,
                   color: scheme.primary,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  '${source.type.toUpperCase()} • Added on ${source.addedAt.day}/${source.addedAt.month}/${source.addedAt.year}',
-                  style: text.labelSmall?.copyWith(
-                    color: scheme.onSurface.withValues(alpha: 0.6),
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
+                Expanded(
+                  child: Text(
+                    '${source.type.toUpperCase()} • Added on ${source.addedAt.day}/${source.addedAt.month}/${source.addedAt.year}',
+                    style: text.labelSmall?.copyWith(
+                      color: scheme.onSurface.withValues(alpha: 0.6),
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
+                // Agent badge for code sources
+                if (hasAgent)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: scheme.primary.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          LucideIcons.bot,
+                          size: 12,
+                          color: scheme.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Agent',
+                          style: text.labelSmall?.copyWith(
+                            color: scheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -110,6 +175,16 @@ class SourceDetailScreen extends ConsumerWidget {
           ),
         ],
       ),
+      // Floating action button for chat with agent
+      floatingActionButton: (isCodeSource || hasAgent)
+          ? FloatingActionButton.extended(
+              onPressed: () => _showAgentChatSheet(context, source, agentName),
+              icon: const Icon(LucideIcons.terminal),
+              label: const Text('Chat with Agent'),
+              backgroundColor: scheme.primary,
+              foregroundColor: scheme.onPrimary,
+            )
+          : null,
     );
   }
 }

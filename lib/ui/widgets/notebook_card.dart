@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'agent_notebook_badge.dart';
 
 class NotebookCard extends StatelessWidget {
   const NotebookCard({
@@ -12,6 +13,10 @@ class NotebookCard extends StatelessWidget {
     this.coverImage,
     this.onPlay,
     this.onCoverTap,
+    // Agent notebook fields (Requirements 1.4, 4.1)
+    this.isAgentNotebook = false,
+    this.agentName,
+    this.agentStatus = 'active',
   });
 
   final String title;
@@ -20,6 +25,10 @@ class NotebookCard extends StatelessWidget {
   final String? coverImage;
   final VoidCallback? onPlay;
   final VoidCallback? onCoverTap;
+  // Agent notebook fields
+  final bool isAgentNotebook;
+  final String? agentName;
+  final String agentStatus;
 
   Widget? _buildCoverImage() {
     if (coverImage == null || coverImage!.isEmpty) return null;
@@ -227,38 +236,47 @@ class NotebookCard extends StatelessWidget {
 
                         const Spacer(),
 
-                        // AI indicator
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: hasCover
-                                ? Colors.white.withValues(alpha: 0.2)
-                                : scheme.tertiary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.auto_awesome,
-                                size: 14,
-                                color:
-                                    hasCover ? Colors.white : scheme.tertiary,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'AI',
-                                style: TextStyle(
+                        // Agent badge or AI indicator (Requirements 1.4, 4.1)
+                        if (isAgentNotebook && agentName != null)
+                          AgentNotebookBadge(
+                            agentName: agentName!,
+                            status: agentStatus,
+                            compact: true,
+                            onCoverImage: hasCover,
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: hasCover
+                                  ? Colors.white.withValues(alpha: 0.2)
+                                  : scheme.tertiary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.auto_awesome,
+                                  size: 14,
                                   color:
                                       hasCover ? Colors.white : scheme.tertiary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
                                 ),
-                              ),
-                            ],
-                          ),
-                        ).animate().slideX(begin: 0.2).fadeIn(),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'AI',
+                                  style: TextStyle(
+                                    color: hasCover
+                                        ? Colors.white
+                                        : scheme.tertiary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ).animate().slideX(begin: 0.2).fadeIn(),
                       ],
                     ),
                   ],

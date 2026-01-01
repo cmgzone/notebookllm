@@ -38,9 +38,15 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
           title: notebook['title'] as String,
           description: notebook['description'] as String? ?? '',
           coverImage: notebook['cover_image'] as String?,
-          sourceCount: 0, // Will be calculated from sources if needed
+          sourceCount: (notebook['source_count'] as num?)?.toInt() ?? 0,
           createdAt: DateTime.parse(notebook['created_at'] as String),
           updatedAt: DateTime.parse(notebook['updated_at'] as String),
+          // Agent notebook fields (Requirements 1.4, 4.1)
+          isAgentNotebook: notebook['is_agent_notebook'] as bool? ?? false,
+          agentSessionId: notebook['agent_session_id'] as String?,
+          agentName: notebook['agent_name'] as String?,
+          agentIdentifier: notebook['agent_identifier'] as String?,
+          agentStatus: notebook['agent_status'] as String? ?? 'active',
         );
       }).toList();
 
