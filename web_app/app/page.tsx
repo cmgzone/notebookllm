@@ -19,7 +19,8 @@ import {
   Headphones,
   Book,
   GraduationCap,
-  Youtube
+  Youtube,
+  Plug
 } from "lucide-react";
 import Image from "next/image";
 import api from "@/lib/api";
@@ -272,6 +273,7 @@ function Navbar() {
           <a href="#" className="hover:text-blue-400 transition-colors">Features</a>
           <a href="#" className="hover:text-blue-400 transition-colors">Technology</a>
           <a href="#pricing" className="hover:text-blue-400 transition-colors">Pricing</a>
+          <Link href="/docs" className="hover:text-blue-400 transition-colors">Docs</Link>
         </div>
         <div className="flex items-center gap-6">
           <a href="/login" className="text-sm font-semibold text-neutral-400 hover:text-white transition-colors">
@@ -430,6 +432,11 @@ function FeaturesSection() {
       icon: <Globe className="text-blue-400" />,
       title: "Deep Research Agent",
       desc: "Our autonomous browser agent dives deep into the web, analyzing thousands of sources to generate comprehensive, cited reports in minutes."
+    },
+    {
+      icon: <Plug className="text-cyan-400" />,
+      title: "MCP Server Integration",
+      desc: "Connect your favorite AI coding agents like Kiro, Claude, or Cursor directly to your notebooks via Model Context Protocol for seamless knowledge access."
     },
     {
       icon: <Mic className="text-purple-400" />,

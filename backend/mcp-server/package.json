@@ -1,11 +1,17 @@
 {
-  "name": "coding-agent-mcp-server",
+  "name": "@notebookllm/mcp-server",
   "version": "1.0.0",
   "type": "module",
-  "description": "MCP Server for Code Verification Agent - allows third-party coding agents to verify and save code",
+  "description": "MCP Server for NotebookLM - connect AI coding agents to your notebooks for knowledge retrieval and code verification",
   "main": "dist/index.js",
   "bin": {
-    "coding-agent-mcp": "./dist/index.js"
+    "notebookllm-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc",

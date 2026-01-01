@@ -78,14 +78,37 @@ npm install
 npm run build
 ```
 
+## Authentication
+
+The MCP server requires a personal API token to authenticate with your NotebookLLM account. This token links the coding agent to your user account, allowing it to save verified code as sources.
+
+### Generating a Personal API Token
+
+1. Open the NotebookLLM app
+2. Go to **Settings** → **Agent Connections**
+3. In the **API Tokens** section, click **Generate New Token**
+4. Give your token a descriptive name (e.g., "Kiro MCP Server")
+5. Optionally set an expiration date
+6. Click **Generate** and **copy the token immediately**
+
+> ⚠️ **Important**: The token is only displayed once. If you lose it, you'll need to generate a new one.
+
+### Token Format
+
+Personal API tokens use the format: `nllm_` followed by 43 characters of random data.
+
+Example: `nllm_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2`
+
 ## Configuration
 
 Create a `.env` file:
 
 ```env
 BACKEND_URL=http://localhost:3000
-CODING_AGENT_API_KEY=your-api-key
+CODING_AGENT_API_KEY=nllm_your-personal-api-token-here
 ```
+
+Replace `nllm_your-personal-api-token-here` with the token you generated from the app.
 
 ## Usage with MCP Clients
 
@@ -101,7 +124,7 @@ Add to `.kiro/settings/mcp.json`:
       "args": ["path/to/backend/mcp-server/dist/index.js"],
       "env": {
         "BACKEND_URL": "http://localhost:3000",
-        "CODING_AGENT_API_KEY": "your-key"
+        "CODING_AGENT_API_KEY": "nllm_your-personal-api-token-here"
       }
     }
   }
@@ -119,12 +142,33 @@ Add to `claude_desktop_config.json`:
       "command": "node",
       "args": ["/absolute/path/to/backend/mcp-server/dist/index.js"],
       "env": {
-        "BACKEND_URL": "http://localhost:3000"
+        "BACKEND_URL": "http://localhost:3000",
+        "CODING_AGENT_API_KEY": "nllm_your-personal-api-token-here"
       }
     }
   }
 }
 ```
+
+## Token Management
+
+### Viewing Your Tokens
+
+In the app, go to **Settings** → **Agent Connections** to see all your active tokens. You can view:
+- Token name
+- Creation date
+- Last used date
+- Partial token (last 4 characters for identification)
+
+### Revoking Tokens
+
+If a token is compromised or no longer needed:
+1. Go to **Settings** → **Agent Connections**
+2. Find the token in the list
+3. Click the **Revoke** button
+4. Confirm the revocation
+
+Revoked tokens are immediately invalidated and cannot be used for authentication.
 
 ## Architecture
 

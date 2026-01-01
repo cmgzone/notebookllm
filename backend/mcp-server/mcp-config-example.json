@@ -5,7 +5,7 @@
       "args": ["./backend/mcp-server/dist/index.js"],
       "env": {
         "BACKEND_URL": "http://localhost:3000",
-        "CODING_AGENT_API_KEY": ""
+        "CODING_AGENT_API_KEY": "nllm_your-personal-api-token-here"
       },
       "disabled": false,
       "autoApprove": [
@@ -13,5 +13,8 @@
         "analyze_code"
       ]
     }
+  },
+  "_comments": {
+    "CODING_AGENT_API_KEY": "Generate a personal API token from the NotebookLLM app: Settings → Agent Connections → Generate New Token. The token format is nllm_ followed by 43 random characters."
   }
 }

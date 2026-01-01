@@ -63,7 +63,7 @@ router.post('/verify', optionalAuth, async (req: Request, res: Response) => {
 router.post('/verify-and-save', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { code, language, title, description, notebookId, context, strictMode } = req.body;
-    const userId = (req as any).user?.userId;
+    const userId = (req as any).userId;
 
     if (!code || !language || !title) {
       return res.status(400).json({ 
@@ -141,7 +141,7 @@ router.post('/verify-and-save', authenticateToken, async (req: Request, res: Res
  */
 router.get('/sources', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId;
+    const userId = (req as any).userId;
     const { notebookId, language } = req.query;
 
     let query = `
@@ -264,7 +264,7 @@ router.post('/analyze', optionalAuth, async (req: Request, res: Response) => {
 router.delete('/sources/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const userId = (req as any).user?.userId;
+    const userId = (req as any).userId;
 
     const result = await pool.query(
       'DELETE FROM sources WHERE id = $1 AND user_id = $2 RETURNING *',
@@ -295,7 +295,7 @@ router.delete('/sources/:id', authenticateToken, async (req: Request, res: Respo
  */
 router.post('/notebooks', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId;
+    const userId = (req as any).userId;
     const { 
       agentName, 
       agentIdentifier, 
@@ -361,7 +361,7 @@ router.post('/notebooks', authenticateToken, async (req: Request, res: Response)
  */
 router.post('/sources/with-context', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId;
+    const userId = (req as any).userId;
     const { 
       code, 
       language, 
@@ -474,7 +474,7 @@ router.post('/sources/with-context', authenticateToken, async (req: Request, res
  */
 router.get('/followups', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId;
+    const userId = (req as any).userId;
     const { agentSessionId, agentIdentifier } = req.query;
 
     // Get the agent session
@@ -538,7 +538,7 @@ router.get('/followups', authenticateToken, async (req: Request, res: Response) 
  */
 router.post('/followups/:id/respond', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId;
+    const userId = (req as any).userId;
     const { id: messageId } = req.params;
     const { response, codeUpdate, agentSessionId } = req.body;
 
@@ -631,7 +631,7 @@ router.post('/followups/:id/respond', authenticateToken, async (req: Request, re
  */
 router.post('/webhook/register', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId;
+    const userId = (req as any).userId;
     const { agentSessionId, agentIdentifier, webhookUrl, webhookSecret } = req.body;
 
     // Validate required fields
@@ -693,7 +693,7 @@ router.post('/webhook/register', authenticateToken, async (req: Request, res: Re
  */
 router.post('/followups/send', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId;
+    const userId = (req as any).userId;
     const { sourceId, message } = req.body;
 
     if (!sourceId || !message) {
@@ -806,7 +806,7 @@ router.post('/followups/send', authenticateToken, async (req: Request, res: Resp
  */
 router.get('/notebooks', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId;
+    const userId = (req as any).userId;
 
     // Get all agent notebooks for this user
     const notebooks = await agentNotebookService.getAgentNotebooks(userId);
@@ -859,7 +859,7 @@ router.get('/notebooks', authenticateToken, async (req: Request, res: Response) 
  */
 router.post('/sessions/:sessionId/disconnect', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId;
+    const userId = (req as any).userId;
     const { sessionId } = req.params;
 
     // Get the session and verify ownership
@@ -900,7 +900,7 @@ router.post('/sessions/:sessionId/disconnect', authenticateToken, async (req: Re
  */
 router.get('/conversations/:sourceId', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId;
+    const userId = (req as any).userId;
     const { sourceId } = req.params;
 
     // Verify source ownership

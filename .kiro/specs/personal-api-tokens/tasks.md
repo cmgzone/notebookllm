@@ -89,15 +89,15 @@ This plan implements a personal API token system for authenticating MCP servers 
   - [x] 8.5 Add MCP configuration instructions display
     - _Requirements: 5.4_
 
-- [ ] 9. Update MCP Server Documentation
-  - [ ] 9.1 Update README.md with personal token authentication instructions
+- [x] 9. Update MCP Server Documentation
+  - [x] 9.1 Update README.md with personal token authentication instructions
     - _Requirements: 3.5_
-  - [ ] 9.2 Update mcp-config-example.json with token placeholder
+  - [x] 9.2 Update mcp-config-example.json with token placeholder
     - _Requirements: 3.5_
-  - [ ] 9.3 Update CODING_AGENT_SETUP.md with token generation steps
+  - [x] 9.3 Update CODING_AGENT_SETUP.md with token generation steps
     - _Requirements: 5.4_
 
-- [ ] 10. Final Checkpoint
+- [x] 10. Final Checkpoint
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

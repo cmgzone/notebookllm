@@ -64,21 +64,39 @@ A backend-only coding agent that verifies code and saves it as sources to your a
 
 ## Quick Start
 
-### 1. Run Database Migration
+### 1. Generate a Personal API Token
+
+Before setting up the MCP server, you need to generate a personal API token from the NotebookLLM app:
+
+1. Open the NotebookLLM app
+2. Go to **Settings** → **Agent Connections**
+3. In the **API Tokens** section, click **Generate New Token**
+4. Enter a name for your token (e.g., "Kiro Coding Agent")
+5. Optionally set an expiration date (recommended for security)
+6. Click **Generate**
+7. **Copy the token immediately** - it will only be shown once!
+
+The token format is: `nllm_` followed by 43 random characters.
+
+Example: `nllm_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2`
+
+> ⚠️ **Security Note**: Treat this token like a password. Anyone with this token can access your account through the API.
+
+### 2. Run Database Migration
 
 ```bash
 cd backend
 npx tsx src/scripts/run-coding-agent-migration.ts
 ```
 
-### 2. Start Backend
+### 3. Start Backend
 
 ```bash
 cd backend
 npm run dev
 ```
 
-### 3. Build MCP Server
+### 4. Build MCP Server
 
 ```bash
 cd backend/mcp-server
@@ -86,7 +104,7 @@ npm install
 npm run build
 ```
 
-### 4. Configure MCP Client
+### 5. Configure MCP Client
 
 Add to your MCP config (e.g., `.kiro/settings/mcp.json`):
 
@@ -97,12 +115,41 @@ Add to your MCP config (e.g., `.kiro/settings/mcp.json`):
       "command": "node",
       "args": ["./backend/mcp-server/dist/index.js"],
       "env": {
-        "BACKEND_URL": "http://localhost:3000"
+        "BACKEND_URL": "http://localhost:3000",
+        "CODING_AGENT_API_KEY": "nllm_your-personal-api-token-here"
       }
     }
   }
 }
 ```
+
+Replace `nllm_your-personal-api-token-here` with the token you generated in Step 1.
+
+## Token Management
+
+### Viewing Your Tokens
+
+In the NotebookLLM app, go to **Settings** → **Agent Connections** to see all your active tokens:
+- Token name and description
+- Creation date
+- Last used date (updated each time the token is used)
+- Partial token display (last 4 characters for identification)
+
+### Revoking a Token
+
+If a token is compromised or no longer needed:
+1. Go to **Settings** → **Agent Connections**
+2. Find the token in the list
+3. Click the **Revoke** button
+4. Confirm the revocation
+
+Revoked tokens are immediately invalidated. Any MCP server using that token will receive authentication errors.
+
+### Token Limits
+
+- Maximum 10 active tokens per user
+- Rate limit: 5 new tokens per hour
+- Tokens can optionally have expiration dates
 
 ## API Reference
 
@@ -139,12 +186,12 @@ Response:
 
 ### Verify and Save
 
-Requires authentication. Code must score >= 60 to be saved.
+Requires authentication with a personal API token. Code must score >= 60 to be saved.
 
 ```bash
 curl -X POST http://localhost:3000/api/coding-agent/verify-and-save \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Authorization: Bearer nllm_your-personal-api-token-here" \
   -d '{
     "code": "function add(a, b) { return a + b; }",
     "language": "javascript",
