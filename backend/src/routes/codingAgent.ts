@@ -814,7 +814,13 @@ router.get('/notebooks', authenticateToken, async (req: Request, res: Response) 
     // Enrich with session info
     const enrichedNotebooks = await Promise.all(
       notebooks.map(async (notebook) => {
-        let sessionInfo = null;
+        let sessionInfo: {
+          id: string;
+          agentName: string;
+          agentIdentifier: string;
+          status: 'active' | 'expired' | 'disconnected';
+          lastActivity: Date;
+        } | null = null;
         if (notebook.agentSessionId) {
           const session = await agentSessionService.getSession(notebook.agentSessionId);
           if (session) {

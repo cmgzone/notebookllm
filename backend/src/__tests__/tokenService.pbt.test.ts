@@ -599,4 +599,204 @@ describe('Token Service - Property-Based Tests', () => {
       );
     }, 120000);
   });
+
+  /**
+   * Property 8: Token Usage Logging
+   * 
+   * For any successful token authentication, a usage log entry SHALL be created 
+   * containing the token ID, endpoint, and timestamp.
+   * 
+   * **Validates: Requirements 3.2, 4.5**
+   */
+  describe('Property 8: Token Usage Logging', () => {
+    // Generate valid endpoint strings
+    const endpointArb = fc.tuple(
+      fc.constantFrom('GET', 'POST', 'PUT', 'DELETE', 'PATCH'),
+      fc.stringOf(
+        fc.constantFrom(...'abcdefghijklmnopqrstuvwxyz0123456789/-_'),
+        { minLength: 1, maxLength: 50 }
+      ).map(path => path.startsWith('/') ? path : '/' + path)
+    ).map(([method, path]) => `${method} ${path}`);
+
+    // Generate valid IP addresses
+    const ipAddressArb = fc.oneof(
+      // IPv4
+      fc.tuple(
+        fc.integer({ min: 0, max: 255 }),
+        fc.integer({ min: 0, max: 255 }),
+        fc.integer({ min: 0, max: 255 }),
+        fc.integer({ min: 0, max: 255 })
+      ).map(([a, b, c, d]) => `${a}.${b}.${c}.${d}`),
+      // IPv6 loopback
+      fc.constant('::1'),
+      // Undefined (optional)
+      fc.constant(undefined)
+    );
+
+    // Generate user agent strings
+    const userAgentArb = fc.oneof(
+      fc.constant('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'),
+      fc.constant('curl/7.68.0'),
+      fc.constant('PostmanRuntime/7.28.4'),
+      fc.stringOf(fc.constantFrom(...'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 /.-_()'), { minLength: 5, maxLength: 100 }),
+      fc.constant(undefined)
+    );
+
+    it('token usage is logged with correct token ID and endpoint', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          tokenNameArb,
+          endpointArb,
+          ipAddressArb,
+          userAgentArb,
+          async (name, endpoint, ipAddress, userAgent) => {
+            const userId = await createTestUser();
+            
+            // Generate a token
+            const { token, tokenRecord } = await tokenService.generateToken(userId, name);
+            createdTokenIds.push(tokenRecord.id);
+            
+            // Log token usage
+            await tokenService.logTokenUsage(
+              tokenRecord.id,
+              endpoint,
+              ipAddress,
+              userAgent
+            );
+            
+            // Verify the log entry was created
+            const logResult = await pool.query(
+              `SELECT * FROM token_usage_logs WHERE token_id = $1 ORDER BY created_at DESC LIMIT 1`,
+              [tokenRecord.id]
+            );
+            
+            expect(logResult.rows.length).toBe(1);
+            const logEntry = logResult.rows[0];
+            
+            // Verify log entry contains correct data
+            expect(logEntry.token_id).toBe(tokenRecord.id);
+            expect(logEntry.endpoint).toBe(endpoint);
+            expect(logEntry.ip_address).toBe(ipAddress || null);
+            expect(logEntry.user_agent).toBe(userAgent || null);
+            expect(logEntry.created_at).toBeDefined();
+            
+            // Verify timestamp is recent (within last minute)
+            const logTime = new Date(logEntry.created_at).getTime();
+            const now = Date.now();
+            expect(now - logTime).toBeLessThan(60000);
+          }
+        ),
+        { numRuns: 10, timeout: 60000 }
+      );
+    }, 120000);
+
+    it('multiple usage logs are created for multiple authentications', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          tokenNameArb,
+          fc.array(endpointArb, { minLength: 2, maxLength: 3 }),
+          async (name, endpoints) => {
+            const userId = await createTestUser();
+            
+            // Generate a token
+            const { token, tokenRecord } = await tokenService.generateToken(userId, name);
+            createdTokenIds.push(tokenRecord.id);
+            
+            // Log multiple usages
+            for (const endpoint of endpoints) {
+              await tokenService.logTokenUsage(
+                tokenRecord.id,
+                endpoint,
+                '127.0.0.1',
+                'test-agent'
+              );
+            }
+            
+            // Verify all log entries were created
+            const logResult = await pool.query(
+              `SELECT * FROM token_usage_logs WHERE token_id = $1 ORDER BY created_at ASC`,
+              [tokenRecord.id]
+            );
+            
+            expect(logResult.rows.length).toBe(endpoints.length);
+            
+            // Verify each endpoint was logged
+            const loggedEndpoints = logResult.rows.map(row => row.endpoint);
+            for (const endpoint of endpoints) {
+              expect(loggedEndpoints).toContain(endpoint);
+            }
+          }
+        ),
+        { numRuns: 10, timeout: 60000 }
+      );
+    }, 120000);
+
+    it('usage logs are associated with correct token', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          tokenNameArb,
+          tokenNameArb,
+          endpointArb,
+          async (name1, name2, endpoint) => {
+            const userId = await createTestUser();
+            
+            // Generate two tokens
+            const { tokenRecord: record1 } = await tokenService.generateToken(userId, name1);
+            const { tokenRecord: record2 } = await tokenService.generateToken(userId, name2);
+            createdTokenIds.push(record1.id, record2.id);
+            
+            // Log usage for first token only
+            await tokenService.logTokenUsage(record1.id, endpoint, '127.0.0.1', 'test-agent');
+            
+            // Verify log is associated with first token
+            const log1Result = await pool.query(
+              `SELECT COUNT(*) as count FROM token_usage_logs WHERE token_id = $1`,
+              [record1.id]
+            );
+            expect(parseInt(log1Result.rows[0].count)).toBe(1);
+            
+            // Verify no log for second token
+            const log2Result = await pool.query(
+              `SELECT COUNT(*) as count FROM token_usage_logs WHERE token_id = $1`,
+              [record2.id]
+            );
+            expect(parseInt(log2Result.rows[0].count)).toBe(0);
+          }
+        ),
+        { numRuns: 10, timeout: 60000 }
+      );
+    }, 120000);
+
+    it('last_used_at is updated when token is used', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          tokenNameArb,
+          async (name) => {
+            const userId = await createTestUser();
+            
+            // Generate a token
+            const { token, tokenRecord } = await tokenService.generateToken(userId, name);
+            createdTokenIds.push(tokenRecord.id);
+            
+            // Initially last_used_at should be null
+            const initialToken = await tokenService.getToken(tokenRecord.id);
+            expect(initialToken?.lastUsedAt).toBeNull();
+            
+            // Update last used
+            await tokenService.updateLastUsed(tokenRecord.id);
+            
+            // Verify last_used_at is now set
+            const updatedToken = await tokenService.getToken(tokenRecord.id);
+            expect(updatedToken?.lastUsedAt).not.toBeNull();
+            
+            // Verify timestamp is recent (within last minute)
+            const lastUsedTime = updatedToken!.lastUsedAt!.getTime();
+            const now = Date.now();
+            expect(now - lastUsedTime).toBeLessThan(60000);
+          }
+        ),
+        { numRuns: 10, timeout: 60000 }
+      );
+    }, 120000);
+  });
 });
