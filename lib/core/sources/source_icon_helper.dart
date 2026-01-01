@@ -20,6 +20,8 @@ class SourceIconHelper {
         return Icons.audiotrack;
       case 'file':
         return Icons.insert_drive_file;
+      case 'code':
+        return Icons.code;
       default:
         return Icons.description;
     }
@@ -43,6 +45,8 @@ class SourceIconHelper {
         return Colors.green.shade600;
       case 'file':
         return scheme.secondary;
+      case 'code':
+        return Colors.cyan.shade600;
       default:
         return scheme.tertiary;
     }
@@ -66,6 +70,8 @@ class SourceIconHelper {
         return 'Audio';
       case 'file':
         return 'File';
+      case 'code':
+        return 'Verified Code';
       default:
         return 'Source';
     }
@@ -89,6 +95,8 @@ class SourceIconHelper {
         return 'Audio transcribed and indexed';
       case 'file':
         return 'File content extracted and indexed';
+      case 'code':
+        return 'Code verified and indexed';
       default:
         return 'Content indexed';
     }
