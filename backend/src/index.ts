@@ -23,15 +23,18 @@ import searchRoutes from './routes/search.js';
 import featuresRoutes from './routes/features.js';
 import voiceRoutes from './routes/voice.js';
 import sportsRoutes from './routes/sports.js';
+import codingAgentRoutes from './routes/codingAgent.js';
 
 // Import services
 import bunnyService from './services/bunnyService.js';
+import codeVerificationService from './services/codeVerificationService.js';
 
 // Load environment variables
 dotenv.config();
 
 // Initialize services
 bunnyService.initialize();
+codeVerificationService.initialize();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -89,6 +92,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/features', featuresRoutes);
 app.use('/api/voice', voiceRoutes);
 app.use('/api/sports', sportsRoutes);
+app.use('/api/coding-agent', codingAgentRoutes);
 
 // 404 handler
 app.use((req, res) => {
