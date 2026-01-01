@@ -401,7 +401,8 @@ class VoiceService {
     return cleaned;
   }
 
-  Future<void> speak(String text, {double speed = 1.0}) async {
+  Future<void> speak(String text,
+      {double speed = 1.0, bool interrupt = false}) async {
     try {
       // Sanitize text for professional TTS output
       final cleanedText = _sanitizeTextForTts(text);
@@ -410,6 +411,11 @@ class VoiceService {
       if (cleanedText.trim().isEmpty) {
         debugPrint('TTS: Skipping empty text');
         return;
+      }
+
+      // Interrupt previous speech if requested
+      if (interrupt) {
+        await stopSpeaking();
       }
 
       final prefs = await SharedPreferences.getInstance();
@@ -425,7 +431,7 @@ class VoiceService {
         await _waitForGoogleTtsCompletion();
       } else if (_currentProvider == TtsProvider.googleCloud) {
         // Use Google Cloud TTS (Paid API)
-        await _audioPlayer.stop();
+        if (!interrupt) await _audioPlayer.stop(); // Ensure minimal state reset
 
         final voiceId = prefs.getString('google_cloud_tts_voice');
         final audioBytes = await _googleCloudTtsService.synthesize(
@@ -445,7 +451,7 @@ class VoiceService {
         await _waitForAudioCompletion();
       } else if (_currentProvider == TtsProvider.murf) {
         // Use Murf.ai (Studio quality)
-        await _audioPlayer.stop();
+        if (!interrupt) await _audioPlayer.stop();
 
         final voiceId = prefs.getString('tts_murf_voice');
         final audioBytes = await _murfService.generateSpeech(
@@ -464,7 +470,7 @@ class VoiceService {
         await _waitForAudioCompletion();
       } else {
         // Use ElevenLabs (premium, cloud-based)
-        await _audioPlayer.stop();
+        if (!interrupt) await _audioPlayer.stop();
 
         final voiceId = prefs.getString('tts_voice');
         final modelId = prefs.getString('tts_model');
@@ -495,10 +501,12 @@ class VoiceService {
   /// Wait for just_audio player to complete playback
   Future<void> _waitForAudioCompletion() async {
     try {
-      // Listen for playback completion
+      // Listen for playback completion OR stop (idle)
       await _audioPlayer.playerStateStream
           .firstWhere(
-            (state) => state.processingState == ProcessingState.completed,
+            (state) =>
+                state.processingState == ProcessingState.completed ||
+                state.processingState == ProcessingState.idle,
           )
           .timeout(
             const Duration(minutes: 5),

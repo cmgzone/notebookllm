@@ -49,6 +49,7 @@ import '../features/gamification/daily_challenges_screen.dart';
 import '../features/language_learning/language_learning_hub.dart';
 import '../features/language_learning/language_session_screen.dart';
 import '../features/admin/ai_models_manager_screen.dart';
+import '../features/ai_browser/ai_browser_screen.dart';
 
 String getInitialLocation(bool hasSeenOnboarding) {
   return hasSeenOnboarding ? '/home' : '/onboarding';
@@ -341,6 +342,12 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
                 child: LanguageSessionScreen(sessionId: id),
               );
             },
+          ),
+          GoRoute(
+            path: '/ai-browser',
+            name: 'ai-browser',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const AIBrowserScreen()),
           ),
         ],
       ),

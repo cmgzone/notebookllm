@@ -394,6 +394,7 @@ class ApiService {
     required String title,
     String? content,
     String? url,
+    String? imageUrl,
   }) async {
     final response = await post('/sources', {
       'notebookId': notebookId,
@@ -401,6 +402,7 @@ class ApiService {
       'title': title,
       if (content != null) 'content': content,
       if (url != null) 'url': url,
+      if (imageUrl != null) 'imageUrl': imageUrl,
     });
     return response['source'];
   }
@@ -644,6 +646,19 @@ class ApiService {
       if (model != null) 'model': model,
     });
     return response['response'];
+  }
+
+  Future<String> chatWithVision({
+    required String prompt,
+    required String base64Image,
+    String? notebookId,
+  }) async {
+    final response = await post('/ai/vision', {
+      'prompt': prompt,
+      'image': base64Image,
+      if (notebookId != null) 'notebookId': notebookId,
+    });
+    return response['content'] ?? response['response'] ?? '';
   }
 
   Stream<String> chatWithAIStream({

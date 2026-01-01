@@ -225,6 +225,7 @@ class AudioOverviewNotifier extends StateNotifier<AudioStudioState> {
     bool isPodcast = false,
     String? topic,
     List<String> hosts = const ['Sarah', 'Adam'],
+    String? contentOverride,
   }) async {
     // Keep screen awake during audio generation
     await wakelockService.acquire();
@@ -238,12 +239,18 @@ class AudioOverviewNotifier extends StateNotifier<AudioStudioState> {
     );
 
     try {
-      final sources = ref.read(sourceProvider);
-      if (sources.isEmpty) throw Exception('No sources available');
+      String context;
+
+      if (contentOverride != null && contentOverride.isNotEmpty) {
+        context = contentOverride;
+      } else {
+        final sources = ref.read(sourceProvider);
+        if (sources.isEmpty) throw Exception('No sources available');
+        context = sources.map((s) => s.content).join('\n\n');
+      }
 
       // 1. Generate Script using configured AI provider
       // Limit content to avoid token limits (approx 500k chars for safety with large models)
-      String context = sources.map((s) => s.content).join('\n\n');
       if (context.length > 500000) {
         debugPrint(
             '[AudioOverview] Content too long (${context.length} chars), truncating to 500k');

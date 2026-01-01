@@ -43,9 +43,13 @@ class QuizNotifier extends StateNotifier<List<Quiz>> {
         sourceId: quiz.sourceId,
         questions: quiz.questions.map((q) => q.toBackendJson()).toList(),
       );
+      // Immediately add to state for instant UI update
+      state = [quiz, ...state];
+      // Then reload from backend to get server-generated IDs
       await _loadQuizzes();
     } catch (e) {
       debugPrint('Error adding quiz: $e');
+      rethrow; // Rethrow so the UI can show the error
     }
   }
 

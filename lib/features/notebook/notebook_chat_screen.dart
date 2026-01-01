@@ -4,13 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:ui';
 import '../sources/source_provider.dart';
 import '../../core/ai/ai_provider.dart';
+import '../../core/ai/web_browsing_service.dart';
 import 'notebook_provider.dart';
 import '../../core/api/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../chat/context_usage_widget.dart';
+import '../subscription/services/credit_manager.dart';
+import '../ai_browser/ai_browser_screen.dart';
 
 class NotebookChatScreen extends ConsumerStatefulWidget {
   final String notebookId;
@@ -30,6 +34,10 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
   final List<ChatMessage> _messages = [];
   bool _isLoading = false;
   ChatStyle _selectedStyle = ChatStyle.standard;
+  bool _isWebBrowsingEnabled = false;
+  String? _webBrowsingStatus;
+  List<String> _webBrowsingScreenshots = [];
+  List<String> _webBrowsingSources = [];
 
   @override
   void initState() {
@@ -78,6 +86,16 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
     final message = _messageController.text.trim();
     if (message.isEmpty || _isLoading) return;
 
+    // Check credits (more for web browsing)
+    final hasCredits = await ref.tryUseCredits(
+      context: context,
+      amount: _isWebBrowsingEnabled
+          ? CreditCosts.chatMessage * 3
+          : CreditCosts.chatMessage,
+      feature: _isWebBrowsingEnabled ? 'web_browsing_chat' : 'chat_message',
+    );
+    if (!hasCredits) return;
+
     setState(() {
       _messages.add(ChatMessage(
         text: message,
@@ -85,6 +103,9 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
         timestamp: DateTime.now(),
       ));
       _isLoading = true;
+      _webBrowsingStatus = null;
+      _webBrowsingScreenshots = [];
+      _webBrowsingSources = [];
     });
 
     _messageController.clear();
@@ -98,50 +119,12 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
             notebookId: widget.notebookId,
           );
 
-      // Get notebook sources for context
-      final allSources = ref.read(sourceProvider);
-      final notebookSources =
-          allSources.where((s) => s.notebookId == widget.notebookId).toList();
-
-      final context =
-          notebookSources.map((s) => '${s.title}: ${s.content}').toList();
-
-      // Construct history pairs
-      final historyPairs = <AIPromptResponse>[];
-      for (int i = 0; i < _messages.length - 1; i++) {
-        if (_messages[i].isUser && !_messages[i + 1].isUser) {
-          historyPairs.add(AIPromptResponse(
-              prompt: _messages[i].text,
-              response: _messages[i + 1].text,
-              timestamp: _messages[i + 1].timestamp));
-        }
-      }
-
-      // Generate AI response
-      await ref.read(aiProvider.notifier).generateContent(
-            message,
-            context: context,
-            style: _selectedStyle,
-            externalHistory: historyPairs,
-          );
-
-      final aiState = ref.read(aiProvider);
-      if (aiState.lastResponse != null) {
-        // Save AI Message
-        await ref.read(apiServiceProvider).saveChatMessage(
-              role: 'model',
-              content: aiState.lastResponse!,
-              notebookId: widget.notebookId,
-            );
-
-        setState(() {
-          _messages.add(ChatMessage(
-            text: aiState.lastResponse!,
-            isUser: false,
-            timestamp: DateTime.now(),
-          ));
-        });
-        _scrollToBottom();
+      if (_isWebBrowsingEnabled) {
+        // Use web browsing service
+        await _handleWebBrowsing(message);
+      } else {
+        // Regular chat flow
+        await _handleRegularChat(message);
       }
     } catch (e) {
       if (mounted) {
@@ -153,6 +136,94 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  Future<void> _handleWebBrowsing(String message) async {
+    final webBrowsingService = ref.read(webBrowsingServiceProvider);
+
+    await for (final update in webBrowsingService.browse(query: message)) {
+      if (!mounted) return;
+
+      setState(() {
+        _webBrowsingStatus = update.status;
+        if (update.screenshotUrl != null &&
+            !_webBrowsingScreenshots.contains(update.screenshotUrl)) {
+          _webBrowsingScreenshots.add(update.screenshotUrl!);
+        }
+        _webBrowsingSources = update.sources;
+      });
+      _scrollToBottom();
+
+      if (update.isComplete && update.finalResponse != null) {
+        // Save AI Message
+        await ref.read(apiServiceProvider).saveChatMessage(
+              role: 'model',
+              content: update.finalResponse!,
+              notebookId: widget.notebookId,
+            );
+
+        setState(() {
+          _messages.add(ChatMessage(
+            text: update.finalResponse!,
+            isUser: false,
+            timestamp: DateTime.now(),
+            isWebBrowsing: true,
+            webBrowsingScreenshots: List.from(_webBrowsingScreenshots),
+            webBrowsingSources: List.from(_webBrowsingSources),
+          ));
+          _webBrowsingStatus = null;
+        });
+        _scrollToBottom();
+      }
+    }
+  }
+
+  Future<void> _handleRegularChat(String message) async {
+    // Get notebook sources for context
+    final allSources = ref.read(sourceProvider);
+    final notebookSources =
+        allSources.where((s) => s.notebookId == widget.notebookId).toList();
+
+    final context =
+        notebookSources.map((s) => '${s.title}: ${s.content}').toList();
+
+    // Construct history pairs
+    final historyPairs = <AIPromptResponse>[];
+    for (int i = 0; i < _messages.length - 1; i++) {
+      if (_messages[i].isUser && !_messages[i + 1].isUser) {
+        historyPairs.add(AIPromptResponse(
+            prompt: _messages[i].text,
+            response: _messages[i + 1].text,
+            timestamp: _messages[i + 1].timestamp));
+      }
+    }
+
+    // Generate AI response
+    await ref.read(aiProvider.notifier).generateContent(
+          message,
+          context: context,
+          style: _selectedStyle,
+          externalHistory: historyPairs,
+        );
+
+    final aiState = ref.read(aiProvider);
+    if (aiState.lastResponse != null) {
+      // Save AI Message
+      await ref.read(apiServiceProvider).saveChatMessage(
+            role: 'model',
+            content: aiState.lastResponse!,
+            notebookId: widget.notebookId,
+          );
+
+      setState(() {
+        _messages.add(ChatMessage(
+          text: aiState.lastResponse!,
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+      });
+      _scrollToBottom();
     }
   }
 
@@ -426,8 +497,91 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
                   ),
           ),
 
+          // Web browsing status indicator
+          if (_isWebBrowsingEnabled && _webBrowsingStatus != null)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.orange.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.orange,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _webBrowsingStatus!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Screenshots preview
+                  if (_webBrowsingScreenshots.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 60,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _webBrowsingScreenshots.length,
+                        itemBuilder: (context, index) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: CachedNetworkImage(
+                                imageUrl: _webBrowsingScreenshots[index],
+                                width: 80,
+                                height: 60,
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  width: 80,
+                                  height: 60,
+                                  color: scheme.surfaceContainerHighest,
+                                  child: const Center(
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  width: 80,
+                                  height: 60,
+                                  color: scheme.surfaceContainerHighest,
+                                  child:
+                                      const Icon(Icons.broken_image, size: 20),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ).animate().fadeIn().slideY(begin: 0.2),
+
           // Loading indicator
-          if (_isLoading)
+          if (_isLoading && _webBrowsingStatus == null)
             Padding(
               padding: const EdgeInsets.all(8),
               child: Row(
@@ -456,52 +610,130 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
                   ),
                 ),
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                    // Web browsing toggle indicator
+                    if (_isWebBrowsingEnabled)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHighest
-                              .withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(24),
+                          color: Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: scheme.outline.withValues(alpha: 0.1),
+                            color: Colors.orange.withValues(alpha: 0.3),
                           ),
                         ),
-                        child: TextField(
-                          controller: _messageController,
-                          decoration: const InputDecoration(
-                            hintText: 'Ask anything...',
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(vertical: 14),
-                          ),
-                          maxLines: null,
-                          textInputAction: TextInputAction.send,
-                          onSubmitted: (_) => _sendMessage(),
-                          enabled: !_isLoading,
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.language,
+                                size: 16, color: Colors.orange),
+                            SizedBox(width: 6),
+                            Text(
+                              '🌐 Web Browsing - AI will search & show screenshots',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: AppTheme.premiumGradient,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: scheme.primary.withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
+                      ).animate().fadeIn().slideY(begin: 0.2),
+                    Row(
+                      children: [
+                        // Web browsing toggle
+                        IconButton(
+                          onPressed: () {
+                            setState(() =>
+                                _isWebBrowsingEnabled = !_isWebBrowsingEnabled);
+                          },
+                          icon: Icon(
+                            Icons.language,
+                            color: _isWebBrowsingEnabled
+                                ? Colors.orange
+                                : scheme.onSurface.withValues(alpha: 0.5),
+                            size: 22,
                           ),
-                        ],
-                      ),
-                      child: IconButton(
-                        onPressed: _isLoading ? null : _sendMessage,
-                        icon:
-                            const Icon(Icons.arrow_upward, color: Colors.white),
-                        tooltip: 'Send',
-                      ),
+                          tooltip: _isWebBrowsingEnabled
+                              ? 'Web Browsing ON'
+                              : 'Enable Web Browsing (with screenshots)',
+                        ),
+                        // AI Browser button
+                        IconButton(
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => AIBrowserScreen(
+                                notebookId: widget.notebookId,
+                              ),
+                            ),
+                          ),
+                          icon: Icon(
+                            Icons.open_in_browser,
+                            color: scheme.tertiary,
+                            size: 22,
+                          ),
+                          tooltip: 'Open AI Browser',
+                        ),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: scheme.surfaceContainerHighest
+                                  .withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                color: scheme.outline.withValues(alpha: 0.1),
+                              ),
+                            ),
+                            child: TextField(
+                              controller: _messageController,
+                              decoration: InputDecoration(
+                                hintText: _isWebBrowsingEnabled
+                                    ? 'Search the web...'
+                                    : 'Ask anything...',
+                                border: InputBorder.none,
+                                contentPadding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                              maxLines: null,
+                              textInputAction: TextInputAction.send,
+                              onSubmitted: (_) => _sendMessage(),
+                              enabled: !_isLoading,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: _isWebBrowsingEnabled
+                                ? const LinearGradient(
+                                    colors: [Colors.orange, Colors.deepOrange],
+                                  )
+                                : AppTheme.premiumGradient,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: (_isWebBrowsingEnabled
+                                        ? Colors.orange
+                                        : scheme.primary)
+                                    .withValues(alpha: 0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: IconButton(
+                            onPressed: _isLoading ? null : _sendMessage,
+                            icon: const Icon(Icons.arrow_upward,
+                                color: Colors.white),
+                            tooltip: 'Send',
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -518,11 +750,17 @@ class ChatMessage {
   final String text;
   final bool isUser;
   final DateTime timestamp;
+  final bool isWebBrowsing;
+  final List<String> webBrowsingScreenshots;
+  final List<String> webBrowsingSources;
 
   ChatMessage({
     required this.text,
     required this.isUser,
     required this.timestamp,
+    this.isWebBrowsing = false,
+    this.webBrowsingScreenshots = const [],
+    this.webBrowsingSources = const [],
   });
 }
 
@@ -530,6 +768,14 @@ class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
 
   const _MessageBubble({required this.message});
+
+  String _extractDomain(String url) {
+    try {
+      return Uri.parse(url).host;
+    } catch (_) {
+      return url;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -544,177 +790,392 @@ class _MessageBubble extends StatelessWidget {
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * (isUser ? 0.75 : 0.88),
         ),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isUser ? scheme.primary : scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(24).copyWith(
-            bottomRight: isUser ? Radius.zero : const Radius.circular(24),
-            bottomLeft: !isUser ? Radius.zero : const Radius.circular(24),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-          border: !isUser
-              ? Border.all(color: scheme.outline.withValues(alpha: 0.1))
-              : null,
-        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            // Use Markdown for AI messages, plain text for user
-            if (isUser)
-              SelectableText(
-                message.text,
-                style: text.bodyMedium?.copyWith(
-                  color: scheme.onPrimary,
-                  height: 1.5,
+            // Web browsing indicator
+            if (!isUser && message.isWebBrowsing)
+              Container(
+                margin: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              )
-            else
-              MarkdownBody(
-                data: message.text,
-                selectable: true,
-                styleSheet: MarkdownStyleSheet(
-                  // Text styles
-                  p: text.bodyMedium?.copyWith(
-                    color: scheme.onSurface,
-                    height: 1.6,
-                  ),
-                  h1: text.headlineSmall?.copyWith(
-                    color: scheme.onSurface,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  h2: text.titleLarge?.copyWith(
-                    color: scheme.onSurface,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  h3: text.titleMedium?.copyWith(
-                    color: scheme.onSurface,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  h4: text.titleSmall?.copyWith(
-                    color: scheme.onSurface,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  // Bold and emphasis
-                  strong: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: scheme.primary,
-                  ),
-                  em: TextStyle(
-                    fontStyle: FontStyle.italic,
-                    color: scheme.onSurface,
-                  ),
-                  // Lists
-                  listBullet: text.bodyMedium?.copyWith(
-                    color: scheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  // Code
-                  code: TextStyle(
-                    backgroundColor: scheme.surfaceContainerHighest,
-                    color: scheme.tertiary,
-                    fontFamily: 'monospace',
-                    fontSize: 13,
-                  ),
-                  codeblockDecoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  codeblockPadding: const EdgeInsets.all(12),
-                  // Blockquotes
-                  blockquote: text.bodyMedium?.copyWith(
-                    color: scheme.onSurface.withValues(alpha: 0.8),
-                    fontStyle: FontStyle.italic,
-                  ),
-                  blockquoteDecoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(
-                        color: scheme.primary.withValues(alpha: 0.6),
-                        width: 4,
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.language, size: 12, color: Colors.orange),
+                    SizedBox(width: 4),
+                    Text(
+                      '🌐 Web Browsing',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.orange,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ),
-                  blockquotePadding:
-                      const EdgeInsets.only(left: 16, top: 4, bottom: 4),
-                  // Links
-                  a: TextStyle(
-                    color: scheme.primary,
-                    decoration: TextDecoration.underline,
-                    decorationColor: scheme.primary,
-                  ),
-                  // Horizontal rule
-                  horizontalRuleDecoration: BoxDecoration(
-                    border: Border(
-                      top: BorderSide(
-                        color: scheme.outline.withValues(alpha: 0.3),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                  // Table styles
-                  tableHead: text.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: scheme.onSurface,
-                  ),
-                  tableBody: text.bodyMedium?.copyWith(
-                    color: scheme.onSurface,
-                  ),
+                  ],
                 ),
-                onTapLink: (text, href, title) async {
-                  if (href != null) {
-                    final uri = Uri.parse(href);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri,
-                          mode: LaunchMode.externalApplication);
-                    }
-                  }
-                },
               ),
-            const SizedBox(height: 8),
-            // Action row with timestamp and copy button
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _formatTime(message.timestamp),
-                  style: text.bodySmall?.copyWith(
-                    color: isUser
-                        ? scheme.onPrimary.withValues(alpha: 0.7)
-                        : scheme.onSurface.withValues(alpha: 0.5),
-                    fontSize: 10,
-                  ),
+            // Main message bubble
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isUser ? scheme.primary : scheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(24).copyWith(
+                  bottomRight: isUser ? Radius.zero : const Radius.circular(24),
+                  bottomLeft: !isUser ? Radius.zero : const Radius.circular(24),
                 ),
-                if (!isUser) ...[
-                  const SizedBox(width: 12),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: message.text));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('Copied to clipboard'),
-                          behavior: SnackBarBehavior.floating,
-                          backgroundColor: scheme.inverseSurface,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(
-                        Icons.copy_rounded,
-                        size: 14,
-                        color: scheme.onSurface.withValues(alpha: 0.5),
-                      ),
-                    ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
                 ],
-              ],
+                border: !isUser
+                    ? Border.all(color: scheme.outline.withValues(alpha: 0.1))
+                    : null,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Screenshots from web browsing
+                  if (!isUser &&
+                      message.isWebBrowsing &&
+                      message.webBrowsingScreenshots.isNotEmpty) ...[
+                    SizedBox(
+                      height: 80,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: message.webBrowsingScreenshots.length,
+                        itemBuilder: (context, index) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: GestureDetector(
+                              onTap: () => _showFullScreenshot(context,
+                                  message.webBrowsingScreenshots[index]),
+                              child: Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: CachedNetworkImage(
+                                      imageUrl:
+                                          message.webBrowsingScreenshots[index],
+                                      width: 120,
+                                      height: 80,
+                                      fit: BoxFit.cover,
+                                      placeholder: (context, url) => Container(
+                                        width: 120,
+                                        height: 80,
+                                        color: scheme.surfaceContainerHighest,
+                                        child: const Center(
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                      ),
+                                      errorWidget: (context, url, error) =>
+                                          Container(
+                                        width: 120,
+                                        height: 80,
+                                        color: scheme.surfaceContainerHighest,
+                                        child: const Icon(Icons.broken_image,
+                                            size: 24),
+                                      ),
+                                    ),
+                                  ),
+                                  // Expand icon overlay
+                                  Positioned(
+                                    right: 4,
+                                    bottom: 4,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black54,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Icon(
+                                        Icons.fullscreen,
+                                        color: Colors.white,
+                                        size: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  // Use Markdown for AI messages, plain text for user
+                  if (isUser)
+                    SelectableText(
+                      message.text,
+                      style: text.bodyMedium?.copyWith(
+                        color: scheme.onPrimary,
+                        height: 1.5,
+                      ),
+                    )
+                  else
+                    MarkdownBody(
+                      data: message.text,
+                      selectable: true,
+                      styleSheet: MarkdownStyleSheet(
+                        // Text styles
+                        p: text.bodyMedium?.copyWith(
+                          color: scheme.onSurface,
+                          height: 1.6,
+                        ),
+                        h1: text.headlineSmall?.copyWith(
+                          color: scheme.onSurface,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        h2: text.titleLarge?.copyWith(
+                          color: scheme.onSurface,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        h3: text.titleMedium?.copyWith(
+                          color: scheme.onSurface,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        h4: text.titleSmall?.copyWith(
+                          color: scheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        // Bold and emphasis
+                        strong: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: scheme.primary,
+                        ),
+                        em: TextStyle(
+                          fontStyle: FontStyle.italic,
+                          color: scheme.onSurface,
+                        ),
+                        // Lists
+                        listBullet: text.bodyMedium?.copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        // Code
+                        code: TextStyle(
+                          backgroundColor: scheme.surfaceContainerHighest,
+                          color: scheme.tertiary,
+                          fontFamily: 'monospace',
+                          fontSize: 13,
+                        ),
+                        codeblockDecoration: BoxDecoration(
+                          color: scheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        codeblockPadding: const EdgeInsets.all(12),
+                        // Blockquotes
+                        blockquote: text.bodyMedium?.copyWith(
+                          color: scheme.onSurface.withValues(alpha: 0.8),
+                          fontStyle: FontStyle.italic,
+                        ),
+                        blockquoteDecoration: BoxDecoration(
+                          border: Border(
+                            left: BorderSide(
+                              color: scheme.primary.withValues(alpha: 0.6),
+                              width: 4,
+                            ),
+                          ),
+                        ),
+                        blockquotePadding:
+                            const EdgeInsets.only(left: 16, top: 4, bottom: 4),
+                        // Links
+                        a: TextStyle(
+                          color: scheme.primary,
+                          decoration: TextDecoration.underline,
+                          decorationColor: scheme.primary,
+                        ),
+                        // Horizontal rule
+                        horizontalRuleDecoration: BoxDecoration(
+                          border: Border(
+                            top: BorderSide(
+                              color: scheme.outline.withValues(alpha: 0.3),
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                        // Table styles
+                        tableHead: text.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: scheme.onSurface,
+                        ),
+                        tableBody: text.bodyMedium?.copyWith(
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                      onTapLink: (text, href, title) async {
+                        if (href != null) {
+                          final uri = Uri.parse(href);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri,
+                                mode: LaunchMode.externalApplication);
+                          }
+                        }
+                      },
+                    ),
+                  // Sources from web browsing
+                  if (!isUser &&
+                      message.isWebBrowsing &&
+                      message.webBrowsingSources.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: message.webBrowsingSources.map((url) {
+                        final domain = _extractDomain(url);
+                        return GestureDetector(
+                          onTap: () async {
+                            final uri = Uri.parse(url);
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri,
+                                  mode: LaunchMode.externalApplication);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: scheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: CachedNetworkImage(
+                                    imageUrl:
+                                        'https://www.google.com/s2/favicons?domain=$domain&sz=32',
+                                    width: 14,
+                                    height: 14,
+                                    errorWidget: (context, url, error) =>
+                                        const Icon(Icons.link, size: 14),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  domain.length > 20
+                                      ? '${domain.substring(0, 20)}...'
+                                      : domain,
+                                  style: text.bodySmall?.copyWith(
+                                    color: scheme.primary,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  // Action row with timestamp and copy button
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _formatTime(message.timestamp),
+                        style: text.bodySmall?.copyWith(
+                          color: isUser
+                              ? scheme.onPrimary.withValues(alpha: 0.7)
+                              : scheme.onSurface.withValues(alpha: 0.5),
+                          fontSize: 10,
+                        ),
+                      ),
+                      if (!isUser) ...[
+                        const SizedBox(width: 12),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () {
+                            Clipboard.setData(
+                                ClipboardData(text: message.text));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Text('Copied to clipboard'),
+                                behavior: SnackBarBehavior.floating,
+                                backgroundColor: scheme.inverseSurface,
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.copy_rounded,
+                              size: 14,
+                              color: scheme.onSurface.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showFullScreenshot(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: CachedNetworkImage(
+                    imageUrl: url,
+                    fit: BoxFit.contain,
+                    placeholder: (context, url) => Container(
+                      width: 200,
+                      height: 200,
+                      color: Colors.black54,
+                      child: const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      width: 200,
+                      height: 200,
+                      color: Colors.black54,
+                      child: const Icon(Icons.broken_image,
+                          color: Colors.white, size: 48),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black54,
+                ),
+              ),
             ),
           ],
         ),

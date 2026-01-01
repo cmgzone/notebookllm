@@ -44,9 +44,13 @@ class MindMapNotifier extends StateNotifier<List<MindMap>> {
         rootNode: mindMap.rootNode.toBackendJson(),
         textContent: mindMap.textContent,
       );
+      // Immediately add to state for instant UI update
+      state = [mindMap, ...state];
+      // Then reload from backend to get server-generated IDs
       await _loadMindMaps();
     } catch (e) {
       debugPrint('Error adding mind map: $e');
+      rethrow; // Rethrow so the UI can show the error
     }
   }
 

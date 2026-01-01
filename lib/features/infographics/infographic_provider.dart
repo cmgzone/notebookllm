@@ -48,9 +48,13 @@ class InfographicNotifier extends StateNotifier<List<Infographic>> {
         imageBase64: infographic.imageBase64,
         style: infographic.style.name,
       );
+      // Immediately add to state for instant UI update
+      state = [infographic, ...state];
+      // Then reload from backend to get server-generated IDs
       await _loadInfographics();
     } catch (e) {
       debugPrint('Error adding infographic: $e');
+      rethrow; // Rethrow so the UI can show the error
     }
   }
 

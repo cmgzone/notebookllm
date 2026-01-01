@@ -63,6 +63,7 @@ class TutorNotifier extends StateNotifier<List<TutorSession>> {
       });
     } catch (e) {
       debugPrint('Error saving tutor session: $e');
+      rethrow; // Rethrow so the UI can show the error
     }
   }
 

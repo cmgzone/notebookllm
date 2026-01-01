@@ -15,6 +15,13 @@ class Message with _$Message {
     @Default([]) List<SourceSuggestion> relatedSources,
     String? imageUrl, // Local file path or URL for attached image
     @Default(false) bool isDeepSearch, // Whether this used deep search
+    @Default(false)
+    bool isWebBrowsing, // Whether this is a web browsing message
+    String? webBrowsingStatus, // Current status of web browsing
+    @Default([])
+    List<String> webBrowsingScreenshots, // Screenshots from browsing
+    @Default([])
+    List<String> webBrowsingSources, // URLs visited during browsing
   }) = _Message;
 
   factory Message.fromJson(Map<String, dynamic> json) =>

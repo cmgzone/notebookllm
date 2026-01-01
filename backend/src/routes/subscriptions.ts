@@ -115,6 +115,36 @@ router.get('/seed-defaults', async (req: Request, res: Response) => {
     }
 });
 
+// Get all active subscription plans - PUBLIC
+router.get('/plans', async (req: Request, res: Response) => {
+    try {
+        const result = await pool.query(`
+            SELECT * FROM subscription_plans 
+            WHERE is_active = true 
+            ORDER BY price ASC
+        `);
+        res.json({ plans: result.rows });
+    } catch (error) {
+        console.error('Error fetching plans:', error);
+        res.status(500).json({ error: 'Failed to fetch plans' });
+    }
+});
+
+// Get credit packages - PUBLIC
+router.get('/packages', async (req: Request, res: Response) => {
+    try {
+        const result = await pool.query(`
+            SELECT * FROM credit_packages
+            WHERE is_active = true
+            ORDER BY price ASC
+        `);
+        res.json({ packages: result.rows });
+    } catch (error) {
+        console.error('Error fetching packages:', error);
+        res.status(500).json({ error: 'Failed to fetch packages' });
+    }
+});
+
 // Create Stripe Checkout Session (requires auth)
 router.post('/create-checkout-session', authenticateToken, async (req: AuthRequest, res: Response) => {
     try {
@@ -370,20 +400,6 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Get all active subscription plans
-router.get('/plans', async (req: AuthRequest, res: Response) => {
-    try {
-        const result = await pool.query(`
-            SELECT * FROM subscription_plans 
-            WHERE is_active = true 
-            ORDER BY price ASC
-        `);
-        res.json({ plans: result.rows });
-    } catch (error) {
-        console.error('Error fetching plans:', error);
-        res.status(500).json({ error: 'Failed to fetch plans' });
-    }
-});
 
 // Get credit balance
 router.get('/credits', async (req: AuthRequest, res: Response) => {
@@ -427,20 +443,6 @@ router.get('/transactions', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Get credit packages
-router.get('/packages', async (req: AuthRequest, res: Response) => {
-    try {
-        const result = await pool.query(`
-            SELECT * FROM credit_packages
-            WHERE is_active = true
-            ORDER BY price ASC
-        `);
-        res.json({ packages: result.rows });
-    } catch (error) {
-        console.error('Error fetching packages:', error);
-        res.status(500).json({ error: 'Failed to fetch packages' });
-    }
-});
 
 // Consume credits
 router.post('/consume', async (req: AuthRequest, res: Response) => {

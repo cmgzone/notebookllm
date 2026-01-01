@@ -96,7 +96,8 @@ class QuickAIModelSelector extends ConsumerWidget {
                         Expanded(
                           child: Text(
                             m.name,
-                            style: const TextStyle(fontSize: 12),
+                            style: TextStyle(
+                                fontSize: 12, color: scheme.onSurface),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -137,7 +138,8 @@ class QuickAIModelSelector extends ConsumerWidget {
                         Expanded(
                           child: Text(
                             m.name + (m.isPremium ? ' 💎' : ''),
-                            style: const TextStyle(fontSize: 12),
+                            style: TextStyle(
+                                fontSize: 12, color: scheme.onSurface),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),

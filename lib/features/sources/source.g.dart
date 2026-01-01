@@ -17,6 +17,8 @@ _$SourceImpl _$$SourceImplFromJson(Map<String, dynamic> json) => _$SourceImpl(
       summaryGeneratedAt: json['summaryGeneratedAt'] == null
           ? null
           : DateTime.parse(json['summaryGeneratedAt'] as String),
+      imageUrl: json['imageUrl'] as String?,
+      thumbnailUrl: json['thumbnailUrl'] as String?,
       tagIds: (json['tagIds'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
@@ -33,5 +35,7 @@ Map<String, dynamic> _$$SourceImplToJson(_$SourceImpl instance) =>
       'content': instance.content,
       'summary': instance.summary,
       'summaryGeneratedAt': instance.summaryGeneratedAt?.toIso8601String(),
+      'imageUrl': instance.imageUrl,
+      'thumbnailUrl': instance.thumbnailUrl,
       'tagIds': instance.tagIds,
     };

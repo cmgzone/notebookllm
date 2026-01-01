@@ -310,7 +310,9 @@ $content''',
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        Text('Depth: ', style: text.labelMedium),
+                        Text('Depth: ',
+                            style: text.labelMedium
+                                ?.copyWith(color: scheme.onSurface)),
                         const SizedBox(width: 8),
                         ...ResearchDepth.values.map((depth) {
                           final isSelected = _selectedDepth == depth;
@@ -344,7 +346,9 @@ $content''',
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        Text('Template: ', style: text.labelMedium),
+                        Text('Template: ',
+                            style: text.labelMedium
+                                ?.copyWith(color: scheme.onSurface)),
                         const SizedBox(width: 8),
                         ...ResearchTemplate.values.map((template) {
                           final isSelected = _selectedTemplate == template;
@@ -834,13 +838,14 @@ $content''',
             children: [
               Icon(Icons.auto_awesome, size: 64, color: scheme.primary),
               const SizedBox(height: 16),
-              Text('Deep Research Agent', style: text.headlineSmall),
+              Text('Deep Research Agent',
+                  style: text.headlineSmall?.copyWith(color: scheme.onSurface)),
               const SizedBox(height: 8),
               Text(
                 'I can browse the web, read pages, and\nwrite a comprehensive report for you.',
                 textAlign: TextAlign.center,
-                style: text.bodyMedium
-                    ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.7)),
+                style:
+                    text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ],
           ),
@@ -959,6 +964,42 @@ $content''',
                 padding: const EdgeInsets.all(16),
                 child: MarkdownBody(
                   data: _finalResult!.result!,
+                  styleSheet: MarkdownStyleSheet(
+                    h1: text.headlineSmall?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    h2: text.titleLarge?.copyWith(
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    h3: text.titleMedium?.copyWith(
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    p: text.bodyMedium?.copyWith(
+                      color: scheme.onSurface,
+                    ),
+                    listBullet: text.bodyMedium?.copyWith(
+                      color: scheme.onSurface,
+                    ),
+                    strong: text.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: scheme.onSurface,
+                    ),
+                    em: text.bodyMedium?.copyWith(
+                      fontStyle: FontStyle.italic,
+                      color: scheme.onSurface,
+                    ),
+                    blockquote: text.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontStyle: FontStyle.italic,
+                    ),
+                    code: text.bodySmall?.copyWith(
+                      color: scheme.onSurface,
+                      backgroundColor: scheme.surfaceContainerHighest,
+                    ),
+                  ),
                   sizedImageBuilder: (config) {
                     if (config.alt == 'VIDEO') {
                       return _buildVideoCard(config.uri.toString());
@@ -1324,7 +1365,7 @@ class _SearchResultCard extends StatelessWidget {
                         Text(
                           result.link,
                           style: text.bodySmall?.copyWith(
-                            color: scheme.onSurface.withValues(alpha: 0.6),
+                            color: scheme.onSurfaceVariant,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,

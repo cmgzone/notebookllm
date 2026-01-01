@@ -297,7 +297,7 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
         Text(
           _isSignUp ? 'Create your account' : 'Welcome back',
           style: theme.textTheme.bodyLarge?.copyWith(
-            color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+            color: theme.colorScheme.onSurfaceVariant,
           ),
           textAlign: TextAlign.center,
         ),
@@ -488,11 +488,17 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
           onChanged: (v) => setState(() => _rememberMe = v ?? false),
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
-        Text('Remember me', style: theme.textTheme.bodySmall),
+        Text('Remember me',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface,
+            )),
         const Spacer(),
         TextButton(
           onPressed: () => setState(() => _showForgotPassword = true),
-          child: Text('Forgot password?', style: theme.textTheme.bodySmall),
+          child: Text('Forgot password?',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.primary,
+              )),
         ),
       ],
     );

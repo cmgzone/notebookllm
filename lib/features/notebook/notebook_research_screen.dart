@@ -408,20 +408,57 @@ class _NotebookResearchScreenState
               child: MarkdownBody(
                 data: _finalResult!.result!,
                 selectable: true,
+                styleSheet: MarkdownStyleSheet(
+                  h1: text.headlineSmall?.copyWith(
+                    color: scheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  h2: text.titleLarge?.copyWith(
+                    color: scheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  h3: text.titleMedium?.copyWith(
+                    color: scheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  p: text.bodyMedium?.copyWith(
+                    color: scheme.onSurface,
+                  ),
+                  listBullet: text.bodyMedium?.copyWith(
+                    color: scheme.onSurface,
+                  ),
+                  strong: text.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: scheme.onSurface,
+                  ),
+                  em: text.bodyMedium?.copyWith(
+                    fontStyle: FontStyle.italic,
+                    color: scheme.onSurface,
+                  ),
+                  blockquote: text.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontStyle: FontStyle.italic,
+                  ),
+                  code: text.bodySmall?.copyWith(
+                    color: scheme.onSurface,
+                    backgroundColor: scheme.surfaceContainerHighest,
+                  ),
+                ),
                 onTapLink: (text, href, title) {
                   if (href != null) {
                     launchUrl(Uri.parse(href),
                         mode: LaunchMode.externalApplication);
                   }
                 },
-                imageBuilder: (uri, title, alt) {
-                  // ignore: deprecated_member_use
+                sizedImageBuilder: (config) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: CachedNetworkImage(
-                        imageUrl: uri.toString(),
+                        imageUrl: config.uri.toString(),
+                        width: config.width,
+                        height: config.height,
                         fit: BoxFit.cover,
                         placeholder: (context, url) => Container(
                           height: 200,
@@ -440,7 +477,7 @@ class _NotebookResearchScreenState
                                 Icon(Icons.broken_image, color: scheme.outline),
                                 const SizedBox(height: 4),
                                 Text(
-                                  alt ?? 'Image failed to load',
+                                  config.alt ?? 'Image failed to load',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: scheme.outline,
@@ -562,7 +599,7 @@ class _NotebookResearchScreenState
             Text(
               '${(latestUpdate.progress * 100).toInt()}% complete',
               style: text.bodySmall?.copyWith(
-                color: scheme.onSurface.withValues(alpha: 0.6),
+                color: scheme.onSurfaceVariant,
               ),
             ),
           ],

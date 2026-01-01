@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_service.dart';
+import '../../core/ai/web_browsing_service.dart';
 import 'message.dart';
 import 'stream_provider.dart';
 
@@ -12,6 +13,13 @@ class ChatNotifier extends StateNotifier<List<Message>> {
   }
 
   final Ref ref;
+
+  // Web browsing state
+  bool _isWebBrowsing = false;
+  WebBrowsingUpdate? _currentBrowsingUpdate;
+
+  bool get isWebBrowsing => _isWebBrowsing;
+  WebBrowsingUpdate? get currentBrowsingUpdate => _currentBrowsingUpdate;
 
   Future<void> _loadHistory() async {
     try {
@@ -41,8 +49,10 @@ class ChatNotifier extends StateNotifier<List<Message>> {
     state = [...state, aiMsg];
   }
 
+  /// Send message with optional web browsing mode
   Future<void> send(String text,
       {bool useDeepSearch = false,
+      bool useWebBrowsing = false,
       String? imagePath,
       Uint8List? imageBytes}) async {
     // Save to backend
@@ -61,6 +71,12 @@ class ChatNotifier extends StateNotifier<List<Message>> {
       imageUrl: imagePath,
     );
     state = [...state, userMsg];
+
+    // Use web browsing mode if enabled
+    if (useWebBrowsing) {
+      await _handleWebBrowsing(text);
+      return;
+    }
 
     // Pass chat history to stream provider for context
     final chatHistory = state.where((m) => m.id != userMsg.id).toList();
@@ -110,6 +126,68 @@ class ChatNotifier extends StateNotifier<List<Message>> {
             content: buffer.toString(),
           );
     } catch (_) {}
+
+    // Generate Smart Suggestions
+    _generateSuggestions();
+  }
+
+  /// Handle web browsing mode with real-time updates
+  Future<void> _handleWebBrowsing(String query) async {
+    _isWebBrowsing = true;
+    _currentBrowsingUpdate = null;
+
+    // Add placeholder AI message
+    final placeholderMsg = Message(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      text: '🌐 Browsing the web...',
+      isUser: false,
+      timestamp: DateTime.now(),
+      isWebBrowsing: true,
+    );
+    state = [...state, placeholderMsg];
+
+    final webService = ref.read(webBrowsingServiceProvider);
+    final screenshots = <String>[];
+
+    await for (final update in webService.browse(query: query)) {
+      _currentBrowsingUpdate = update;
+
+      // Collect screenshots
+      if (update.screenshotUrl != null &&
+          !screenshots.contains(update.screenshotUrl)) {
+        screenshots.add(update.screenshotUrl!);
+      }
+
+      // Update the message with current status
+      final statusMsg = Message(
+        id: placeholderMsg.id,
+        text: update.isComplete
+            ? update.finalResponse ?? 'No response generated'
+            : '🌐 ${update.status}',
+        isUser: false,
+        timestamp: DateTime.now(),
+        isWebBrowsing: true,
+        webBrowsingStatus: update.status,
+        webBrowsingScreenshots: screenshots,
+        webBrowsingSources: update.sources,
+        isDeepSearch: true,
+      );
+
+      state = [...state.sublist(0, state.length - 1), statusMsg];
+    }
+
+    _isWebBrowsing = false;
+    _currentBrowsingUpdate = null;
+
+    // Save AI response
+    if (state.isNotEmpty && !state.last.isUser) {
+      try {
+        await ref.read(apiServiceProvider).saveChatMessage(
+              role: 'model',
+              content: state.last.text,
+            );
+      } catch (_) {}
+    }
 
     // Generate Smart Suggestions
     _generateSuggestions();

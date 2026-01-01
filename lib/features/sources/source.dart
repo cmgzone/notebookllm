@@ -9,11 +9,13 @@ class Source with _$Source {
     required String id,
     required String notebookId,
     required String title,
-    required String type, // drive, file, url, youtube, audio, text
+    required String type, // drive, file, url, youtube, audio, text, image
     required DateTime addedAt,
     required String content, // raw text or transcript
     String? summary,
     DateTime? summaryGeneratedAt,
+    String? imageUrl, // URL or base64 data URL for image sources
+    String? thumbnailUrl, // Optional thumbnail for previews
     @Default([]) List<String> tagIds,
   }) = _Source;
 

@@ -45,6 +45,7 @@ class _EnhancedChatScreenState extends ConsumerState<EnhancedChatScreen> {
   final AudioRecorder _recorder = AudioRecorder();
   bool _recording = false;
   bool _isDeepSearchEnabled = false;
+  bool _isWebBrowsingEnabled = false; // New: Web browsing mode
 
   // Image attachment
   final ImagePicker _imagePicker = ImagePicker();
@@ -74,13 +75,19 @@ class _EnhancedChatScreenState extends ConsumerState<EnhancedChatScreen> {
     final text = _controller.text.trim();
     if (text.isEmpty && _selectedImage == null) return;
 
-    // Check and consume credits
+    // Check and consume credits (more for web browsing)
     final hasCredits = await ref.tryUseCredits(
       context: context,
-      amount: _selectedImage != null
-          ? CreditCosts.chatMessage * 2
-          : CreditCosts.chatMessage,
-      feature: _selectedImage != null ? 'image_chat' : 'chat_message',
+      amount: _isWebBrowsingEnabled
+          ? CreditCosts.chatMessage * 3
+          : _selectedImage != null
+              ? CreditCosts.chatMessage * 2
+              : CreditCosts.chatMessage,
+      feature: _isWebBrowsingEnabled
+          ? 'web_browsing_chat'
+          : _selectedImage != null
+              ? 'image_chat'
+              : 'chat_message',
     );
     if (!hasCredits) return;
 
@@ -91,6 +98,7 @@ class _EnhancedChatScreenState extends ConsumerState<EnhancedChatScreen> {
     ref.read(chatProvider.notifier).send(
           text.isNotEmpty ? text : 'Analyze this image',
           useDeepSearch: _isDeepSearchEnabled,
+          useWebBrowsing: _isWebBrowsingEnabled,
           imagePath: imagePath,
           imageBytes: imageBytes,
         );
@@ -754,8 +762,12 @@ Sources to analyze:''';
             isDeepSearchEnabled: _isDeepSearchEnabled,
             onToggleDeepSearch: () =>
                 setState(() => _isDeepSearchEnabled = !_isDeepSearchEnabled),
+            isWebBrowsingEnabled: _isWebBrowsingEnabled,
+            onToggleWebBrowsing: () =>
+                setState(() => _isWebBrowsingEnabled = !_isWebBrowsingEnabled),
             onPickImage: _pickImage,
             onTakePhoto: _takePhoto,
+            onOpenAIBrowser: () => context.push('/ai-browser'),
             selectedImage: _selectedImage,
             onRemoveImage: _removeSelectedImage,
             isRecording: _recording,
@@ -881,7 +893,7 @@ class _MessageBubble extends ConsumerWidget {
                     Icon(Icons.public, size: 12, color: scheme.tertiary),
                     const SizedBox(width: 4),
                     Text(
-                      'Web Search',
+                      message.isWebBrowsing ? '🌐 Web Browsing' : 'Web Search',
                       style: TextStyle(
                         fontSize: 10,
                         color: scheme.tertiary,
@@ -889,6 +901,147 @@ class _MessageBubble extends ConsumerWidget {
                       ),
                     ),
                   ],
+                ),
+              ),
+            // Web browsing status indicator
+            if (!isUser &&
+                message.isWebBrowsing &&
+                message.webBrowsingStatus != null &&
+                !message.webBrowsingStatus!.contains('Complete'))
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.orange,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        message.webBrowsingStatus!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ).animate().fadeIn(),
+            // Web browsing screenshots
+            if (!isUser && message.webBrowsingScreenshots.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                height: 80,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: message.webBrowsingScreenshots.length,
+                  itemBuilder: (context, index) {
+                    final screenshotUrl = message.webBrowsingScreenshots[index];
+                    return GestureDetector(
+                      onTap: () => _showFullScreenshot(context, screenshotUrl),
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                screenshotUrl,
+                                width: 120,
+                                height: 80,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  width: 120,
+                                  height: 80,
+                                  color: scheme.surfaceContainerHighest,
+                                  child: Icon(Icons.broken_image,
+                                      color: scheme.outline),
+                                ),
+                                loadingBuilder:
+                                    (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return Container(
+                                    width: 120,
+                                    height: 80,
+                                    color: scheme.surfaceContainerHighest,
+                                    child: const Center(
+                                      child: SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            // Expand icon overlay
+                            Positioned(
+                              right: 4,
+                              bottom: 4,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Icon(
+                                  Icons.fullscreen,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                        .animate()
+                        .scale(delay: Duration(milliseconds: index * 100));
+                  },
+                ),
+              ),
+            // Web browsing sources
+            if (!isUser && message.webBrowsingSources.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: message.webBrowsingSources.take(3).map((url) {
+                    final domain = Uri.tryParse(url)?.host ?? url;
+                    return Chip(
+                      avatar: CircleAvatar(
+                        backgroundColor: Colors.transparent,
+                        child: Image.network(
+                          'https://www.google.com/s2/favicons?domain=$domain&sz=32',
+                          width: 16,
+                          height: 16,
+                          errorBuilder: (_, __, ___) => Icon(Icons.language,
+                              size: 14, color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                      label: Text(domain, style: const TextStyle(fontSize: 10)),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    );
+                  }).toList(),
                 ),
               ),
             Container(
@@ -1092,6 +1245,62 @@ class _MessageBubble extends ConsumerWidget {
               style: TextStyle(
                 fontSize: 11,
                 color: scheme.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showFullScreenshot(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        width: 200,
+                        height: 200,
+                        color: Colors.black54,
+                        child: const Center(
+                          child: CircularProgressIndicator(color: Colors.white),
+                        ),
+                      );
+                    },
+                    errorBuilder: (_, __, ___) => Container(
+                      width: 200,
+                      height: 200,
+                      color: Colors.black54,
+                      child: const Icon(Icons.broken_image,
+                          color: Colors.white, size: 48),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black54,
+                ),
               ),
             ),
           ],
@@ -1446,8 +1655,11 @@ class _ChatInputArea extends StatelessWidget {
     required this.onMic,
     required this.isDeepSearchEnabled,
     required this.onToggleDeepSearch,
+    required this.isWebBrowsingEnabled,
+    required this.onToggleWebBrowsing,
     required this.onPickImage,
     required this.onTakePhoto,
+    required this.onOpenAIBrowser,
     this.selectedImage,
     this.onRemoveImage,
     this.isRecording = false,
@@ -1459,8 +1671,11 @@ class _ChatInputArea extends StatelessWidget {
   final VoidCallback onMic;
   final bool isDeepSearchEnabled;
   final VoidCallback onToggleDeepSearch;
+  final bool isWebBrowsingEnabled;
+  final VoidCallback onToggleWebBrowsing;
   final VoidCallback onPickImage;
   final VoidCallback onTakePhoto;
+  final VoidCallback onOpenAIBrowser;
   final XFile? selectedImage;
   final VoidCallback? onRemoveImage;
   final bool isRecording;
@@ -1483,8 +1698,37 @@ class _ChatInputArea extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Web Browsing indicator
+          if (isWebBrowsingEnabled)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.orange.withValues(alpha: 0.3),
+                ),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.language, size: 16, color: Colors.orange),
+                  SizedBox(width: 6),
+                  Text(
+                    '🌐 Web Browsing - AI will search & show screenshots',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.orange,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ).animate().fadeIn().slideY(begin: 0.2),
+
           // Deep Search indicator
-          if (isDeepSearchEnabled)
+          if (isDeepSearchEnabled && !isWebBrowsingEnabled)
             Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1620,6 +1864,30 @@ class _ChatInputArea extends StatelessWidget {
                         tooltip: isDeepSearchEnabled
                             ? 'Deep Search ON'
                             : 'Enable Deep Search',
+                      ),
+                      // Web browsing toggle
+                      IconButton(
+                        onPressed: onToggleWebBrowsing,
+                        icon: Icon(
+                          Icons.language,
+                          color: isWebBrowsingEnabled
+                              ? Colors.orange
+                              : scheme.onSurface.withValues(alpha: 0.5),
+                          size: 20,
+                        ),
+                        tooltip: isWebBrowsingEnabled
+                            ? 'Web Browsing ON'
+                            : 'Enable Web Browsing (with screenshots)',
+                      ),
+                      // AI Browser button
+                      IconButton(
+                        onPressed: onOpenAIBrowser,
+                        icon: Icon(
+                          Icons.open_in_browser,
+                          color: scheme.tertiary,
+                          size: 20,
+                        ),
+                        tooltip: 'Open AI Browser (real browser control)',
                       ),
                       Expanded(
                         child: TextField(

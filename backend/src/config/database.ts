@@ -59,6 +59,8 @@ export async function initializeDatabase() {
                 title TEXT NOT NULL,
                 description TEXT,
                 cover_image TEXT,
+                is_agent_notebook BOOLEAN DEFAULT false,
+                agent_session_id TEXT,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
@@ -111,6 +113,7 @@ export async function initializeDatabase() {
 
             -- Create indexes
             CREATE INDEX IF NOT EXISTS idx_notebooks_user_id ON notebooks(user_id);
+            CREATE INDEX IF NOT EXISTS idx_notebooks_agent ON notebooks(is_agent_notebook) WHERE is_agent_notebook = true;
             CREATE INDEX IF NOT EXISTS idx_sources_notebook_id ON sources(notebook_id);
             CREATE INDEX IF NOT EXISTS idx_chunks_source_id ON chunks(source_id);
             CREATE INDEX IF NOT EXISTS idx_tags_user_id ON tags(user_id);

@@ -24,12 +24,16 @@ mixin _$Source {
   String get notebookId => throw _privateConstructorUsedError;
   String get title => throw _privateConstructorUsedError;
   String get type =>
-      throw _privateConstructorUsedError; // drive, file, url, youtube, audio, text
+      throw _privateConstructorUsedError; // drive, file, url, youtube, audio, text, image
   DateTime get addedAt => throw _privateConstructorUsedError;
   String get content =>
       throw _privateConstructorUsedError; // raw text or transcript
   String? get summary => throw _privateConstructorUsedError;
   DateTime? get summaryGeneratedAt => throw _privateConstructorUsedError;
+  String? get imageUrl =>
+      throw _privateConstructorUsedError; // URL or base64 data URL for image sources
+  String? get thumbnailUrl =>
+      throw _privateConstructorUsedError; // Optional thumbnail for previews
   List<String> get tagIds => throw _privateConstructorUsedError;
 
   /// Serializes this Source to a JSON map.
@@ -55,6 +59,8 @@ abstract class $SourceCopyWith<$Res> {
       String content,
       String? summary,
       DateTime? summaryGeneratedAt,
+      String? imageUrl,
+      String? thumbnailUrl,
       List<String> tagIds});
 }
 
@@ -81,6 +87,8 @@ class _$SourceCopyWithImpl<$Res, $Val extends Source>
     Object? content = null,
     Object? summary = freezed,
     Object? summaryGeneratedAt = freezed,
+    Object? imageUrl = freezed,
+    Object? thumbnailUrl = freezed,
     Object? tagIds = null,
   }) {
     return _then(_value.copyWith(
@@ -116,6 +124,14 @@ class _$SourceCopyWithImpl<$Res, $Val extends Source>
           ? _value.summaryGeneratedAt
           : summaryGeneratedAt // ignore: cast_nullable_to_non_nullable
               as DateTime?,
+      imageUrl: freezed == imageUrl
+          ? _value.imageUrl
+          : imageUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+      thumbnailUrl: freezed == thumbnailUrl
+          ? _value.thumbnailUrl
+          : thumbnailUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
       tagIds: null == tagIds
           ? _value.tagIds
           : tagIds // ignore: cast_nullable_to_non_nullable
@@ -140,6 +156,8 @@ abstract class _$$SourceImplCopyWith<$Res> implements $SourceCopyWith<$Res> {
       String content,
       String? summary,
       DateTime? summaryGeneratedAt,
+      String? imageUrl,
+      String? thumbnailUrl,
       List<String> tagIds});
 }
 
@@ -164,6 +182,8 @@ class __$$SourceImplCopyWithImpl<$Res>
     Object? content = null,
     Object? summary = freezed,
     Object? summaryGeneratedAt = freezed,
+    Object? imageUrl = freezed,
+    Object? thumbnailUrl = freezed,
     Object? tagIds = null,
   }) {
     return _then(_$SourceImpl(
@@ -199,6 +219,14 @@ class __$$SourceImplCopyWithImpl<$Res>
           ? _value.summaryGeneratedAt
           : summaryGeneratedAt // ignore: cast_nullable_to_non_nullable
               as DateTime?,
+      imageUrl: freezed == imageUrl
+          ? _value.imageUrl
+          : imageUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+      thumbnailUrl: freezed == thumbnailUrl
+          ? _value.thumbnailUrl
+          : thumbnailUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
       tagIds: null == tagIds
           ? _value._tagIds
           : tagIds // ignore: cast_nullable_to_non_nullable
@@ -219,6 +247,8 @@ class _$SourceImpl implements _Source {
       required this.content,
       this.summary,
       this.summaryGeneratedAt,
+      this.imageUrl,
+      this.thumbnailUrl,
       final List<String> tagIds = const []})
       : _tagIds = tagIds;
 
@@ -233,7 +263,7 @@ class _$SourceImpl implements _Source {
   final String title;
   @override
   final String type;
-// drive, file, url, youtube, audio, text
+// drive, file, url, youtube, audio, text, image
   @override
   final DateTime addedAt;
   @override
@@ -243,7 +273,14 @@ class _$SourceImpl implements _Source {
   final String? summary;
   @override
   final DateTime? summaryGeneratedAt;
+  @override
+  final String? imageUrl;
+// URL or base64 data URL for image sources
+  @override
+  final String? thumbnailUrl;
+// Optional thumbnail for previews
   final List<String> _tagIds;
+// Optional thumbnail for previews
   @override
   @JsonKey()
   List<String> get tagIds {
@@ -254,7 +291,7 @@ class _$SourceImpl implements _Source {
 
   @override
   String toString() {
-    return 'Source(id: $id, notebookId: $notebookId, title: $title, type: $type, addedAt: $addedAt, content: $content, summary: $summary, summaryGeneratedAt: $summaryGeneratedAt, tagIds: $tagIds)';
+    return 'Source(id: $id, notebookId: $notebookId, title: $title, type: $type, addedAt: $addedAt, content: $content, summary: $summary, summaryGeneratedAt: $summaryGeneratedAt, imageUrl: $imageUrl, thumbnailUrl: $thumbnailUrl, tagIds: $tagIds)';
   }
 
   @override
@@ -272,6 +309,10 @@ class _$SourceImpl implements _Source {
             (identical(other.summary, summary) || other.summary == summary) &&
             (identical(other.summaryGeneratedAt, summaryGeneratedAt) ||
                 other.summaryGeneratedAt == summaryGeneratedAt) &&
+            (identical(other.imageUrl, imageUrl) ||
+                other.imageUrl == imageUrl) &&
+            (identical(other.thumbnailUrl, thumbnailUrl) ||
+                other.thumbnailUrl == thumbnailUrl) &&
             const DeepCollectionEquality().equals(other._tagIds, _tagIds));
   }
 
@@ -287,6 +328,8 @@ class _$SourceImpl implements _Source {
       content,
       summary,
       summaryGeneratedAt,
+      imageUrl,
+      thumbnailUrl,
       const DeepCollectionEquality().hash(_tagIds));
 
   /// Create a copy of Source
@@ -315,6 +358,8 @@ abstract class _Source implements Source {
       required final String content,
       final String? summary,
       final DateTime? summaryGeneratedAt,
+      final String? imageUrl,
+      final String? thumbnailUrl,
       final List<String> tagIds}) = _$SourceImpl;
 
   factory _Source.fromJson(Map<String, dynamic> json) = _$SourceImpl.fromJson;
@@ -326,7 +371,7 @@ abstract class _Source implements Source {
   @override
   String get title;
   @override
-  String get type; // drive, file, url, youtube, audio, text
+  String get type; // drive, file, url, youtube, audio, text, image
   @override
   DateTime get addedAt;
   @override
@@ -335,6 +380,10 @@ abstract class _Source implements Source {
   String? get summary;
   @override
   DateTime? get summaryGeneratedAt;
+  @override
+  String? get imageUrl; // URL or base64 data URL for image sources
+  @override
+  String? get thumbnailUrl; // Optional thumbnail for previews
   @override
   List<String> get tagIds;
 

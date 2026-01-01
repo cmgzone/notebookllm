@@ -59,9 +59,13 @@ class FlashcardNotifier extends StateNotifier<List<FlashcardDeck>> {
         sourceId: deck.sourceId,
         cards: deck.cards.map((c) => c.toBackendJson()).toList(),
       );
+      // Immediately add to state for instant UI update
+      state = [deck, ...state];
+      // Then reload from backend to get server-generated IDs
       await _loadDecks();
     } catch (e) {
       debugPrint('Error adding deck: $e');
+      rethrow; // Rethrow so the UI can show the error
     }
   }
 

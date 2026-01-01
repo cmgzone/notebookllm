@@ -1,6 +1,6 @@
 // Dynamically determine API URL based on current host
 // Backend runs on port 3000, web app runs on 3000/3001
-const BACKEND_PORT = 3000;
+const BACKEND_PORT = 3005;
 
 const getApiBase = () => {
     if (typeof window === 'undefined') {

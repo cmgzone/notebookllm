@@ -557,7 +557,7 @@ class _TemplateCard extends StatelessWidget {
               Text(
                 subtitle,
                 style: text.bodySmall?.copyWith(
-                  color: scheme.secondary,
+                  color: scheme.onSurfaceVariant,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

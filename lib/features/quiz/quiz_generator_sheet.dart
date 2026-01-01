@@ -215,7 +215,7 @@ class _QuizGeneratorSheetState extends ConsumerState<QuizGeneratorSheet> {
     setState(() => _isGenerating = true);
 
     try {
-      await ref.read(quizProvider.notifier).generateFromSources(
+      final quiz = await ref.read(quizProvider.notifier).generateFromSources(
             notebookId: widget.notebookId,
             title: _titleController.text.trim(),
             sourceId: widget.sourceId,
@@ -226,7 +226,8 @@ class _QuizGeneratorSheetState extends ConsumerState<QuizGeneratorSheet> {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Created quiz with $_questionCount questions!'),
+          content:
+              Text('Created quiz with ${quiz.questions.length} questions!'),
           backgroundColor: Colors.green,
         ),
       );

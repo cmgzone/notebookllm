@@ -26,6 +26,16 @@ _$MessageImpl _$$MessageImplFromJson(Map<String, dynamic> json) =>
           const [],
       imageUrl: json['imageUrl'] as String?,
       isDeepSearch: json['isDeepSearch'] as bool? ?? false,
+      isWebBrowsing: json['isWebBrowsing'] as bool? ?? false,
+      webBrowsingStatus: json['webBrowsingStatus'] as String?,
+      webBrowsingScreenshots: (json['webBrowsingScreenshots'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
+      webBrowsingSources: (json['webBrowsingSources'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
     );
 
 Map<String, dynamic> _$$MessageImplToJson(_$MessageImpl instance) =>
@@ -39,6 +49,10 @@ Map<String, dynamic> _$$MessageImplToJson(_$MessageImpl instance) =>
       'relatedSources': instance.relatedSources,
       'imageUrl': instance.imageUrl,
       'isDeepSearch': instance.isDeepSearch,
+      'isWebBrowsing': instance.isWebBrowsing,
+      'webBrowsingStatus': instance.webBrowsingStatus,
+      'webBrowsingScreenshots': instance.webBrowsingScreenshots,
+      'webBrowsingSources': instance.webBrowsingSources,
     };
 
 _$CitationImpl _$$CitationImplFromJson(Map<String, dynamic> json) =>

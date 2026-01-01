@@ -217,18 +217,19 @@ class _FlashcardGeneratorSheetState
     setState(() => _isGenerating = true);
 
     try {
-      await ref.read(flashcardProvider.notifier).generateFromSources(
-            notebookId: widget.notebookId,
-            title: _titleController.text.trim(),
-            sourceId: widget.sourceId,
-            cardCount: _cardCount,
-          );
+      final deck =
+          await ref.read(flashcardProvider.notifier).generateFromSources(
+                notebookId: widget.notebookId,
+                title: _titleController.text.trim(),
+                sourceId: widget.sourceId,
+                cardCount: _cardCount,
+              );
 
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Created $_cardCount flashcards!'),
+          content: Text('Created ${deck.cards.length} flashcards!'),
           backgroundColor: Colors.green,
         ),
       );

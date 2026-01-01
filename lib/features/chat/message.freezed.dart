@@ -30,7 +30,15 @@ mixin _$Message {
       throw _privateConstructorUsedError;
   String? get imageUrl =>
       throw _privateConstructorUsedError; // Local file path or URL for attached image
-  bool get isDeepSearch => throw _privateConstructorUsedError;
+  bool get isDeepSearch =>
+      throw _privateConstructorUsedError; // Whether this used deep search
+  bool get isWebBrowsing =>
+      throw _privateConstructorUsedError; // Whether this is a web browsing message
+  String? get webBrowsingStatus =>
+      throw _privateConstructorUsedError; // Current status of web browsing
+  List<String> get webBrowsingScreenshots =>
+      throw _privateConstructorUsedError; // Screenshots from browsing
+  List<String> get webBrowsingSources => throw _privateConstructorUsedError;
 
   /// Serializes this Message to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -55,7 +63,11 @@ abstract class $MessageCopyWith<$Res> {
       List<String> suggestedQuestions,
       List<SourceSuggestion> relatedSources,
       String? imageUrl,
-      bool isDeepSearch});
+      bool isDeepSearch,
+      bool isWebBrowsing,
+      String? webBrowsingStatus,
+      List<String> webBrowsingScreenshots,
+      List<String> webBrowsingSources});
 }
 
 /// @nodoc
@@ -82,6 +94,10 @@ class _$MessageCopyWithImpl<$Res, $Val extends Message>
     Object? relatedSources = null,
     Object? imageUrl = freezed,
     Object? isDeepSearch = null,
+    Object? isWebBrowsing = null,
+    Object? webBrowsingStatus = freezed,
+    Object? webBrowsingScreenshots = null,
+    Object? webBrowsingSources = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -120,6 +136,22 @@ class _$MessageCopyWithImpl<$Res, $Val extends Message>
           ? _value.isDeepSearch
           : isDeepSearch // ignore: cast_nullable_to_non_nullable
               as bool,
+      isWebBrowsing: null == isWebBrowsing
+          ? _value.isWebBrowsing
+          : isWebBrowsing // ignore: cast_nullable_to_non_nullable
+              as bool,
+      webBrowsingStatus: freezed == webBrowsingStatus
+          ? _value.webBrowsingStatus
+          : webBrowsingStatus // ignore: cast_nullable_to_non_nullable
+              as String?,
+      webBrowsingScreenshots: null == webBrowsingScreenshots
+          ? _value.webBrowsingScreenshots
+          : webBrowsingScreenshots // ignore: cast_nullable_to_non_nullable
+              as List<String>,
+      webBrowsingSources: null == webBrowsingSources
+          ? _value.webBrowsingSources
+          : webBrowsingSources // ignore: cast_nullable_to_non_nullable
+              as List<String>,
     ) as $Val);
   }
 }
@@ -140,7 +172,11 @@ abstract class _$$MessageImplCopyWith<$Res> implements $MessageCopyWith<$Res> {
       List<String> suggestedQuestions,
       List<SourceSuggestion> relatedSources,
       String? imageUrl,
-      bool isDeepSearch});
+      bool isDeepSearch,
+      bool isWebBrowsing,
+      String? webBrowsingStatus,
+      List<String> webBrowsingScreenshots,
+      List<String> webBrowsingSources});
 }
 
 /// @nodoc
@@ -165,6 +201,10 @@ class __$$MessageImplCopyWithImpl<$Res>
     Object? relatedSources = null,
     Object? imageUrl = freezed,
     Object? isDeepSearch = null,
+    Object? isWebBrowsing = null,
+    Object? webBrowsingStatus = freezed,
+    Object? webBrowsingScreenshots = null,
+    Object? webBrowsingSources = null,
   }) {
     return _then(_$MessageImpl(
       id: null == id
@@ -203,6 +243,22 @@ class __$$MessageImplCopyWithImpl<$Res>
           ? _value.isDeepSearch
           : isDeepSearch // ignore: cast_nullable_to_non_nullable
               as bool,
+      isWebBrowsing: null == isWebBrowsing
+          ? _value.isWebBrowsing
+          : isWebBrowsing // ignore: cast_nullable_to_non_nullable
+              as bool,
+      webBrowsingStatus: freezed == webBrowsingStatus
+          ? _value.webBrowsingStatus
+          : webBrowsingStatus // ignore: cast_nullable_to_non_nullable
+              as String?,
+      webBrowsingScreenshots: null == webBrowsingScreenshots
+          ? _value._webBrowsingScreenshots
+          : webBrowsingScreenshots // ignore: cast_nullable_to_non_nullable
+              as List<String>,
+      webBrowsingSources: null == webBrowsingSources
+          ? _value._webBrowsingSources
+          : webBrowsingSources // ignore: cast_nullable_to_non_nullable
+              as List<String>,
     ));
   }
 }
@@ -219,10 +275,16 @@ class _$MessageImpl implements _Message {
       final List<String> suggestedQuestions = const [],
       final List<SourceSuggestion> relatedSources = const [],
       this.imageUrl,
-      this.isDeepSearch = false})
+      this.isDeepSearch = false,
+      this.isWebBrowsing = false,
+      this.webBrowsingStatus,
+      final List<String> webBrowsingScreenshots = const [],
+      final List<String> webBrowsingSources = const []})
       : _citations = citations,
         _suggestedQuestions = suggestedQuestions,
-        _relatedSources = relatedSources;
+        _relatedSources = relatedSources,
+        _webBrowsingScreenshots = webBrowsingScreenshots,
+        _webBrowsingSources = webBrowsingSources;
 
   factory _$MessageImpl.fromJson(Map<String, dynamic> json) =>
       _$$MessageImplFromJson(json);
@@ -269,10 +331,40 @@ class _$MessageImpl implements _Message {
   @override
   @JsonKey()
   final bool isDeepSearch;
+// Whether this used deep search
+  @override
+  @JsonKey()
+  final bool isWebBrowsing;
+// Whether this is a web browsing message
+  @override
+  final String? webBrowsingStatus;
+// Current status of web browsing
+  final List<String> _webBrowsingScreenshots;
+// Current status of web browsing
+  @override
+  @JsonKey()
+  List<String> get webBrowsingScreenshots {
+    if (_webBrowsingScreenshots is EqualUnmodifiableListView)
+      return _webBrowsingScreenshots;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(_webBrowsingScreenshots);
+  }
+
+// Screenshots from browsing
+  final List<String> _webBrowsingSources;
+// Screenshots from browsing
+  @override
+  @JsonKey()
+  List<String> get webBrowsingSources {
+    if (_webBrowsingSources is EqualUnmodifiableListView)
+      return _webBrowsingSources;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(_webBrowsingSources);
+  }
 
   @override
   String toString() {
-    return 'Message(id: $id, text: $text, isUser: $isUser, timestamp: $timestamp, citations: $citations, suggestedQuestions: $suggestedQuestions, relatedSources: $relatedSources, imageUrl: $imageUrl, isDeepSearch: $isDeepSearch)';
+    return 'Message(id: $id, text: $text, isUser: $isUser, timestamp: $timestamp, citations: $citations, suggestedQuestions: $suggestedQuestions, relatedSources: $relatedSources, imageUrl: $imageUrl, isDeepSearch: $isDeepSearch, isWebBrowsing: $isWebBrowsing, webBrowsingStatus: $webBrowsingStatus, webBrowsingScreenshots: $webBrowsingScreenshots, webBrowsingSources: $webBrowsingSources)';
   }
 
   @override
@@ -294,7 +386,15 @@ class _$MessageImpl implements _Message {
             (identical(other.imageUrl, imageUrl) ||
                 other.imageUrl == imageUrl) &&
             (identical(other.isDeepSearch, isDeepSearch) ||
-                other.isDeepSearch == isDeepSearch));
+                other.isDeepSearch == isDeepSearch) &&
+            (identical(other.isWebBrowsing, isWebBrowsing) ||
+                other.isWebBrowsing == isWebBrowsing) &&
+            (identical(other.webBrowsingStatus, webBrowsingStatus) ||
+                other.webBrowsingStatus == webBrowsingStatus) &&
+            const DeepCollectionEquality().equals(
+                other._webBrowsingScreenshots, _webBrowsingScreenshots) &&
+            const DeepCollectionEquality()
+                .equals(other._webBrowsingSources, _webBrowsingSources));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -309,7 +409,11 @@ class _$MessageImpl implements _Message {
       const DeepCollectionEquality().hash(_suggestedQuestions),
       const DeepCollectionEquality().hash(_relatedSources),
       imageUrl,
-      isDeepSearch);
+      isDeepSearch,
+      isWebBrowsing,
+      webBrowsingStatus,
+      const DeepCollectionEquality().hash(_webBrowsingScreenshots),
+      const DeepCollectionEquality().hash(_webBrowsingSources));
 
   /// Create a copy of Message
   /// with the given fields replaced by the non-null parameter values.
@@ -337,7 +441,11 @@ abstract class _Message implements Message {
       final List<String> suggestedQuestions,
       final List<SourceSuggestion> relatedSources,
       final String? imageUrl,
-      final bool isDeepSearch}) = _$MessageImpl;
+      final bool isDeepSearch,
+      final bool isWebBrowsing,
+      final String? webBrowsingStatus,
+      final List<String> webBrowsingScreenshots,
+      final List<String> webBrowsingSources}) = _$MessageImpl;
 
   factory _Message.fromJson(Map<String, dynamic> json) = _$MessageImpl.fromJson;
 
@@ -358,7 +466,15 @@ abstract class _Message implements Message {
   @override
   String? get imageUrl; // Local file path or URL for attached image
   @override
-  bool get isDeepSearch;
+  bool get isDeepSearch; // Whether this used deep search
+  @override
+  bool get isWebBrowsing; // Whether this is a web browsing message
+  @override
+  String? get webBrowsingStatus; // Current status of web browsing
+  @override
+  List<String> get webBrowsingScreenshots; // Screenshots from browsing
+  @override
+  List<String> get webBrowsingSources;
 
   /// Create a copy of Message
   /// with the given fields replaced by the non-null parameter values.

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:convert';
 import '../../core/auth/custom_auth_service.dart';
 import '../../core/api/api_service.dart';
 import '../../core/rag/smart_ingestion_provider.dart';
@@ -53,6 +54,7 @@ class SourceNotifier extends StateNotifier<List<Source>> {
           type: sourceData['type'] as String,
           addedAt: DateTime.parse(sourceData['created_at'] as String),
           content: sourceData['content'] as String? ?? '',
+          imageUrl: sourceData['imageUrl'] as String?,
           tagIds: [], // Tags will be handled separately if needed
         );
       }).toList();
@@ -171,6 +173,14 @@ class SourceNotifier extends StateNotifier<List<Source>> {
         finalNotebookId = notebookId;
       }
 
+      // Handle image data
+      String? imageUrl;
+      if (mediaBytes != null) {
+        // Convert bytes to base64 data URL
+        final base64Image = base64Encode(mediaBytes);
+        imageUrl = 'data:image/png;base64,$base64Image';
+      }
+
       debugPrint('Saving source to API: notebookId=$finalNotebookId');
       final sourceData = await apiService.createSource(
         notebookId: finalNotebookId,
@@ -178,6 +188,7 @@ class SourceNotifier extends StateNotifier<List<Source>> {
         title: title,
         content: content,
         url: url,
+        imageUrl: imageUrl,
       );
 
       final source = Source(
@@ -187,6 +198,7 @@ class SourceNotifier extends StateNotifier<List<Source>> {
         type: sourceData['type'] as String,
         addedAt: DateTime.parse(sourceData['created_at'] as String),
         content: sourceData['content'] as String? ?? '',
+        imageUrl: sourceData['imageUrl'] as String?,
       );
 
       state = [source, ...state];
