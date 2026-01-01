@@ -9,6 +9,7 @@ import '../../core/api/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../core/extensions/color_compat.dart';
 import '../../ui/widgets/agent_notebook_badge.dart';
+import 'api_tokens_section.dart';
 
 /// Model for agent session data
 /// Requirements: 4.1, 4.4
@@ -229,13 +230,26 @@ class AgentConnectionsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: state.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : state.error != null
-              ? _buildErrorState(context, ref, state.error!)
-              : state.sessions.isEmpty
-                  ? _buildEmptyState(context, scheme)
-                  : _buildSessionsList(context, ref, state, scheme),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // API Tokens Section - always visible
+            const ApiTokensSection(),
+            // Agent Sessions Section
+            if (state.isLoading)
+              const Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (state.error != null)
+              _buildErrorState(context, ref, state.error!)
+            else if (state.sessions.isEmpty)
+              _buildEmptyState(context, scheme)
+            else
+              _buildSessionsList(context, ref, state, scheme),
+          ],
+        ),
+      ),
     );
   }
 

@@ -77,16 +77,16 @@ This plan implements a personal API token system for authenticating MCP servers 
   - [x] 7.3 Add revokeApiToken(tokenId) method
     - _Requirements: 2.2_
 
-- [ ] 8. Flutter UI - API Tokens Section
-  - [ ] 8.1 Create ApiTokensSection widget for Agent Connections screen
+- [x] 8. Flutter UI - API Tokens Section
+  - [x] 8.1 Create ApiTokensSection widget for Agent Connections screen
     - _Requirements: 5.1_
-  - [ ] 8.2 Create TokenGenerationDialog with copy functionality and warning
+  - [x] 8.2 Create TokenGenerationDialog with copy functionality and warning
     - _Requirements: 5.2, 5.3_
-  - [ ] 8.3 Create TokenListItem widget showing name, dates, and partial token
+  - [x] 8.3 Create TokenListItem widget showing name, dates, and partial token
     - _Requirements: 2.1_
-  - [ ] 8.4 Add revoke confirmation dialog
+  - [x] 8.4 Add revoke confirmation dialog
     - _Requirements: 5.5_
-  - [ ] 8.5 Add MCP configuration instructions display
+  - [x] 8.5 Add MCP configuration instructions display
     - _Requirements: 5.4_
 
 - [ ] 9. Update MCP Server Documentation
