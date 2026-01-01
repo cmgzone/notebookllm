@@ -402,8 +402,24 @@ Webhook requests are signed with HMAC-SHA256 using the provided secret.`,
       required: ['webhookUrl', 'webhookSecret'],
     },
   },
-];
+  {
+    name: 'get_websocket_info',
+    description: `Get WebSocket connection information for real-time bidirectional communication.
+    
+WebSocket provides instant message delivery without polling. Connect to receive user messages in real-time and send responses immediately.
 
+Returns:
+- WebSocket URL to connect to
+- Authentication method (query parameters)
+- Message format for sending responses
+
+Use this for the most responsive agent experience.`,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+];
 
 // Input validation schemas
 const VerifyCodeSchema = z.object({
@@ -651,6 +667,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
       case 'register_webhook': {
         const input = RegisterWebhookSchema.parse(args);
         const response = await api.post('/webhook/register', input);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_websocket_info': {
+        const response = await api.get('/websocket/info');
         return {
           content: [
             {

@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { createServer } from 'http';
 
 // Import all routes
 import authRoutes from './routes/auth.js';
@@ -29,6 +30,7 @@ import mcpDownloadRoutes from './routes/mcpDownload.js';
 // Import services
 import bunnyService from './services/bunnyService.js';
 import codeVerificationService from './services/codeVerificationService.js';
+import { agentWebSocketService } from './services/agentWebSocketService.js';
 
 // Load environment variables
 dotenv.config();
@@ -111,9 +113,15 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server with WebSocket support
+const server = createServer(app);
+
+// Initialize WebSocket service for real-time agent communication
+agentWebSocketService.initialize(server);
+
+server.listen(PORT, () => {
     console.log(`🚀 Server is running on http://localhost:${PORT}`);
+    console.log(`🔌 WebSocket available at ws://localhost:${PORT}/ws/agent`);
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`📅 Started at: ${new Date().toISOString()}`);
 });

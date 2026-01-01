@@ -17,6 +17,7 @@ import { agentSessionService } from '../services/agentSessionService.js';
 import { agentNotebookService } from '../services/agentNotebookService.js';
 import { sourceConversationService } from '../services/sourceConversationService.js';
 import { webhookService } from '../services/webhookService.js';
+import { agentWebSocketService } from '../services/agentWebSocketService.js';
 
 const router = Router();
 
@@ -687,7 +688,7 @@ router.post('/webhook/register', authenticateToken, async (req: Request, res: Re
 
 /**
  * POST /api/coding-agent/followups/send
- * User sends a follow-up message to an agent (routes to webhook)
+ * User sends a follow-up message to an agent (routes via WebSocket or webhook)
  * 
  * Requirements: 3.2
  */
@@ -716,7 +717,10 @@ router.post('/followups/send', authenticateToken, async (req: Request, res: Resp
     }
 
     const source = sourceResult.rows[0];
-    const agentSessionId = source.metadata?.agentSessionId || source.agent_session_id;
+    const metadata = typeof source.metadata === 'string' 
+      ? JSON.parse(source.metadata) 
+      : (source.metadata || {});
+    const agentSessionId = metadata.agentSessionId || source.agent_session_id;
 
     if (!agentSessionId) {
       return res.status(400).json({ error: 'Source is not associated with an agent session' });
@@ -729,68 +733,105 @@ router.post('/followups/send', authenticateToken, async (req: Request, res: Resp
       message
     );
 
-    // Get conversation history for webhook payload
+    // Get conversation history
     const conversation = await sourceConversationService.getConversation(sourceId);
     const conversationHistory = conversation?.messages || [];
 
-    // Build and send webhook payload
-    const payload = await webhookService.buildPayload(
+    // Build payload
+    const payload = {
       sourceId,
+      sourceTitle: source.title || 'Untitled',
+      sourceCode: source.content || '',
+      sourceLanguage: metadata.language || 'unknown',
       message,
+      messageId: userMessage.id,
       conversationHistory,
-      userId
-    );
+      userId,
+      timestamp: new Date().toISOString(),
+    };
 
-    // Try to send to webhook
-    const webhookResponse = await webhookService.sendFollowup(agentSessionId, payload);
+    let delivered = false;
+    let deliveryMethod = 'none';
+    let agentResponse = null;
 
-    // If webhook succeeded and has a response, add it to the conversation
-    if (webhookResponse.success && webhookResponse.response) {
-      await sourceConversationService.addMessage(
-        sourceId,
-        'agent',
-        webhookResponse.response,
-        {
-          metadata: {
-            codeUpdate: webhookResponse.codeUpdate,
-            deliveredViaWebhook: true,
-          },
-        }
-      );
-
-      // Update source code if there's a code update
-      if (webhookResponse.codeUpdate?.code) {
-        await pool.query(
-          `UPDATE sources 
-           SET content = $1, 
-               metadata = jsonb_set(
-                 COALESCE(metadata, '{}')::jsonb, 
-                 '{lastCodeUpdate}', 
-                 $2::jsonb
-               ),
-               updated_at = NOW()
-           WHERE id = $3`,
-          [
-            webhookResponse.codeUpdate.code,
-            JSON.stringify({
-              description: webhookResponse.codeUpdate.description,
-              updatedAt: new Date().toISOString(),
-            }),
-            sourceId,
-          ]
-        );
+    // Try WebSocket first (instant delivery)
+    if (agentWebSocketService.isAgentConnected(agentSessionId)) {
+      delivered = await agentWebSocketService.sendFollowupToAgent(agentSessionId, payload);
+      if (delivered) {
+        deliveryMethod = 'websocket';
+        console.log(`[Coding Agent] Message sent via WebSocket to session ${agentSessionId}`);
       }
     }
 
-    console.log(`[Coding Agent] User sent followup for source ${sourceId}`);
+    // Fall back to webhook if WebSocket not available
+    if (!delivered) {
+      const webhookPayload = await webhookService.buildPayload(
+        sourceId,
+        message,
+        conversationHistory,
+        userId
+      );
+
+      const webhookResponse = await webhookService.sendFollowup(agentSessionId, webhookPayload);
+
+      if (webhookResponse.success) {
+        delivered = true;
+        deliveryMethod = 'webhook';
+        agentResponse = webhookResponse.response;
+
+        // If webhook returned a response, add it to the conversation
+        if (webhookResponse.response) {
+          await sourceConversationService.addMessage(
+            sourceId,
+            'agent',
+            webhookResponse.response,
+            {
+              metadata: {
+                codeUpdate: webhookResponse.codeUpdate,
+                deliveredViaWebhook: true,
+              },
+            }
+          );
+
+          // Update source code if there's a code update
+          if (webhookResponse.codeUpdate?.code) {
+            await pool.query(
+              `UPDATE sources 
+               SET content = $1, 
+                   metadata = jsonb_set(
+                     COALESCE(metadata, '{}')::jsonb, 
+                     '{lastCodeUpdate}', 
+                     $2::jsonb
+                   ),
+                   updated_at = NOW()
+               WHERE id = $3`,
+              [
+                webhookResponse.codeUpdate.code,
+                JSON.stringify({
+                  description: webhookResponse.codeUpdate.description,
+                  updatedAt: new Date().toISOString(),
+                }),
+                sourceId,
+              ]
+            );
+          }
+        }
+      }
+    }
+
+    console.log(`[Coding Agent] User sent followup for source ${sourceId} (delivery: ${deliveryMethod})`);
 
     res.json({
       success: true,
       message: userMessage,
-      webhookDelivered: webhookResponse.success,
-      agentResponse: webhookResponse.success ? webhookResponse.response : null,
-      codeUpdated: !!webhookResponse.codeUpdate?.code,
-      error: webhookResponse.success ? null : webhookResponse.error,
+      delivered,
+      deliveryMethod,
+      agentResponse,
+      note: deliveryMethod === 'websocket' 
+        ? 'Message sent to agent via WebSocket. Response will appear when agent replies.'
+        : deliveryMethod === 'webhook'
+        ? 'Message delivered via webhook.'
+        : 'Message stored. Agent will see it when they poll for messages.',
     });
   } catch (error: any) {
     console.error('Send followup error:', error);
@@ -939,6 +980,75 @@ router.get('/conversations/:sourceId', authenticateToken, async (req: Request, r
     console.error('Get conversation error:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+/**
+ * GET /api/coding-agent/websocket/status
+ * Get WebSocket connection status for agent sessions
+ */
+router.get('/websocket/status', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+
+    // Get all agent sessions for this user
+    const sessionsResult = await pool.query(
+      `SELECT id, agent_name, agent_identifier, status FROM agent_sessions WHERE user_id = $1`,
+      [userId]
+    );
+
+    const sessions = sessionsResult.rows.map(session => ({
+      id: session.id,
+      agentName: session.agent_name,
+      agentIdentifier: session.agent_identifier,
+      status: session.status,
+      websocketConnected: agentWebSocketService.isAgentConnected(session.id),
+    }));
+
+    const stats = agentWebSocketService.getStats();
+
+    res.json({
+      success: true,
+      sessions,
+      stats,
+      websocketUrl: `wss://${req.get('host')}/ws/agent`,
+    });
+  } catch (error: any) {
+    console.error('WebSocket status error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/coding-agent/websocket/info
+ * Get WebSocket connection info for agents
+ */
+router.get('/websocket/info', optionalAuth, async (req: Request, res: Response) => {
+  const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+  const wsUrl = backendUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+
+  res.json({
+    success: true,
+    websocket: {
+      url: `${wsUrl}/ws/agent`,
+      protocol: 'wss',
+      authentication: 'Query parameter: ?token=YOUR_API_TOKEN&sessionId=YOUR_SESSION_ID',
+      messageTypes: {
+        incoming: ['followup_message', 'ping'],
+        outgoing: ['response', 'pong'],
+      },
+    },
+    example: {
+      connect: `const ws = new WebSocket('${wsUrl}/ws/agent?token=nllm_xxx&sessionId=xxx')`,
+      sendResponse: JSON.stringify({
+        type: 'response',
+        messageId: 'message-uuid',
+        payload: {
+          response: 'Your response text',
+          codeUpdate: { code: '...', description: '...' },
+        },
+      }),
+    },
+  });
 });
 
 export default router;
