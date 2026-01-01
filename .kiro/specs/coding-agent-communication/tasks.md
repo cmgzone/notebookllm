@@ -69,16 +69,16 @@ This plan implements bidirectional communication between users and third-party c
 - [x] 7. Checkpoint - Backend Complete
   - Ensure all backend tests pass, ask the user if questions arise.
 
-- [ ] 8. Update MCP Server
-  - [ ] 8.1 Add create_agent_notebook tool to MCP server
+- [x] 8. Update MCP Server
+  - [x] 8.1 Add create_agent_notebook tool to MCP server
     - _Requirements: 1.1, 1.2_
-  - [ ] 8.2 Add save_code_with_context tool that includes conversation context
+  - [x] 8.2 Add save_code_with_context tool that includes conversation context
     - _Requirements: 2.1, 2.2, 2.3_
-  - [ ] 8.3 Add get_followup_messages tool for polling user messages
+  - [x] 8.3 Add get_followup_messages tool for polling user messages
     - _Requirements: 3.2_
-  - [ ] 8.4 Add respond_to_followup tool for sending responses
+  - [x] 8.4 Add respond_to_followup tool for sending responses
     - _Requirements: 3.3_
-  - [ ] 8.5 Add register_webhook tool for webhook configuration
+  - [x] 8.5 Add register_webhook tool for webhook configuration
     - _Requirements: 5.1_
 
 - [ ] 9. Flutter API Service Updates

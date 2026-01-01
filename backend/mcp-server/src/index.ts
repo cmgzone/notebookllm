@@ -11,6 +11,13 @@
  * - batch_verify: Verify multiple code snippets at once
  * - analyze_code: Deep analysis with suggestions
  * - get_verified_sources: Retrieve saved verified sources
+ * 
+ * Agent Communication Tools (Requirements 1.1, 1.2, 2.1-2.3, 3.2, 3.3, 5.1):
+ * - create_agent_notebook: Create a dedicated notebook for the agent
+ * - save_code_with_context: Save code with conversation context
+ * - get_followup_messages: Poll for user messages
+ * - respond_to_followup: Send response to user
+ * - register_webhook: Register webhook for receiving messages
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -182,6 +189,219 @@ Uses strict mode by default for thorough analysis.`,
       },
     },
   },
+  // ==================== AGENT COMMUNICATION TOOLS ====================
+  {
+    name: 'create_agent_notebook',
+    description: `Create a dedicated notebook for this coding agent. This is idempotent - calling multiple times with the same agent identifier returns the existing notebook.
+    
+Use this tool to:
+- Set up a workspace for storing verified code
+- Establish a session for bidirectional communication with the user
+- Configure webhook endpoints for receiving follow-up messages
+
+Returns:
+- notebook: The created/existing notebook with ID, title, description
+- session: The agent session with ID, status, and configuration`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agentName: {
+          type: 'string',
+          description: 'Display name of the coding agent (e.g., "Claude", "Kiro", "Cursor")',
+        },
+        agentIdentifier: {
+          type: 'string',
+          description: 'Unique identifier for this agent type (e.g., "claude-3-opus", "kiro-v1")',
+        },
+        title: {
+          type: 'string',
+          description: 'Optional custom title for the notebook (defaults to "{agentName} Code")',
+        },
+        description: {
+          type: 'string',
+          description: 'Optional description for the notebook',
+        },
+        webhookUrl: {
+          type: 'string',
+          description: 'Optional webhook URL for receiving follow-up messages',
+        },
+        webhookSecret: {
+          type: 'string',
+          description: 'Optional shared secret for webhook authentication',
+        },
+        metadata: {
+          type: 'object',
+          description: 'Optional additional metadata to store with the session',
+        },
+      },
+      required: ['agentName', 'agentIdentifier'],
+    },
+  },
+  {
+    name: 'save_code_with_context',
+    description: `Save verified code to the agent's notebook with full conversation context.
+    
+This tool:
+- Associates the code with the agent's notebook
+- Stores the conversation context that led to this code
+- Links the source to the agent session for follow-up communication
+- Optionally verifies the code before saving
+
+Use this instead of verify_and_save when you want to:
+- Preserve the conversation history with the code
+- Enable the user to send follow-up messages about this code
+- Track which agent created the code`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        code: {
+          type: 'string',
+          description: 'The code to save',
+        },
+        language: {
+          type: 'string',
+          description: 'Programming language (javascript, typescript, python, dart, etc.)',
+        },
+        title: {
+          type: 'string',
+          description: 'Title for the code source',
+        },
+        description: {
+          type: 'string',
+          description: 'Description of what the code does',
+        },
+        notebookId: {
+          type: 'string',
+          description: 'The agent notebook ID to save to (from create_agent_notebook)',
+        },
+        agentSessionId: {
+          type: 'string',
+          description: 'The agent session ID (from create_agent_notebook)',
+        },
+        conversationContext: {
+          type: 'string',
+          description: 'The conversation/context that led to this code being created',
+        },
+        verification: {
+          type: 'object',
+          description: 'Optional pre-computed verification result',
+        },
+        strictMode: {
+          type: 'boolean',
+          description: 'Enable strict verification mode if verifying',
+          default: false,
+        },
+      },
+      required: ['code', 'language', 'title', 'notebookId'],
+    },
+  },
+  {
+    name: 'get_followup_messages',
+    description: `Poll for pending follow-up messages from the user.
+    
+Use this tool to:
+- Check if the user has sent any questions or requests about saved code
+- Retrieve messages that need responses
+- Get context about which code source the message relates to
+
+Returns messages with:
+- Message ID, content, and timestamp
+- Source information (title, code, language)
+- Conversation history`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agentSessionId: {
+          type: 'string',
+          description: 'The agent session ID to check for messages',
+        },
+        agentIdentifier: {
+          type: 'string',
+          description: 'Alternative: the agent identifier to look up the session',
+        },
+      },
+    },
+  },
+  {
+    name: 'respond_to_followup',
+    description: `Send a response to a user's follow-up message.
+    
+Use this tool to:
+- Answer user questions about saved code
+- Provide code updates or modifications
+- Continue the conversation about a specific code source
+
+The response will be displayed to the user in the app's chat interface.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        messageId: {
+          type: 'string',
+          description: 'The ID of the message being responded to',
+        },
+        response: {
+          type: 'string',
+          description: 'The response text to send to the user',
+        },
+        agentSessionId: {
+          type: 'string',
+          description: 'The agent session ID',
+        },
+        codeUpdate: {
+          type: 'object',
+          description: 'Optional code update to apply to the source',
+          properties: {
+            code: {
+              type: 'string',
+              description: 'The updated code',
+            },
+            description: {
+              type: 'string',
+              description: 'Description of what changed',
+            },
+          },
+        },
+      },
+      required: ['messageId', 'response'],
+    },
+  },
+  {
+    name: 'register_webhook',
+    description: `Register a webhook endpoint to receive follow-up messages in real-time.
+    
+Instead of polling with get_followup_messages, you can register a webhook to receive messages as they arrive.
+
+The webhook will receive POST requests with:
+- type: 'followup_message'
+- sourceId, sourceTitle, sourceCode, sourceLanguage
+- message: The user's message
+- conversationHistory: Previous messages
+- userId, timestamp
+
+Webhook requests are signed with HMAC-SHA256 using the provided secret.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agentSessionId: {
+          type: 'string',
+          description: 'The agent session ID to configure',
+        },
+        agentIdentifier: {
+          type: 'string',
+          description: 'Alternative: the agent identifier to look up the session',
+        },
+        webhookUrl: {
+          type: 'string',
+          description: 'The HTTPS URL to receive webhook requests',
+        },
+        webhookSecret: {
+          type: 'string',
+          description: 'Shared secret for HMAC-SHA256 signature verification (min 16 characters)',
+        },
+      },
+      required: ['webhookUrl', 'webhookSecret'],
+    },
+  },
 ];
 
 
@@ -222,6 +442,58 @@ const AnalyzeCodeSchema = z.object({
 const GetSourcesSchema = z.object({
   notebookId: z.string().optional(),
   language: z.string().optional(),
+});
+
+// ==================== AGENT COMMUNICATION SCHEMAS ====================
+
+const CreateAgentNotebookSchema = z.object({
+  agentName: z.string().min(1),
+  agentIdentifier: z.string().min(1),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  webhookUrl: z.string().url().optional(),
+  webhookSecret: z.string().min(16).optional(),
+  metadata: z.record(z.any()).optional(),
+});
+
+const SaveCodeWithContextSchema = z.object({
+  code: z.string().min(1),
+  language: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().optional(),
+  notebookId: z.string().min(1),
+  agentSessionId: z.string().optional(),
+  conversationContext: z.string().optional(),
+  verification: z.object({
+    isValid: z.boolean(),
+    score: z.number(),
+    errors: z.array(z.string()).optional(),
+    warnings: z.array(z.string()).optional(),
+    suggestions: z.array(z.string()).optional(),
+  }).optional(),
+  strictMode: z.boolean().optional().default(false),
+});
+
+const GetFollowupMessagesSchema = z.object({
+  agentSessionId: z.string().optional(),
+  agentIdentifier: z.string().optional(),
+});
+
+const RespondToFollowupSchema = z.object({
+  messageId: z.string().min(1),
+  response: z.string().min(1),
+  agentSessionId: z.string().optional(),
+  codeUpdate: z.object({
+    code: z.string(),
+    description: z.string().optional(),
+  }).optional(),
+});
+
+const RegisterWebhookSchema = z.object({
+  agentSessionId: z.string().optional(),
+  agentIdentifier: z.string().optional(),
+  webhookUrl: z.string().url(),
+  webhookSecret: z.string().min(16),
 });
 
 // Create MCP Server
@@ -307,6 +579,78 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
         if (input.language) params.append('language', input.language);
         
         const response = await api.get(`/sources?${params.toString()}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      // ==================== AGENT COMMUNICATION HANDLERS ====================
+
+      case 'create_agent_notebook': {
+        const input = CreateAgentNotebookSchema.parse(args);
+        const response = await api.post('/notebooks', input);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'save_code_with_context': {
+        const input = SaveCodeWithContextSchema.parse(args);
+        const response = await api.post('/sources/with-context', input);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_followup_messages': {
+        const input = GetFollowupMessagesSchema.parse(args);
+        const params = new URLSearchParams();
+        if (input.agentSessionId) params.append('agentSessionId', input.agentSessionId);
+        if (input.agentIdentifier) params.append('agentIdentifier', input.agentIdentifier);
+        
+        const response = await api.get(`/followups?${params.toString()}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'respond_to_followup': {
+        const input = RespondToFollowupSchema.parse(args);
+        const { messageId, ...body } = input;
+        const response = await api.post(`/followups/${messageId}/respond`, body);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'register_webhook': {
+        const input = RegisterWebhookSchema.parse(args);
+        const response = await api.post('/webhook/register', input);
         return {
           content: [
             {
