@@ -287,6 +287,88 @@ export async function initializeDatabase() {
             );
         `);
 
+        // API tokens table (for MCP authentication)
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS api_tokens (
+                id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+                user_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                token_prefix TEXT NOT NULL,
+                token_suffix TEXT NOT NULL,
+                expires_at TIMESTAMPTZ,
+                last_used_at TIMESTAMPTZ,
+                revoked_at TIMESTAMPTZ,
+                metadata JSONB DEFAULT '{}',
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS token_usage_logs (
+                id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+                token_id TEXT NOT NULL,
+                endpoint TEXT NOT NULL,
+                ip_address TEXT,
+                user_agent TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id);
+            CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
+            CREATE INDEX IF NOT EXISTS idx_api_tokens_active ON api_tokens(user_id) WHERE revoked_at IS NULL;
+        `);
+
+        console.log('✅ API tokens tables initialized');
+
+        // Agent communication tables (for MCP/coding agent support)
+        await client.query(`
+            -- Agent sessions table
+            CREATE TABLE IF NOT EXISTS agent_sessions (
+                id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+                user_id TEXT NOT NULL,
+                agent_name TEXT NOT NULL,
+                agent_identifier TEXT NOT NULL,
+                webhook_url TEXT,
+                webhook_secret TEXT,
+                notebook_id TEXT,
+                status TEXT DEFAULT 'active' CHECK (status IN ('active', 'expired', 'disconnected')),
+                last_activity TIMESTAMPTZ DEFAULT NOW(),
+                metadata JSONB DEFAULT '{}',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(user_id, agent_identifier)
+            );
+
+            -- Source conversations table
+            CREATE TABLE IF NOT EXISTS source_conversations (
+                id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+                source_id TEXT NOT NULL,
+                agent_session_id TEXT REFERENCES agent_sessions(id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(source_id)
+            );
+
+            -- Conversation messages table
+            CREATE TABLE IF NOT EXISTS conversation_messages (
+                id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+                conversation_id TEXT NOT NULL REFERENCES source_conversations(id) ON DELETE CASCADE,
+                role TEXT NOT NULL CHECK (role IN ('user', 'agent')),
+                content TEXT NOT NULL,
+                metadata JSONB DEFAULT '{}',
+                is_read BOOLEAN DEFAULT false,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+
+            -- Create indexes for agent communication
+            CREATE INDEX IF NOT EXISTS idx_agent_sessions_user ON agent_sessions(user_id);
+            CREATE INDEX IF NOT EXISTS idx_agent_sessions_status ON agent_sessions(status);
+            CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent_identifier ON agent_sessions(agent_identifier);
+            CREATE INDEX IF NOT EXISTS idx_source_conversations_source ON source_conversations(source_id);
+            CREATE INDEX IF NOT EXISTS idx_source_conversations_agent_session ON source_conversations(agent_session_id);
+            CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation ON conversation_messages(conversation_id);
+            CREATE INDEX IF NOT EXISTS idx_conversation_messages_unread ON conversation_messages(conversation_id, is_read) WHERE is_read = false;
+        `);
+
+        console.log('✅ Agent communication tables initialized');
+
         console.log('✅ Core tables initialized');
     } catch (error) {
         console.error('❌ Database initialization error:', error);
