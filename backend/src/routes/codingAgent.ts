@@ -752,7 +752,7 @@ router.post('/followups/send', authenticateToken, async (req: Request, res: Resp
 
     let delivered = false;
     let deliveryMethod = 'none';
-    let agentResponse = null;
+    let agentResponse: string | null = null;
 
     // Try WebSocket first (instant delivery)
     if (agentWebSocketService.isAgentConnected(agentSessionId)) {
@@ -777,7 +777,7 @@ router.post('/followups/send', authenticateToken, async (req: Request, res: Resp
       if (webhookResponse.success) {
         delivered = true;
         deliveryMethod = 'webhook';
-        agentResponse = webhookResponse.response;
+        agentResponse = webhookResponse.response || null;
 
         // If webhook returned a response, add it to the conversation
         if (webhookResponse.response) {

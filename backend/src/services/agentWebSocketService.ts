@@ -89,7 +89,7 @@ class AgentWebSocketService {
       }
 
       // Get or validate the agent session
-      let sessionId = agentSessionId;
+      let sessionId: string = agentSessionId || '';
       let agentIdentifier = 'unknown';
 
       if (sessionId) {
@@ -113,7 +113,7 @@ class AgentWebSocketService {
       const connection: AgentConnection = {
         ws,
         agentSessionId: sessionId,
-        userId: tokenData.userId,
+        userId: tokenData.userId || '',
         agentIdentifier,
         connectedAt: new Date(),
         lastPing: new Date(),
