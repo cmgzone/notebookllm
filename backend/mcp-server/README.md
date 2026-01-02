@@ -1,6 +1,20 @@
-# Coding Agent MCP Server
+# NotebookLLM MCP Server
 
-An MCP (Model Context Protocol) server that allows third-party coding agents to verify code and save it as sources in your app.
+An MCP (Model Context Protocol) server that allows third-party coding agents to verify code and save it as sources in your NotebookLLM app.
+
+## Quick Install
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/cmgzone/notebookllm/main/scripts/install-mcp.ps1 | iex
+```
+
+**macOS/Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/cmgzone/notebookllm/main/scripts/install-mcp.sh | bash
+```
+
+
 
 ## Features
 
@@ -71,6 +85,19 @@ Retrieve previously saved verified code sources.
 ```
 
 ## Installation
+
+### Option 1: Quick Install (Recommended)
+
+Use the install scripts above - they automatically download the latest release and set everything up.
+
+### Option 2: Manual Install from GitHub Release
+
+1. Download the latest release from [GitHub Releases](https://github.com/cmgzone/notebookllm/releases)
+2. Extract to `~/.notebookllm-mcp`
+3. Run `npm install --production`
+4. Configure your MCP client (see below)
+
+### Option 3: Build from Source
 
 ```bash
 cd backend/mcp-server

@@ -13,13 +13,20 @@ const router = Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Get the project root - works both in dev (src/routes) and prod (dist/routes)
+const getProjectRoot = () => {
+  // __dirname is either backend/src/routes or backend/dist/routes
+  // Go up 2 levels to get to backend/
+  return path.resolve(__dirname, '../..');
+};
+
 /**
  * GET /api/mcp/package.tgz
  * Download the MCP server package as a tarball
  */
 router.get('/package.tgz', async (req: Request, res: Response) => {
   try {
-    const packagePath = path.join(__dirname, '../../mcp-server/dist');
+    const packagePath = path.join(getProjectRoot(), 'mcp-server/dist');
     
     // Check if dist exists
     if (!fs.existsSync(packagePath)) {
@@ -47,7 +54,7 @@ router.get('/package.tgz', async (req: Request, res: Response) => {
  */
 router.get('/index.js', async (req: Request, res: Response) => {
   try {
-    const indexPath = path.join(__dirname, '../../mcp-server/dist/index.js');
+    const indexPath = path.join(getProjectRoot(), 'mcp-server/dist/index.js');
     
     if (!fs.existsSync(indexPath)) {
       return res.status(404).json({ error: 'MCP server not found' });
@@ -67,7 +74,7 @@ router.get('/index.js', async (req: Request, res: Response) => {
  */
 router.get('/package.json', async (req: Request, res: Response) => {
   try {
-    const packageJsonPath = path.join(__dirname, '../../mcp-server/package.json');
+    const packageJsonPath = path.join(getProjectRoot(), 'mcp-server/package.json');
     
     if (!fs.existsSync(packageJsonPath)) {
       return res.status(404).json({ error: 'package.json not found' });

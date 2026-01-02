@@ -1,0 +1,84 @@
+name: Publish MCP Server
+
+on:
+  push:
+    tags:
+      - 'mcp-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: backend/mcp-server
+        run: npm ci
+
+      - name: Build MCP server
+        working-directory: backend/mcp-server
+        run: npm run build
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/mcp-v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create release package
+        working-directory: backend/mcp-server
+        run: |
+          mkdir -p release
+          cp dist/index.js release/
+          cp package.json release/
+          cp README.md release/
+          cp .env.example release/
+          cd release && zip -r ../notebookllm-mcp-${{ steps.version.outputs.version }}.zip .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: mcp-v${{ steps.version.outputs.version }}
+          name: NotebookLLM MCP Server v${{ steps.version.outputs.version }}
+          body: |
+            ## NotebookLLM MCP Server v${{ steps.version.outputs.version }}
+            
+            ### Quick Install
+            
+            **Windows (PowerShell):**
+            ```powershell
+            irm https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install-mcp.ps1 | iex
+            ```
+            
+            **macOS/Linux:**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install-mcp.sh | bash
+            ```
+            
+            ### Manual Setup
+            1. Download `notebookllm-mcp-${{ steps.version.outputs.version }}.zip`
+            2. Extract to `~/.notebookllm-mcp`
+            3. Run `npm install --production`
+            4. Add to your MCP config (see README)
+          files: |
+            backend/mcp-server/notebookllm-mcp-${{ steps.version.outputs.version }}.zip
+          draft: false
+          prerelease: false
