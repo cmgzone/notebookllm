@@ -152,6 +152,19 @@ class HomeScreen extends ConsumerWidget {
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
+                  onPressed: () =>
+                      ref.read(notebookProvider.notifier).refresh(),
+                  icon: const Icon(Icons.refresh, color: Colors.white),
+                  tooltip: 'Refresh Notebooks',
+                ),
+              ),
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
                   onPressed: () => showDialog(
                     context: context,
                     builder: (_) => const CreateNotebookDialog(),
@@ -161,6 +174,12 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
             ],
+          ),
+          SliverToBoxAdapter(
+            child: RefreshIndicator(
+              onRefresh: () => ref.read(notebookProvider.notifier).refresh(),
+              child: const SizedBox.shrink(),
+            ),
           ),
           const SliverPadding(
             padding: EdgeInsets.all(20),

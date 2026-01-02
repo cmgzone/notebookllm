@@ -334,8 +334,14 @@ class ApiService {
   // ================= NOTEBOOKS ============
 
   Future<List<Map<String, dynamic>>> getNotebooks() async {
+    developer.log('[API] Fetching notebooks...', name: 'ApiService');
     final response = await get('/notebooks');
-    return List<Map<String, dynamic>>.from(response['notebooks'] ?? []);
+    developer.log('[API] Notebooks response: $response', name: 'ApiService');
+    final notebooks =
+        List<Map<String, dynamic>>.from(response['notebooks'] ?? []);
+    developer.log('[API] Parsed ${notebooks.length} notebooks',
+        name: 'ApiService');
+    return notebooks;
   }
 
   Future<Map<String, dynamic>> getNotebook(String id) async {

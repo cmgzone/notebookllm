@@ -9,6 +9,8 @@ router.use(authenticateToken);
 // Get all notebooks for the authenticated user
 router.get('/', async (req: AuthRequest, res: Response) => {
     try {
+        console.log(`[Notebooks] GET / - userId: ${req.userId}`);
+        
         // First try with agent session info, fall back to simple query if agent_sessions table doesn't exist
         let result;
         try {
@@ -38,6 +40,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
                 [req.userId]
             );
         }
+        
+        console.log(`[Notebooks] Found ${result.rows.length} notebooks for user ${req.userId}`);
         res.json({ success: true, notebooks: result.rows });
     } catch (error) {
         console.error('Get notebooks error:', error);
@@ -72,6 +76,8 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
     try {
         const { title, description, coverImage } = req.body;
+        
+        console.log(`[Notebooks] POST / - userId: ${req.userId}, title: ${title}`);
 
         if (!title) {
             return res.status(400).json({ error: 'Title is required' });
@@ -84,6 +90,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
              RETURNING *`,
             [id, req.userId, title, description || null, coverImage || null]
         );
+
+        console.log(`[Notebooks] Created notebook ${id} for user ${req.userId}`);
 
         // Update user stats (ignore errors if table doesn't exist)
         try {
@@ -116,15 +124,15 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
         let paramIndex = 1;
 
         if (title !== undefined) {
-            updates.push('title = $' + paramIndex++);
+            updates.push(`title = $${paramIndex++}`);
             values.push(title);
         }
         if (description !== undefined) {
-            updates.push('description = $' + paramIndex++);
+            updates.push(`description = $${paramIndex++}`);
             values.push(description);
         }
         if (coverImage !== undefined) {
-            updates.push('cover_image = $' + paramIndex++);
+            updates.push(`cover_image = $${paramIndex++}`);
             values.push(coverImage);
         }
 
@@ -135,12 +143,12 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
         updates.push('updated_at = NOW()');
         values.push(id, req.userId);
 
-        const idParam = paramIndex++;
-        const userIdParam = paramIndex;
+        const idParamIndex = paramIndex++;
+        const userIdParamIndex = paramIndex;
 
         const result = await pool.query(
             `UPDATE notebooks SET ${updates.join(', ')} 
-             WHERE id = $${idParam} AND user_id = $${userIdParam}
+             WHERE id = $${idParamIndex} AND user_id = $${userIdParamIndex}
              RETURNING *`,
             values
         );

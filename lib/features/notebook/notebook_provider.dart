@@ -11,27 +11,61 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
   }
 
   final Ref ref;
+  bool _isLoading = false;
 
   Future<void> _init() async {
+    // Listen to auth state changes and reload notebooks
+    ref.listen(customAuthStateProvider, (previous, next) {
+      if (next.isAuthenticated && !_isLoading) {
+        debugPrint('🔄 Auth state changed, reloading notebooks...');
+        loadNotebooks();
+      }
+    });
+
+    // Initial load
     await loadNotebooks();
   }
 
   Future<void> loadNotebooks() async {
+    if (_isLoading) {
+      debugPrint('⏳ Already loading notebooks, skipping...');
+      return;
+    }
+
+    _isLoading = true;
+
     try {
       final authState = ref.read(customAuthStateProvider);
       final user = authState.user;
+      debugPrint('🔍 Auth state: isAuthenticated=${authState.isAuthenticated}, user=${user?.uid}');
+      
       if (user == null) {
-        debugPrint('⚠️ NotebookNotifier: No user logged in');
+        debugPrint('⚠️ NotebookNotifier loadNotebooks: No user logged in');
         state = [];
+        _isLoading = false;
         return;
       }
 
       final apiService = ref.read(apiServiceProvider);
-      debugPrint('Notebook loadNotebooks: user=${user.uid}');
+      debugPrint('📚 Loading notebooks for user=${user.uid}');
 
       final notebooks = await apiService.getNotebooks();
+      debugPrint('📚 API returned ${notebooks.length} notebooks');
+      
+      if (notebooks.isEmpty) {
+        debugPrint('⚠️ No notebooks returned from API - check if user has notebooks in database');
+        state = [];
+        _isLoading = false;
+        return;
+      }
+      
+      // Log first notebook for debugging
+      if (notebooks.isNotEmpty) {
+        debugPrint('📖 First notebook data: ${notebooks.first}');
+      }
 
-      state = notebooks.map((notebook) {
+      final loadedNotebooks = notebooks.map((notebook) {
+        debugPrint('📖 Parsing: ${notebook['id']} - ${notebook['title']}');
         return Notebook(
           id: notebook['id'] as String,
           userId: notebook['user_id'] as String,
@@ -50,28 +84,43 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
         );
       }).toList();
 
-      debugPrint('Loaded ${state.length} notebooks');
-    } catch (e) {
-      debugPrint('Error loading notebooks: $e');
-      state = [];
+      state = loadedNotebooks;
+      debugPrint('✅ Loaded ${state.length} notebooks into state');
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error loading notebooks: $e');
+      debugPrint('Stack trace: $stackTrace');
+      // Don't reset state on error - keep existing notebooks
+    } finally {
+      _isLoading = false;
     }
+  }
+
+  /// Force refresh notebooks from the backend
+  Future<void> refresh() async {
+    debugPrint('🔄 Force refreshing notebooks...');
+    await loadNotebooks();
   }
 
   Future<String?> addNotebook(String title) async {
     try {
       final authState = ref.read(customAuthStateProvider);
       final user = authState.user;
-      if (user == null) return null;
+      if (user == null) {
+        debugPrint('❌ NotebookNotifier addNotebook: No user logged in');
+        return null;
+      }
 
       final apiService = ref.read(apiServiceProvider);
 
       debugPrint(
-          'NotebookNotifier addNotebook: title=$title, user=${user.uid}');
+          '📝 NotebookNotifier addNotebook: title=$title, user=${user.uid}');
 
       final notebookData = await apiService.createNotebook(
         title: title,
         description: '',
       );
+
+      debugPrint('📝 API response: $notebookData');
 
       final notebook = Notebook(
         id: notebookData['id'] as String,
@@ -84,20 +133,19 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
         updatedAt: DateTime.parse(notebookData['updated_at'] as String),
       );
 
-      state = [notebook, ...state];
-      debugPrint('Notebook added, state updated, count=${state.length}');
+      // Update state immediately with the new notebook
+      final currentState = [...state];
+      state = [notebook, ...currentState];
+      debugPrint('✅ Notebook added to state, count=${state.length}');
 
-      // Track gamification
+      // Track gamification (don't await to avoid blocking)
       ref.read(gamificationProvider.notifier).trackNotebookCreated();
 
-      // Refresh from API
-      await Future.delayed(const Duration(milliseconds: 100));
-      await loadNotebooks();
-
       return notebook.id;
-    } catch (e) {
-      debugPrint('Error adding notebook: $e');
-      return null;
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error adding notebook: $e');
+      debugPrint('Stack trace: $stackTrace');
+      rethrow; // Rethrow so the dialog can show the error
     }
   }
 
