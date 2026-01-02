@@ -594,6 +594,181 @@ router.get('/tokens', authenticateToken, async (req: AuthRequest, res: Response)
 });
 
 /**
+ * GET /api/auth/tokens/:id/usage - Get usage logs for a specific token
+ * 
+ * Requirements: 4.5
+ * 
+ * Response:
+ * - logs: array of usage log entries
+ */
+router.get('/tokens/:id/usage', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const tokenId = req.params.id;
+        const limit = parseInt(req.query.limit as string) || 100;
+
+        // Verify token belongs to user
+        const token = await tokenService.getToken(tokenId);
+        if (!token || token.userId !== userId) {
+            return res.status(404).json({ error: 'Token not found' });
+        }
+
+        // Get usage logs
+        const result = await pool.query(
+            `SELECT * FROM token_usage_logs 
+             WHERE token_id = $1 
+             ORDER BY created_at DESC 
+             LIMIT $2`,
+            [tokenId, limit]
+        );
+
+        res.json({
+            success: true,
+            logs: result.rows.map(row => ({
+                id: row.id,
+                endpoint: row.endpoint,
+                ipAddress: row.ip_address,
+                userAgent: row.user_agent,
+                createdAt: row.created_at,
+            })),
+            count: result.rows.length,
+        });
+    } catch (error) {
+        console.error('Get token usage error:', error);
+        res.status(500).json({ error: 'Failed to get token usage' });
+    }
+});
+
+/**
+ * GET /api/auth/mcp/stats - Get MCP usage statistics for the user
+ * 
+ * Response:
+ * - totalTokens: number of tokens
+ * - activeTokens: number of active tokens
+ * - totalUsage: total API calls
+ * - recentUsage: usage in last 24 hours
+ * - verifiedSources: count of verified code sources
+ */
+router.get('/mcp/stats', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        // Get token counts
+        const tokensResult = await pool.query(
+            `SELECT 
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())) as active
+             FROM api_tokens WHERE user_id = $1`,
+            [userId]
+        );
+
+        // Get total usage count
+        const usageResult = await pool.query(
+            `SELECT COUNT(*) as total FROM token_usage_logs tul
+             JOIN api_tokens at ON tul.token_id = at.id
+             WHERE at.user_id = $1`,
+            [userId]
+        );
+
+        // Get recent usage (last 24 hours)
+        const recentUsageResult = await pool.query(
+            `SELECT COUNT(*) as recent FROM token_usage_logs tul
+             JOIN api_tokens at ON tul.token_id = at.id
+             WHERE at.user_id = $1 AND tul.created_at > NOW() - INTERVAL '24 hours'`,
+            [userId]
+        );
+
+        // Get verified sources count
+        const sourcesResult = await pool.query(
+            `SELECT COUNT(*) as count FROM sources 
+             WHERE user_id = $1 AND type = 'code' 
+             AND (metadata->>'isVerified')::boolean = true`,
+            [userId]
+        );
+
+        // Get agent sessions count
+        const sessionsResult = await pool.query(
+            `SELECT COUNT(*) as count FROM agent_sessions WHERE user_id = $1`,
+            [userId]
+        );
+
+        res.json({
+            success: true,
+            stats: {
+                totalTokens: parseInt(tokensResult.rows[0].total),
+                activeTokens: parseInt(tokensResult.rows[0].active),
+                totalUsage: parseInt(usageResult.rows[0].total),
+                recentUsage: parseInt(recentUsageResult.rows[0].recent),
+                verifiedSources: parseInt(sourcesResult.rows[0].count),
+                agentSessions: parseInt(sessionsResult.rows[0].count),
+            },
+        });
+    } catch (error) {
+        console.error('Get MCP stats error:', error);
+        res.status(500).json({ error: 'Failed to get MCP stats' });
+    }
+});
+
+/**
+ * GET /api/auth/mcp/usage - Get detailed MCP usage history
+ * 
+ * Response:
+ * - usage: array of usage entries with token info
+ */
+router.get('/mcp/usage', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const limit = parseInt(req.query.limit as string) || 50;
+
+        // Get usage logs with token info
+        const result = await pool.query(
+            `SELECT 
+                tul.id,
+                tul.endpoint,
+                tul.ip_address,
+                tul.user_agent,
+                tul.created_at,
+                at.name as token_name,
+                at.token_prefix
+             FROM token_usage_logs tul
+             JOIN api_tokens at ON tul.token_id = at.id
+             WHERE at.user_id = $1
+             ORDER BY tul.created_at DESC
+             LIMIT $2`,
+            [userId, limit]
+        );
+
+        res.json({
+            success: true,
+            usage: result.rows.map(row => ({
+                id: row.id,
+                endpoint: row.endpoint,
+                ipAddress: row.ip_address,
+                userAgent: row.user_agent,
+                createdAt: row.created_at,
+                tokenName: row.token_name,
+                tokenPrefix: row.token_prefix,
+            })),
+            count: result.rows.length,
+        });
+    } catch (error) {
+        console.error('Get MCP usage error:', error);
+        res.status(500).json({ error: 'Failed to get MCP usage' });
+    }
+});
+
+/**
  * DELETE /api/auth/tokens/:id - Revoke a token
  * 
  * Requirements: 2.2, 2.3

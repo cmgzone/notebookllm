@@ -9,7 +9,8 @@ import {
     Database,
     LogOut,
     Loader2,
-    ArrowUpRight
+    ArrowUpRight,
+    Bot,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -114,6 +115,7 @@ export default function DashboardPage() {
                             </div>
                             <div className="space-y-6">
                                 <SubscriptionCard subscription={subscription} />
+                                <McpCard />
                             </div>
                         </div>
                     </>
@@ -261,6 +263,41 @@ function SubscriptionCard({ subscription }: { subscription: Subscription | null 
                     className="w-full flex items-center justify-center gap-2 rounded-lg bg-white/10 py-2 text-sm font-medium hover:bg-white/20 transition-colors border border-white/10"
                 >
                     {isFree ? "Upgrade Plan" : "Manage Subscription"}
+                    <ArrowUpRight size={14} />
+                </Link>
+            </div>
+        </div>
+    );
+}
+
+function McpCard() {
+    return (
+        <div className="rounded-xl border border-white/5 bg-gradient-to-br from-purple-900/20 to-pink-900/20 p-6 relative overflow-hidden">
+            <div className="relative z-10">
+                <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-lg font-semibold">MCP Integration</h3>
+                    <Bot size={20} className="text-purple-400" />
+                </div>
+                <p className="text-sm text-neutral-400 mb-6">
+                    Connect AI coding agents to verify and save code directly to your notebooks.
+                </p>
+
+                <div className="space-y-3 mb-6">
+                    <div className="flex items-center gap-2 text-sm text-neutral-300">
+                        <Zap size={16} className="text-amber-400" />
+                        <span>API token management</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-neutral-300">
+                        <Database size={16} className="text-green-400" />
+                        <span>Code verification & storage</span>
+                    </div>
+                </div>
+
+                <Link
+                    href="/dashboard/mcp"
+                    className="w-full flex items-center justify-center gap-2 rounded-lg bg-purple-600/20 py-2 text-sm font-medium hover:bg-purple-600/30 transition-colors border border-purple-500/20"
+                >
+                    View MCP Dashboard
                     <ArrowUpRight size={14} />
                 </Link>
             </div>

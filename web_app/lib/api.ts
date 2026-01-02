@@ -48,6 +48,77 @@ export interface CreditTransaction {
     created_at: string;
 }
 
+export interface ApiToken {
+    id: string;
+    name: string;
+    tokenPrefix: string;
+    tokenSuffix: string;
+    expiresAt: string | null;
+    lastUsedAt: string | null;
+    createdAt: string;
+    revokedAt: string | null;
+    isActive: boolean;
+}
+
+export interface TokenUsageLog {
+    id: string;
+    endpoint: string;
+    ipAddress: string | null;
+    userAgent: string | null;
+    createdAt: string;
+}
+
+export interface McpStats {
+    totalTokens: number;
+    activeTokens: number;
+    totalUsage: number;
+    recentUsage: number;
+    verifiedSources: number;
+    agentSessions: number;
+}
+
+export interface McpUsageEntry {
+    id: string;
+    endpoint: string;
+    ipAddress: string | null;
+    userAgent: string | null;
+    createdAt: string;
+    tokenName: string;
+    tokenPrefix: string;
+}
+
+export interface VerifiedSource {
+    id: string;
+    notebook_id: string;
+    title: string;
+    content: string;
+    type: string;
+    metadata: {
+        language: string;
+        verification: any;
+        isVerified: boolean;
+        verifiedAt: string;
+        agentName?: string;
+    };
+    created_at: string;
+}
+
+export interface AgentNotebook {
+    id: string;
+    title: string;
+    description: string;
+    isAgentNotebook: boolean;
+    agentSessionId: string | null;
+    createdAt: string;
+    session?: {
+        id: string;
+        agentName: string;
+        agentIdentifier: string;
+        status: string;
+        lastActivity: string;
+    };
+}
+
 class ApiService {
     private token: string | null = null;
 
@@ -170,6 +241,56 @@ class ApiService {
         } catch {
             return null;
         }
+    }
+
+    // MCP / API Tokens
+    async getApiTokens(): Promise<ApiToken[]> {
+        const data = await this.fetch<{ tokens: ApiToken[]; count: number; maxTokens: number }>('/auth/tokens');
+        return data.tokens;
+    }
+
+    async createApiToken(name: string, expiresAt?: string): Promise<{ token: string; tokenRecord: ApiToken }> {
+        return this.fetch('/auth/tokens', {
+            method: 'POST',
+            body: JSON.stringify({ name, expiresAt }),
+        });
+    }
+
+    async revokeApiToken(tokenId: string): Promise<{ success: boolean }> {
+        return this.fetch(`/auth/tokens/${tokenId}`, {
+            method: 'DELETE',
+        });
+    }
+
+    async getTokenUsage(tokenId: string, limit = 100): Promise<TokenUsageLog[]> {
+        const data = await this.fetch<{ logs: TokenUsageLog[] }>(`/auth/tokens/${tokenId}/usage?limit=${limit}`);
+        return data.logs;
+    }
+
+    async getMcpStats(): Promise<McpStats> {
+        const data = await this.fetch<{ stats: McpStats }>('/auth/mcp/stats');
+        return data.stats;
+    }
+
+    async getMcpUsage(limit = 50): Promise<McpUsageEntry[]> {
+        const data = await this.fetch<{ usage: McpUsageEntry[] }>(`/auth/mcp/usage?limit=${limit}`);
+        return data.usage;
+    }
+
+    async getVerifiedSources(notebookId?: string, language?: string): Promise<VerifiedSource[]> {
+        let url = '/coding-agent/sources';
+        const params = new URLSearchParams();
+        if (notebookId) params.append('notebookId', notebookId);
+        if (language) params.append('language', language);
+        if (params.toString()) url += `?${params.toString()}`;
+        
+        const data = await this.fetch<{ sources: VerifiedSource[] }>(url);
+        return data.sources;
+    }
+
+    async getAgentNotebooks(): Promise<AgentNotebook[]> {
+        const data = await this.fetch<{ notebooks: AgentNotebook[] }>('/coding-agent/notebooks');
+        return data.notebooks;
     }
 }
 
