@@ -191,20 +191,26 @@ function QuickStartSection() {
               <span className="text-xs text-neutral-500">Windows (PowerShell):</span>
               <CodeBlock
                 language="powershell"
-                code={`irm https://notebookllm-ufj7.onrender.com/api/mcp/install.ps1 | iex`}
+                code={`irm https://raw.githubusercontent.com/cmgzone/notebookllmmcp/main/install.ps1 | iex`}
               />
             </div>
             <div>
               <span className="text-xs text-neutral-500">Mac/Linux:</span>
               <CodeBlock
                 language="bash"
-                code={`curl -fsSL https://notebookllm-ufj7.onrender.com/api/mcp/install.sh | bash`}
+                code={`curl -fsSL https://raw.githubusercontent.com/cmgzone/notebookllmmcp/main/install.sh | bash`}
               />
             </div>
           </div>
           <p className="text-neutral-400 text-sm">
             The script will download the MCP server and show you the configuration to add.
           </p>
+          <div className="mt-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-200 text-sm">
+            <strong>GitHub Repository:</strong>{" "}
+            <a href="https://github.com/cmgzone/notebookllmmcp" target="_blank" rel="noopener noreferrer" className="underline hover:text-white">
+              github.com/cmgzone/notebookllmmcp
+            </a>
+          </div>
         </Step>
 
         <Step number={3} title="Configure Your MCP Client">
@@ -483,10 +489,10 @@ function ConfigurationSection() {
         <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-6">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <Zap className="text-green-400" size={20} />
-            Recommended: Self-Hosted Installation
+            Recommended: Install from GitHub
           </h3>
           <p className="text-neutral-400 mb-4">
-            Install the MCP server directly from our backend - no npm account needed:
+            Install the MCP server directly from our public GitHub repository:
           </p>
           
           <div className="space-y-4">
@@ -494,7 +500,7 @@ function ConfigurationSection() {
               <h4 className="text-sm font-medium text-neutral-300 mb-2">Windows (PowerShell):</h4>
               <CodeBlock
                 language="powershell"
-                code={`irm https://notebookllm-ufj7.onrender.com/api/mcp/install.ps1 | iex`}
+                code={`irm https://raw.githubusercontent.com/cmgzone/notebookllmmcp/main/install.ps1 | iex`}
               />
             </div>
             
@@ -502,14 +508,22 @@ function ConfigurationSection() {
               <h4 className="text-sm font-medium text-neutral-300 mb-2">Mac/Linux:</h4>
               <CodeBlock
                 language="bash"
-                code={`curl -fsSL https://notebookllm-ufj7.onrender.com/api/mcp/install.sh | bash`}
+                code={`curl -fsSL https://raw.githubusercontent.com/cmgzone/notebookllmmcp/main/install.sh | bash`}
               />
             </div>
           </div>
           
-          <p className="text-neutral-400 mt-4 text-sm">
-            After installation, configure your MCP client with the path shown in the output.
-          </p>
+          <div className="mt-4 flex items-center gap-4">
+            <a 
+              href="https://github.com/cmgzone/notebookllmmcp" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm"
+            >
+              <ExternalLink size={16} />
+              View on GitHub
+            </a>
+          </div>
         </div>
 
         <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
@@ -559,24 +573,32 @@ function ConfigurationSection() {
         <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
           <h3 className="text-lg font-semibold mb-4">Manual Download</h3>
           <p className="text-neutral-400 mb-4">
-            If you prefer to download manually:
-          </p>
-          <div className="space-y-2 text-sm text-neutral-300">
-            <p>1. Download the server: <a href="https://notebookllm-ufj7.onrender.com/api/mcp/index.js" className="text-blue-400 hover:underline">index.js</a></p>
-            <p>2. Download package.json: <a href="https://notebookllm-ufj7.onrender.com/api/mcp/package.json" className="text-blue-400 hover:underline">package.json</a></p>
-            <p>3. Run <code className="text-purple-400">npm install --production</code> in the download folder</p>
-            <p>4. Configure your MCP client with the path to index.js</p>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
-          <h3 className="text-lg font-semibold mb-4">Get Configuration Template</h3>
-          <p className="text-neutral-400 mb-4">
-            Get a ready-to-use configuration template:
+            If you prefer to download manually from GitHub:
           </p>
           <CodeBlock
             language="bash"
-            code={`curl https://notebookllm-ufj7.onrender.com/api/mcp/config`}
+            code={`git clone https://github.com/cmgzone/notebookllmmcp.git ~/.notebookllm-mcp
+cd ~/.notebookllm-mcp
+npm install --production`}
+          />
+          <p className="text-neutral-400 mt-4 text-sm">
+            Then configure your MCP client with the path to <code className="text-blue-400">~/.notebookllm-mcp/dist/index.js</code>
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
+          <h3 className="text-lg font-semibold mb-4">Alternative: Backend API Install</h3>
+          <p className="text-neutral-400 mb-4">
+            You can also install from our backend API:
+          </p>
+          <CodeBlock
+            language="bash"
+            code={`# Get configuration template
+curl https://notebookllm-ufj7.onrender.com/api/mcp/config
+
+# Or use the backend install scripts
+# Windows: irm https://notebookllm-ufj7.onrender.com/api/mcp/install.ps1 | iex
+# Mac/Linux: curl -fsSL https://notebookllm-ufj7.onrender.com/api/mcp/install.sh | bash`}
           />
         </div>
       </div>
@@ -825,12 +847,12 @@ function Footer() {
             <Link href="/" className="hover:text-white transition-colors">Home</Link>
             <Link href="/login" className="hover:text-white transition-colors">Login</Link>
             <a
-              href="https://github.com"
+              href="https://github.com/cmgzone/notebookllmmcp"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-white transition-colors flex items-center gap-1"
             >
-              GitHub <ExternalLink size={12} />
+              MCP Server <ExternalLink size={12} />
             </a>
           </div>
           <p className="text-sm text-neutral-500">© 2025 NotebookLM</p>
