@@ -6,12 +6,12 @@ An MCP (Model Context Protocol) server that allows third-party coding agents to 
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/cmgzone/notebookllm/main/scripts/install-mcp.ps1 | iex
+irm https://raw.githubusercontent.com/cmgzone/notebookllm/master/scripts/install-mcp.ps1 | iex
 ```
 
 **macOS/Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cmgzone/notebookllm/main/scripts/install-mcp.sh | bash
+curl -fsSL https://raw.githubusercontent.com/cmgzone/notebookllm/master/scripts/install-mcp.sh | bash
 ```
 
 

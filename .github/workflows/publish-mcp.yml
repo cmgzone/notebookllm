@@ -65,12 +65,12 @@ jobs:
             
             **Windows (PowerShell):**
             ```powershell
-            irm https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install-mcp.ps1 | iex
+            irm https://raw.githubusercontent.com/${{ github.repository }}/master/scripts/install-mcp.ps1 | iex
             ```
             
             **macOS/Linux:**
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install-mcp.sh | bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/master/scripts/install-mcp.sh | bash
             ```
             
             ### Manual Setup

@@ -1,6 +1,6 @@
 #!/bin/bash
 # NotebookLLM MCP Server Installer for macOS/Linux
-# Usage: curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/scripts/install-mcp.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/cmgzone/notebookllm/master/scripts/install-mcp.sh | bash
 
 set -e
 

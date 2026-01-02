@@ -1,5 +1,5 @@
 # NotebookLLM MCP Server Installer for Windows
-# Usage: irm https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/scripts/install-mcp.ps1 | iex
+# Usage: irm https://raw.githubusercontent.com/cmgzone/notebookllm/master/scripts/install-mcp.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
