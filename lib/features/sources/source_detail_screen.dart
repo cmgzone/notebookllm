@@ -380,6 +380,20 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
     if (_chunks.isEmpty) {
       return const Center(child: Text('No text extracted'));
     }
+
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    // For single chunk (full content), display as formatted text
+    if (_chunks.length == 1) {
+      final c = _chunks[0];
+      return SingleChildScrollView(
+        controller: _scroll,
+        child: _buildFormattedContent(context, c.text, scheme, textTheme),
+      );
+    }
+
+    // For multiple chunks, display as cards
     return ListView.builder(
       controller: _scroll,
       itemCount: _chunks.length,
@@ -399,10 +413,7 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
               TextSpan(
                 text: middle,
                 style: TextStyle(
-                    backgroundColor: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.15)),
+                    backgroundColor: scheme.primary.withValues(alpha: 0.15)),
               ),
               TextSpan(text: after),
             ]);
@@ -412,74 +423,228 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
         } else {
           contentSpan = TextSpan(text: c.text);
         }
+
         return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          margin: const EdgeInsets.only(bottom: 16),
           decoration: BoxDecoration(
             color: highlight
-                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: highlight
-                ? Border.all(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.2))
-                : null,
+                ? scheme.primaryContainer.withValues(alpha: 0.3)
+                : scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: highlight
+                  ? scheme.primary.withValues(alpha: 0.3)
+                  : scheme.outline.withValues(alpha: 0.1),
+              width: highlight ? 2 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          child: widget.source.type == 'report'
-              ? MarkdownBody(
-                  data: c.text,
-                  selectable: true,
-                  styleSheet:
-                      MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                    p: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          height: 1.6,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.8),
-                        ),
-                    h1: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                    h2: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                    h3: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                    blockquote: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontStyle: FontStyle.italic,
-                          height: 1.5,
-                        ),
-                    code: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontFamily: 'monospace',
-                          backgroundColor: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest,
-                        ),
-                    blockSpacing: 16,
-                  ),
-                )
-              : Text.rich(
-                  contentSpan,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        height: 1.6,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.8),
-                      ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Chunk header
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(11)),
                 ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.format_quote,
+                      size: 16,
+                      color: scheme.primary.withValues(alpha: 0.7),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Section ${i + 1}',
+                      style: textTheme.labelMedium?.copyWith(
+                        color: scheme.onSurface.withValues(alpha: 0.6),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${c.text.split(' ').length} words',
+                      style: textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurface.withValues(alpha: 0.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Content
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: widget.source.type == 'report' ||
+                        widget.source.type == 'code'
+                    ? MarkdownBody(
+                        data: c.text,
+                        selectable: true,
+                        styleSheet: _buildMarkdownStyleSheet(context),
+                      )
+                    : Text.rich(
+                        contentSpan,
+                        style: textTheme.bodyLarge?.copyWith(
+                          height: 1.7,
+                          color: scheme.onSurface.withValues(alpha: 0.85),
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+              ),
+            ],
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildFormattedContent(
+    BuildContext context,
+    String text,
+    ColorScheme scheme,
+    TextTheme textTheme,
+  ) {
+    // Check if content looks like markdown
+    final hasMarkdown = text.contains('# ') ||
+        text.contains('## ') ||
+        text.contains('**') ||
+        text.contains('- ') ||
+        text.contains('```') ||
+        widget.source.type == 'report' ||
+        widget.source.type == 'code';
+
+    if (hasMarkdown) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: scheme.outline.withValues(alpha: 0.1),
+          ),
+        ),
+        child: MarkdownBody(
+          data: text,
+          selectable: true,
+          styleSheet: _buildMarkdownStyleSheet(context),
+        ),
+      );
+    }
+
+    // For plain text, format it nicely with paragraphs
+    final paragraphs = text.split(RegExp(r'\n\n+'));
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: scheme.outline.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: paragraphs.map((paragraph) {
+          final trimmed = paragraph.trim();
+          if (trimmed.isEmpty) return const SizedBox(height: 16);
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: SelectableText(
+              trimmed,
+              style: textTheme.bodyLarge?.copyWith(
+                height: 1.8,
+                color: scheme.onSurface.withValues(alpha: 0.85),
+                letterSpacing: 0.3,
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  MarkdownStyleSheet _buildMarkdownStyleSheet(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+      p: textTheme.bodyLarge?.copyWith(
+        height: 1.7,
+        color: scheme.onSurface.withValues(alpha: 0.85),
+        letterSpacing: 0.2,
+      ),
+      h1: textTheme.headlineMedium?.copyWith(
+        fontWeight: FontWeight.bold,
+        color: scheme.primary,
+        height: 1.4,
+      ),
+      h2: textTheme.headlineSmall?.copyWith(
+        fontWeight: FontWeight.bold,
+        color: scheme.onSurface,
+        height: 1.4,
+      ),
+      h3: textTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.w600,
+        color: scheme.onSurface,
+        height: 1.4,
+      ),
+      h4: textTheme.titleMedium?.copyWith(
+        fontWeight: FontWeight.w600,
+        color: scheme.onSurface.withValues(alpha: 0.9),
+      ),
+      blockquote: textTheme.bodyLarge?.copyWith(
+        color: scheme.onSurfaceVariant,
+        fontStyle: FontStyle.italic,
+        height: 1.6,
+      ),
+      blockquoteDecoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(
+            color: scheme.primary.withValues(alpha: 0.5),
+            width: 4,
+          ),
+        ),
+        color: scheme.primaryContainer.withValues(alpha: 0.1),
+      ),
+      blockquotePadding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      code: textTheme.bodyMedium?.copyWith(
+        fontFamily: 'monospace',
+        backgroundColor: scheme.surfaceContainerHighest,
+        color: scheme.primary,
+      ),
+      codeblockDecoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: scheme.outline.withValues(alpha: 0.1),
+        ),
+      ),
+      codeblockPadding: const EdgeInsets.all(16),
+      listBullet: textTheme.bodyLarge?.copyWith(
+        color: scheme.primary,
+      ),
+      listIndent: 24,
+      blockSpacing: 16,
+      horizontalRuleDecoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: scheme.outline.withValues(alpha: 0.2),
+            width: 1,
+          ),
+        ),
+      ),
     );
   }
 

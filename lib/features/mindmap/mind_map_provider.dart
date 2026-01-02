@@ -34,20 +34,24 @@ class MindMapNotifier extends StateNotifier<List<MindMap>> {
   }
 
   /// Add a new mind map
-  Future<void> addMindMap(MindMap mindMap) async {
+  Future<MindMap> addMindMap(MindMap mindMap) async {
     try {
       final api = ref.read(apiServiceProvider);
-      await api.saveMindMap(
+      final savedData = await api.saveMindMap(
         title: mindMap.title,
         notebookId: mindMap.notebookId,
         sourceId: mindMap.sourceId,
         rootNode: mindMap.rootNode.toBackendJson(),
         textContent: mindMap.textContent,
       );
-      // Immediately add to state for instant UI update
-      state = [mindMap, ...state];
-      // Then reload from backend to get server-generated IDs
-      await _loadMindMaps();
+
+      // Parse the saved mind map from backend response
+      final savedMindMap = MindMap.fromBackendJson(savedData);
+
+      // Add to state with the server-generated data
+      state = [savedMindMap, ...state.where((mm) => mm.id != savedMindMap.id)];
+
+      return savedMindMap;
     } catch (e) {
       debugPrint('Error adding mind map: $e');
       rethrow; // Rethrow so the UI can show the error
@@ -154,13 +158,14 @@ Create 3-5 main branches with 2-4 sub-topics each.
       updatedAt: now,
     );
 
-    await addMindMap(mindMap);
+    // Save and get the server-confirmed mind map
+    final savedMindMap = await addMindMap(mindMap);
 
     // Track gamification
     ref.read(gamificationProvider.notifier).trackMindmapCreated();
     ref.read(gamificationProvider.notifier).trackFeatureUsed('mindmap');
 
-    return mindMap;
+    return savedMindMap;
   }
 
   Future<String> _callAI(String prompt) async {

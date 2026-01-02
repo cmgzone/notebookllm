@@ -50,19 +50,46 @@ class FlashcardNotifier extends StateNotifier<List<FlashcardDeck>> {
   }
 
   /// Add a new deck
-  Future<void> addDeck(FlashcardDeck deck) async {
+  Future<FlashcardDeck> addDeck(FlashcardDeck deck) async {
     try {
       final api = ref.read(apiServiceProvider);
-      await api.createFlashcardDeck(
+      final savedData = await api.createFlashcardDeck(
         title: deck.title,
         notebookId: deck.notebookId,
         sourceId: deck.sourceId,
         cards: deck.cards.map((c) => c.toBackendJson()).toList(),
       );
-      // Immediately add to state for instant UI update
-      state = [deck, ...state];
-      // Then reload from backend to get server-generated IDs
-      await _loadDecks();
+
+      // Check if savedData is valid
+      if (savedData.isEmpty || savedData['id'] == null) {
+        debugPrint(
+            '[FlashcardProvider] Backend returned invalid deck data, using local deck');
+        // Add local deck to state as fallback
+        state = [deck, ...state];
+        return deck;
+      }
+
+      // The backend returns the deck, but we need to fetch cards separately
+      // since createFlashcardDeck doesn't return them
+      final deckId = savedData['id'] as String;
+
+      try {
+        final cardsData = await api.getFlashcardsForDeck(deckId);
+        savedData['cards'] = cardsData;
+      } catch (e) {
+        debugPrint(
+            '[FlashcardProvider] Failed to fetch cards, using local cards: $e');
+        // Use local cards if fetch fails
+        savedData['cards'] = deck.cards.map((c) => c.toBackendJson()).toList();
+      }
+
+      // Parse the saved deck from backend response
+      final savedDeck = FlashcardDeck.fromBackendJson(savedData);
+
+      // Add to state with the server-generated data
+      state = [savedDeck, ...state.where((d) => d.id != savedDeck.id)];
+
+      return savedDeck;
     } catch (e) {
       debugPrint('Error adding deck: $e');
       rethrow; // Rethrow so the UI can show the error
@@ -135,6 +162,10 @@ difficulty: 1=easy, 2=medium, 3=hard
     final response = await _callAI(prompt);
     final cards = _parseFlashcardsFromResponse(response, notebookId, sourceId);
 
+    if (cards.isEmpty) {
+      throw Exception('Failed to generate flashcards from AI response');
+    }
+
     final now = DateTime.now();
     final deck = FlashcardDeck(
       id: const Uuid().v4(),
@@ -146,8 +177,17 @@ difficulty: 1=easy, 2=medium, 3=hard
       updatedAt: now,
     );
 
-    await addDeck(deck);
-    return deck;
+    // Try to save to backend, but don't fail if it doesn't work
+    try {
+      final savedDeck = await addDeck(deck);
+      return savedDeck;
+    } catch (e) {
+      debugPrint(
+          '[FlashcardProvider] Backend save failed, using local deck: $e');
+      // Add to local state even if backend fails
+      state = [deck, ...state];
+      return deck;
+    }
   }
 
   Future<String> _callAI(String prompt) async {

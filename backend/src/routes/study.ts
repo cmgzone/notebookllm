@@ -30,6 +30,14 @@ router.get('/flashcards/decks', async (req: AuthRequest, res: Response) => {
 router.post('/flashcards/decks', async (req: AuthRequest, res: Response) => {
     try {
         const { id, notebookId, sourceId, title, cards } = req.body;
+        
+        if (!title) {
+            return res.status(400).json({ error: 'Title is required' });
+        }
+        if (!notebookId) {
+            return res.status(400).json({ error: 'Notebook ID is required' });
+        }
+        
         const deckId = id || uuidv4();
         
         await pool.query('BEGIN');
@@ -38,7 +46,7 @@ router.post('/flashcards/decks', async (req: AuthRequest, res: Response) => {
             `INSERT INTO flashcard_decks (id, user_id, notebook_id, source_id, title)
              VALUES ($1, $2, $3, $4, $5) 
              RETURNING *`,
-            [deckId, req.userId, notebookId, sourceId, title]
+            [deckId, req.userId, notebookId, sourceId || null, title]
         );
         
         // Save cards if provided
@@ -55,7 +63,7 @@ router.post('/flashcards/decks', async (req: AuthRequest, res: Response) => {
                 await pool.query(
                     `INSERT INTO flashcards (id, deck_id, question, answer, difficulty)
                      VALUES ($1, $2, $3, $4, $5)`,
-                    [cardId, deckId, card.question, card.answer, difficulty]
+                    [cardId, deckId, card.question || '', card.answer || '', difficulty]
                 );
             }
         }
@@ -63,10 +71,21 @@ router.post('/flashcards/decks', async (req: AuthRequest, res: Response) => {
         await pool.query('COMMIT');
         
         res.status(201).json({ success: true, deck: result.rows[0] });
-    } catch (error) {
+    } catch (error: any) {
         await pool.query('ROLLBACK');
         console.error('Create flashcard deck error:', error);
-        res.status(500).json({ error: 'Failed to create deck' });
+        
+        // Provide more specific error messages
+        if (error.code === '23503') {
+            // Foreign key violation
+            return res.status(400).json({ error: 'Invalid notebook or source ID' });
+        }
+        if (error.code === '42P01') {
+            // Table doesn't exist
+            return res.status(500).json({ error: 'Database table not found. Please run migrations.' });
+        }
+        
+        res.status(500).json({ error: `Failed to create deck: ${error.message || 'Unknown error'}` });
     }
 });
 

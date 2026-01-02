@@ -761,6 +761,7 @@ class CustomAuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> _init() async {
     state = state.copyWith(status: AuthStatus.loading);
+    developer.log('Auth init: starting...', name: 'CustomAuthNotifier');
 
     try {
       // First check if we have a stored token - directly from API service
@@ -780,7 +781,7 @@ class CustomAuthNotifier extends StateNotifier<AuthState> {
           // Immediately authenticate with cached user
           state = AuthState(status: AuthStatus.authenticated, user: cachedUser);
           developer.log(
-              'Auth init: authenticated with cached user ${cachedUser.email}',
+              'Auth init: ✅ authenticated with cached user ${cachedUser.email} (uid: ${cachedUser.uid})',
               name: 'CustomAuthNotifier');
 
           // Then try to refresh from API in background (don't await)
@@ -797,19 +798,20 @@ class CustomAuthNotifier extends StateNotifier<AuthState> {
 
         if (user != null) {
           state = AuthState(status: AuthStatus.authenticated, user: user);
-          developer.log('Auth init: authenticated as ${user.email}',
+          developer.log(
+              'Auth init: ✅ authenticated as ${user.email} (uid: ${user.uid})',
               name: 'CustomAuthNotifier');
           return;
         }
 
         // Token exists but couldn't get user - this is unusual
         developer.log(
-            'Auth init: WARNING - token exists but no user data available',
+            'Auth init: ⚠️ WARNING - token exists but no user data available',
             name: 'CustomAuthNotifier');
       }
 
       // No valid session
-      developer.log('Auth init: no valid session, unauthenticated',
+      developer.log('Auth init: ❌ no valid session, unauthenticated',
           name: 'CustomAuthNotifier');
       state = const AuthState(status: AuthStatus.unauthenticated);
     } catch (e) {

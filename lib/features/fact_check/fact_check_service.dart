@@ -57,7 +57,7 @@ class FactCheckService {
         : content;
 
     final prompt = '''
-You are a professional fact-checker. Analyze the following text and identify specific factual claims that can be verified. 
+You are a professional fact-checker and research analyst. Analyze the following text and identify specific factual claims that can be verified. 
 For each claim, verify its accuracy based on your general knowledge.
 
 Text to analyze:
@@ -66,10 +66,16 @@ $truncatedContent
 """
 
 Return a JSON array where each object has:
-- "claim": The specific claim extracted from the text.
+- "claim": The specific claim extracted from the text (quote it exactly or paraphrase clearly).
 - "verdict": "True", "False", "Misleading", or "Unverified".
-- "explanation": A brief explanation of why.
+- "explanation": A DETAILED explanation (2-4 sentences) explaining:
+  1. WHY this verdict was given
+  2. What evidence or reasoning supports this conclusion
+  3. Any important context or nuance
+  4. If False/Misleading, what the correct information is
 - "confidence": A score from 0.0 to 1.0 indicating your certainty.
+
+IMPORTANT: The explanation must be thorough and educational. Don't just state the verdict - explain the reasoning behind it so users understand WHY a claim is true, false, or misleading.
 
 Ensure the output is valid JSON. Do not include markdown code blocks (```json).
 ''';

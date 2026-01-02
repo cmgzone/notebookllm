@@ -134,13 +134,30 @@ class ApiService {
   // Generic GET request
   Future<Map<String, dynamic>> get(String endpoint) async {
     try {
+      final headers = await _getHeaders();
+      developer.log('[API] GET $endpoint - headers: ${headers.keys.toList()}',
+          name: 'ApiService');
+      developer.log(
+          '[API] GET $endpoint - has auth: ${headers.containsKey('Authorization')}',
+          name: 'ApiService');
+
       final response = await http.get(
         Uri.parse('$_baseUrl$endpoint'),
-        headers: await _getHeaders(),
+        headers: headers,
       );
+
+      developer.log('[API] GET $endpoint - status: ${response.statusCode}',
+          name: 'ApiService');
+
+      if (response.statusCode == 401) {
+        developer.log(
+            '[API] GET $endpoint - 401 UNAUTHORIZED! Token may be invalid or expired',
+            name: 'ApiService');
+      }
 
       return _handleResponse(response);
     } catch (e) {
+      developer.log('[API] GET $endpoint - ERROR: $e', name: 'ApiService');
       throw Exception('Network error: $e');
     }
   }
@@ -334,6 +351,17 @@ class ApiService {
   // ================= NOTEBOOKS ============
 
   Future<List<Map<String, dynamic>>> getNotebooks() async {
+    final token = await getToken();
+    developer.log(
+        '[API] getNotebooks - token exists: ${token != null}, length: ${token?.length ?? 0}',
+        name: 'ApiService');
+
+    if (token == null) {
+      developer.log('[API] getNotebooks - NO TOKEN! User not authenticated',
+          name: 'ApiService');
+      return [];
+    }
+
     developer.log('[API] Fetching notebooks...', name: 'ApiService');
     final response = await get('/notebooks');
     developer.log('[API] Notebooks response: $response', name: 'ApiService');
@@ -994,7 +1022,11 @@ class ApiService {
       'title': title,
       if (cards != null) 'cards': cards,
     });
-    return response['deck'];
+    final deck = response['deck'];
+    if (deck == null) {
+      throw Exception('Failed to create deck: No deck data returned');
+    }
+    return deck;
   }
 
   Future<void> deleteFlashcardDeck(String id) async {

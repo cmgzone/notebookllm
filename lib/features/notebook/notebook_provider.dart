@@ -14,16 +14,36 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
   bool _isLoading = false;
 
   Future<void> _init() async {
+    debugPrint('🚀 NotebookNotifier _init starting...');
+
     // Listen to auth state changes and reload notebooks
     ref.listen(customAuthStateProvider, (previous, next) {
+      debugPrint(
+          '🔔 Auth state changed: ${previous?.status} -> ${next.status}');
+      debugPrint(
+          '🔔 isAuthenticated: ${next.isAuthenticated}, user: ${next.user?.uid}');
       if (next.isAuthenticated && !_isLoading) {
-        debugPrint('🔄 Auth state changed, reloading notebooks...');
+        debugPrint(
+            '🔄 Auth state changed to authenticated, reloading notebooks...');
         loadNotebooks();
       }
     });
 
-    // Initial load
-    await loadNotebooks();
+    // Wait a bit for auth to initialize before loading
+    final authState = ref.read(customAuthStateProvider);
+    debugPrint(
+        '🔍 Initial auth state: status=${authState.status}, isAuthenticated=${authState.isAuthenticated}');
+
+    if (authState.isAuthenticated) {
+      debugPrint('✅ Already authenticated, loading notebooks...');
+      await loadNotebooks();
+    } else if (authState.status == AuthStatus.initial ||
+        authState.status == AuthStatus.loading) {
+      debugPrint('⏳ Auth still initializing, waiting...');
+      // Don't load yet - wait for auth state change
+    } else {
+      debugPrint('❌ Not authenticated, skipping notebook load');
+    }
   }
 
   Future<void> loadNotebooks() async {
@@ -37,42 +57,70 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
     try {
       final authState = ref.read(customAuthStateProvider);
       final user = authState.user;
-      debugPrint('🔍 Auth state: isAuthenticated=${authState.isAuthenticated}, user=${user?.uid}');
-      
+      debugPrint(
+          '🔍 Auth state: isAuthenticated=${authState.isAuthenticated}, status=${authState.status}, user=${user?.uid}');
+
       if (user == null) {
         debugPrint('⚠️ NotebookNotifier loadNotebooks: No user logged in');
+        debugPrint('⚠️ Auth status: ${authState.status}');
         state = [];
         _isLoading = false;
         return;
       }
 
       final apiService = ref.read(apiServiceProvider);
-      debugPrint('📚 Loading notebooks for user=${user.uid}');
+      debugPrint(
+          '📚 Loading notebooks for user=${user.uid}, email=${user.email}');
 
       final notebooks = await apiService.getNotebooks();
       debugPrint('📚 API returned ${notebooks.length} notebooks');
-      
+
       if (notebooks.isEmpty) {
-        debugPrint('⚠️ No notebooks returned from API - check if user has notebooks in database');
+        debugPrint('⚠️ No notebooks returned from API');
+        debugPrint('⚠️ This could mean:');
+        debugPrint('   1. User has no notebooks in database');
+        debugPrint('   2. Token is invalid/expired');
+        debugPrint('   3. User ID mismatch between app and backend');
         state = [];
         _isLoading = false;
         return;
       }
-      
+
       // Log first notebook for debugging
       if (notebooks.isNotEmpty) {
         debugPrint('📖 First notebook data: ${notebooks.first}');
+        debugPrint('📖 First notebook user_id: ${notebooks.first['user_id']}');
+        debugPrint('📖 Current user uid: ${user.uid}');
+
+        // Check if user IDs match
+        if (notebooks.first['user_id'] != user.uid) {
+          debugPrint('⚠️ WARNING: User ID mismatch!');
+          debugPrint('   Notebook user_id: ${notebooks.first['user_id']}');
+          debugPrint('   Current user uid: ${user.uid}');
+        }
       }
 
       final loadedNotebooks = notebooks.map((notebook) {
         debugPrint('📖 Parsing: ${notebook['id']} - ${notebook['title']}');
+
+        // Handle source_count which can be String or num from PostgreSQL
+        int sourceCount = 0;
+        final rawSourceCount = notebook['source_count'];
+        if (rawSourceCount != null) {
+          if (rawSourceCount is num) {
+            sourceCount = rawSourceCount.toInt();
+          } else if (rawSourceCount is String) {
+            sourceCount = int.tryParse(rawSourceCount) ?? 0;
+          }
+        }
+
         return Notebook(
           id: notebook['id'] as String,
           userId: notebook['user_id'] as String,
           title: notebook['title'] as String,
           description: notebook['description'] as String? ?? '',
           coverImage: notebook['cover_image'] as String?,
-          sourceCount: (notebook['source_count'] as num?)?.toInt() ?? 0,
+          sourceCount: sourceCount,
           createdAt: DateTime.parse(notebook['created_at'] as String),
           updatedAt: DateTime.parse(notebook['updated_at'] as String),
           // Agent notebook fields (Requirements 1.4, 4.1)
