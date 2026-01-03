@@ -14,8 +14,41 @@ const pool = new Pool({
     },
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
+    connectionTimeoutMillis: 30000, // Increased to 30s for Neon cold starts
+    // Keep connections alive
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
 });
+
+// Helper function to execute query with retry for connection issues
+export async function queryWithRetry<T>(
+    queryFn: () => Promise<T>,
+    maxRetries: number = 3
+): Promise<T> {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await queryFn();
+        } catch (error: any) {
+            lastError = error;
+            const isConnectionError = 
+                error.message?.includes('Connection terminated') ||
+                error.message?.includes('connection timeout') ||
+                error.code === 'ECONNRESET' ||
+                error.code === 'ETIMEDOUT';
+            
+            if (!isConnectionError || attempt === maxRetries) {
+                throw error;
+            }
+            
+            console.log(`Database connection attempt ${attempt}/${maxRetries} failed, retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        }
+    }
+    
+    throw lastError;
+}
 
 // Test the connection
 pool.on('connect', () => {
