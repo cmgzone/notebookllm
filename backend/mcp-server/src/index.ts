@@ -16,6 +16,9 @@
  * - get_source: Get a specific source by ID
  * - search_sources: Search across all code sources
  * - update_source: Update existing source without quota hit
+ * - delete_source: Delete a source permanently
+ * - export_sources: Export sources as JSON for backup
+ * - get_usage_stats: Get usage statistics and analytics
  * 
  * Agent Communication Tools (Requirements 1.1, 1.2, 2.1-2.3, 3.2, 3.3, 5.1):
  * - create_agent_notebook: Create a dedicated notebook for the agent
@@ -23,6 +26,18 @@
  * - get_followup_messages: Poll for user messages
  * - respond_to_followup: Send response to user
  * - register_webhook: Register webhook for receiving messages
+ * 
+ * GitHub Integration Tools:
+ * - github_status: Check GitHub connection status
+ * - github_list_repos: List accessible repositories
+ * - github_get_repo_tree: Get repository file structure
+ * - github_get_file: Get file contents
+ * - github_search_code: Search code across repos
+ * - github_get_readme: Get repository README
+ * - github_create_issue: Create GitHub issue
+ * - github_add_comment: Comment on issues/PRs
+ * - github_add_as_source: Import GitHub file as notebook source
+ * - github_analyze_repo: AI analysis of repository
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -565,6 +580,433 @@ Returns the updated source and optionally new verification results.`,
       required: ['sourceId'],
     },
   },
+  {
+    name: 'delete_source',
+    description: `Delete a code source permanently.
+    
+This will:
+- Remove the source from your notebook
+- Free up one slot in your source quota
+- Delete any associated conversation history
+
+Returns confirmation of deletion.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sourceId: {
+          type: 'string',
+          description: 'The ID of the source to delete',
+        },
+      },
+      required: ['sourceId'],
+    },
+  },
+  {
+    name: 'export_sources',
+    description: `Export your code sources as JSON for backup or transfer.
+    
+Export options:
+- notebookId: Export only sources from a specific notebook
+- language: Export only sources in a specific language
+- includeVerification: Include verification results in export
+- includeConversations: Include conversation history
+
+Returns a JSON object with all matching sources and their metadata.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        notebookId: {
+          type: 'string',
+          description: 'Export only from this notebook',
+        },
+        language: {
+          type: 'string',
+          description: 'Export only this language',
+        },
+        includeVerification: {
+          type: 'boolean',
+          description: 'Include verification results',
+          default: true,
+        },
+        includeConversations: {
+          type: 'boolean',
+          description: 'Include conversation history',
+          default: false,
+        },
+      },
+    },
+  },
+  {
+    name: 'get_usage_stats',
+    description: `Get detailed usage statistics and analytics.
+    
+Returns:
+- Total sources by language
+- Verification score distribution
+- Sources created over time
+- Most active notebooks
+- Agent activity breakdown
+
+Use this to understand your coding patterns and MCP usage.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        period: {
+          type: 'string',
+          description: 'Time period: "week", "month", "year", or "all"',
+          enum: ['week', 'month', 'year', 'all'],
+          default: 'month',
+        },
+      },
+    },
+  },
+  // ==================== GITHUB INTEGRATION TOOLS ====================
+  {
+    name: 'github_status',
+    description: `Check if GitHub is connected for the current user.
+    
+Returns:
+- connected: Whether GitHub account is linked
+- username: GitHub username if connected
+- scopes: Permissions granted
+
+Use this before calling other GitHub tools to verify access.`,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'github_list_repos',
+    description: `List GitHub repositories accessible to the user.
+    
+Returns repositories with:
+- fullName: owner/repo format
+- name, owner, description
+- defaultBranch, language
+- isPrivate, isFork
+- starsCount, forksCount
+
+Use this to discover repositories to work with.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          description: 'Filter by type: all, owner, member',
+          enum: ['all', 'owner', 'member'],
+          default: 'all',
+        },
+        sort: {
+          type: 'string',
+          description: 'Sort by: created, updated, pushed, full_name',
+          enum: ['created', 'updated', 'pushed', 'full_name'],
+          default: 'updated',
+        },
+        perPage: {
+          type: 'number',
+          description: 'Results per page (max 100)',
+          default: 30,
+        },
+        page: {
+          type: 'number',
+          description: 'Page number',
+          default: 1,
+        },
+      },
+    },
+  },
+  {
+    name: 'github_get_repo_tree',
+    description: `Get the file tree structure of a GitHub repository.
+    
+Returns all files and directories with:
+- path: Full path from repo root
+- type: 'blob' (file) or 'tree' (directory)
+- sha: Git SHA
+- size: File size in bytes (for files)
+
+Use this to explore repository structure before fetching specific files.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'Repository owner (username or org)',
+        },
+        repo: {
+          type: 'string',
+          description: 'Repository name',
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch name (defaults to default branch)',
+        },
+      },
+      required: ['owner', 'repo'],
+    },
+  },
+  {
+    name: 'github_get_file',
+    description: `Get the contents of a file from a GitHub repository.
+    
+Returns:
+- name, path, sha, size
+- content: The file contents (decoded)
+- encoding: Content encoding
+
+Use this to read specific files for analysis or reference.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'Repository owner',
+        },
+        repo: {
+          type: 'string',
+          description: 'Repository name',
+        },
+        path: {
+          type: 'string',
+          description: 'File path from repo root (e.g., "src/index.ts")',
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch name (optional)',
+        },
+      },
+      required: ['owner', 'repo', 'path'],
+    },
+  },
+  {
+    name: 'github_search_code',
+    description: `Search for code across GitHub repositories.
+    
+Search parameters:
+- query: Search terms (required)
+- repo: Limit to specific repo (owner/repo format)
+- language: Filter by programming language
+- path: Filter by file path
+
+Returns matching files with:
+- name, path, sha
+- repository: Full repo name
+- htmlUrl: Link to file on GitHub
+- textMatches: Matching code snippets
+
+Use this to find relevant code across repositories.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query',
+        },
+        repo: {
+          type: 'string',
+          description: 'Limit to repo (owner/repo format)',
+        },
+        language: {
+          type: 'string',
+          description: 'Filter by language',
+        },
+        path: {
+          type: 'string',
+          description: 'Filter by path',
+        },
+        perPage: {
+          type: 'number',
+          description: 'Results per page',
+          default: 20,
+        },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'github_get_readme',
+    description: `Get the README file from a GitHub repository.
+    
+Returns the README content as markdown text.
+
+Use this to understand what a repository is about.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'Repository owner',
+        },
+        repo: {
+          type: 'string',
+          description: 'Repository name',
+        },
+      },
+      required: ['owner', 'repo'],
+    },
+  },
+  {
+    name: 'github_create_issue',
+    description: `Create a new issue in a GitHub repository.
+    
+Parameters:
+- title: Issue title (required)
+- body: Issue description (markdown supported)
+- labels: Array of label names
+
+Returns:
+- number: Issue number
+- htmlUrl: Link to issue on GitHub
+
+Use this to report bugs, request features, or track tasks.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'Repository owner',
+        },
+        repo: {
+          type: 'string',
+          description: 'Repository name',
+        },
+        title: {
+          type: 'string',
+          description: 'Issue title',
+        },
+        body: {
+          type: 'string',
+          description: 'Issue body (markdown)',
+        },
+        labels: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Labels to apply',
+        },
+      },
+      required: ['owner', 'repo', 'title'],
+    },
+  },
+  {
+    name: 'github_add_comment',
+    description: `Add a comment to an issue or pull request.
+    
+Parameters:
+- owner, repo: Repository
+- issueNumber: Issue or PR number
+- body: Comment text (markdown supported)
+
+Returns:
+- id: Comment ID
+- htmlUrl: Link to comment
+
+Use this to provide feedback or updates on issues/PRs.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'Repository owner',
+        },
+        repo: {
+          type: 'string',
+          description: 'Repository name',
+        },
+        issueNumber: {
+          type: 'number',
+          description: 'Issue or PR number',
+        },
+        body: {
+          type: 'string',
+          description: 'Comment body (markdown)',
+        },
+      },
+      required: ['owner', 'repo', 'issueNumber', 'body'],
+    },
+  },
+  {
+    name: 'github_add_as_source',
+    description: `Add a GitHub file as a source to a notebook.
+    
+This imports a file from GitHub into NotebookLLM as a code source,
+allowing the app's AI to analyze and discuss it.
+
+Parameters:
+- notebookId: Target notebook
+- owner, repo, path: GitHub file location
+- branch: Optional branch name
+
+Returns the created source with ID.
+
+Use this to bring GitHub code into NotebookLLM for AI analysis.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        notebookId: {
+          type: 'string',
+          description: 'Notebook ID to add source to',
+        },
+        owner: {
+          type: 'string',
+          description: 'Repository owner',
+        },
+        repo: {
+          type: 'string',
+          description: 'Repository name',
+        },
+        path: {
+          type: 'string',
+          description: 'File path in repo',
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch name (optional)',
+        },
+      },
+      required: ['notebookId', 'owner', 'repo', 'path'],
+    },
+  },
+  {
+    name: 'github_analyze_repo',
+    description: `Request AI analysis of a GitHub repository.
+    
+This asks the NotebookLLM app's AI to analyze a repository and provide insights.
+
+Analysis includes:
+- Repository structure overview
+- Key files and their purposes
+- Code patterns and architecture
+- Potential improvements
+- Technology stack
+
+Returns AI-generated analysis.
+
+Use this to get intelligent insights about a codebase.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'Repository owner',
+        },
+        repo: {
+          type: 'string',
+          description: 'Repository name',
+        },
+        focus: {
+          type: 'string',
+          description: 'Optional focus area (e.g., "security", "performance", "architecture")',
+        },
+        includeFiles: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Specific files to include in analysis',
+        },
+      },
+      required: ['owner', 'repo'],
+    },
+  },
 ];
 
 // Input validation schemas
@@ -678,6 +1120,96 @@ const UpdateSourceSchema = z.object({
   description: z.string().optional(),
   language: z.string().optional(),
   revalidate: z.boolean().optional().default(false),
+});
+
+const DeleteSourceSchema = z.object({
+  sourceId: z.string().min(1),
+});
+
+const ExportSourcesSchema = z.object({
+  notebookId: z.string().optional(),
+  language: z.string().optional(),
+  includeVerification: z.boolean().optional().default(true),
+  includeConversations: z.boolean().optional().default(false),
+});
+
+const GetUsageStatsSchema = z.object({
+  period: z.enum(['week', 'month', 'year', 'all']).optional().default('month'),
+});
+
+// ==================== GITHUB SCHEMAS ====================
+
+const GitHubListReposSchema = z.object({
+  type: z.enum(['all', 'owner', 'member']).optional().default('all'),
+  sort: z.enum(['created', 'updated', 'pushed', 'full_name']).optional().default('updated'),
+  perPage: z.number().optional().default(30),
+  page: z.number().optional().default(1),
+});
+
+const GitHubRepoTreeSchema = z.object({
+  owner: z.string().min(1),
+  repo: z.string().min(1),
+  branch: z.string().optional(),
+});
+
+const GitHubGetFileSchema = z.object({
+  owner: z.string().min(1),
+  repo: z.string().min(1),
+  path: z.string().min(1),
+  branch: z.string().optional(),
+});
+
+const GitHubSearchCodeSchema = z.object({
+  query: z.string().min(1),
+  repo: z.string().optional(),
+  language: z.string().optional(),
+  path: z.string().optional(),
+  perPage: z.number().optional().default(20),
+});
+
+const GitHubGetReadmeSchema = z.object({
+  owner: z.string().min(1),
+  repo: z.string().min(1),
+});
+
+const GitHubCreateIssueSchema = z.object({
+  owner: z.string().min(1),
+  repo: z.string().min(1),
+  title: z.string().min(1),
+  body: z.string().optional(),
+  labels: z.array(z.string()).optional(),
+});
+
+const GitHubAddCommentSchema = z.object({
+  owner: z.string().min(1),
+  repo: z.string().min(1),
+  issueNumber: z.number(),
+  body: z.string().min(1),
+});
+
+const GitHubAddAsSourceSchema = z.object({
+  notebookId: z.string().min(1),
+  owner: z.string().min(1),
+  repo: z.string().min(1),
+  path: z.string().min(1),
+  branch: z.string().optional(),
+});
+
+const GitHubAnalyzeRepoSchema = z.object({
+  owner: z.string().min(1),
+  repo: z.string().min(1),
+  focus: z.string().optional(),
+  includeFiles: z.array(z.string()).optional(),
+});
+
+// GitHub API instance (uses different base URL)
+const githubApi = axios.create({
+  baseURL: `${BACKEND_URL}/api/github`,
+  headers: {
+    'Content-Type': 'application/json',
+    ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
+  },
+  timeout: 30000,
 });
 
 // Create MCP Server
@@ -917,6 +1449,202 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
         const input = UpdateSourceSchema.parse(args);
         const { sourceId, ...body } = input;
         const response = await api.put(`/sources/${sourceId}`, body);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'delete_source': {
+        const input = DeleteSourceSchema.parse(args);
+        const response = await api.delete(`/sources/${input.sourceId}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'export_sources': {
+        const input = ExportSourcesSchema.parse(args);
+        const params = new URLSearchParams();
+        if (input.notebookId) params.append('notebookId', input.notebookId);
+        if (input.language) params.append('language', input.language);
+        if (input.includeVerification !== undefined) params.append('includeVerification', input.includeVerification.toString());
+        if (input.includeConversations !== undefined) params.append('includeConversations', input.includeConversations.toString());
+        
+        const response = await api.get(`/sources/export?${params.toString()}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_usage_stats': {
+        const input = GetUsageStatsSchema.parse(args);
+        const params = new URLSearchParams();
+        if (input.period) params.append('period', input.period);
+        
+        const response = await api.get(`/stats?${params.toString()}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      // ==================== GITHUB TOOL HANDLERS ====================
+
+      case 'github_status': {
+        const response = await githubApi.get('/status');
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'github_list_repos': {
+        const input = GitHubListReposSchema.parse(args);
+        const params = new URLSearchParams();
+        if (input.type) params.append('type', input.type);
+        if (input.sort) params.append('sort', input.sort);
+        if (input.perPage) params.append('perPage', input.perPage.toString());
+        if (input.page) params.append('page', input.page.toString());
+        
+        const response = await githubApi.get(`/repos?${params.toString()}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'github_get_repo_tree': {
+        const input = GitHubRepoTreeSchema.parse(args);
+        const params = input.branch ? `?branch=${input.branch}` : '';
+        const response = await githubApi.get(`/repos/${input.owner}/${input.repo}/tree${params}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'github_get_file': {
+        const input = GitHubGetFileSchema.parse(args);
+        const params = input.branch ? `?branch=${input.branch}` : '';
+        const response = await githubApi.get(`/repos/${input.owner}/${input.repo}/contents/${input.path}${params}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'github_search_code': {
+        const input = GitHubSearchCodeSchema.parse(args);
+        const params = new URLSearchParams();
+        params.append('q', input.query);
+        if (input.repo) params.append('repo', input.repo);
+        if (input.language) params.append('language', input.language);
+        if (input.path) params.append('path', input.path);
+        if (input.perPage) params.append('perPage', input.perPage.toString());
+        
+        const response = await githubApi.get(`/search?${params.toString()}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'github_get_readme': {
+        const input = GitHubGetReadmeSchema.parse(args);
+        const response = await githubApi.get(`/repos/${input.owner}/${input.repo}/readme`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'github_create_issue': {
+        const input = GitHubCreateIssueSchema.parse(args);
+        const { owner, repo, ...body } = input;
+        const response = await githubApi.post(`/repos/${owner}/${repo}/issues`, body);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'github_add_comment': {
+        const input = GitHubAddCommentSchema.parse(args);
+        const { owner, repo, issueNumber, body } = input;
+        const response = await githubApi.post(`/repos/${owner}/${repo}/issues/${issueNumber}/comments`, { body });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'github_add_as_source': {
+        const input = GitHubAddAsSourceSchema.parse(args);
+        const response = await githubApi.post('/add-source', input);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'github_analyze_repo': {
+        const input = GitHubAnalyzeRepoSchema.parse(args);
+        const response = await githubApi.post('/analyze', input);
         return {
           content: [
             {

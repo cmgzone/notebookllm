@@ -1222,6 +1222,93 @@ router.get('/sources/search', authenticateToken, async (req: Request, res: Respo
 });
 
 /**
+ * GET /api/coding-agent/sources/export
+ * Export sources as JSON
+ * NOTE: This route MUST be defined before /sources/:id to avoid route conflicts
+ */
+router.get('/sources/export', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { 
+      notebookId, 
+      language, 
+      includeVerification = 'true', 
+      includeConversations = 'false' 
+    } = req.query;
+
+    let sql = `
+      SELECT s.*, n.title as notebook_title 
+      FROM sources s
+      LEFT JOIN notebooks n ON s.notebook_id = n.id
+      WHERE s.user_id = $1 AND s.type = 'code'
+    `;
+    const params: any[] = [userId];
+    let paramIndex = 2;
+
+    if (notebookId) {
+      sql += ` AND s.notebook_id = $${paramIndex++}`;
+      params.push(notebookId);
+    }
+
+    if (language) {
+      sql += ` AND s.metadata->>'language' = $${paramIndex++}`;
+      params.push(language);
+    }
+
+    sql += ' ORDER BY s.created_at DESC';
+
+    const result = await pool.query(sql, params);
+
+    const sources = await Promise.all(result.rows.map(async (row) => {
+      const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata || {});
+      
+      const source: any = {
+        id: row.id,
+        notebookId: row.notebook_id,
+        notebookTitle: row.notebook_title,
+        title: row.title,
+        code: row.content,
+        language: metadata.language,
+        agentName: metadata.agentName,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+
+      if (includeVerification === 'true' && metadata.verification) {
+        source.verification = metadata.verification;
+      }
+
+      if (includeConversations === 'true') {
+        const convResult = await pool.query(
+          `SELECT cm.* FROM conversation_messages cm
+           JOIN source_conversations sc ON cm.conversation_id = sc.id
+           WHERE sc.source_id = $1
+           ORDER BY cm.created_at ASC`,
+          [row.id]
+        );
+        source.conversations = convResult.rows;
+      }
+
+      return source;
+    }));
+
+    res.json({
+      success: true,
+      exportedAt: new Date().toISOString(),
+      count: sources.length,
+      filters: {
+        notebookId: notebookId || null,
+        language: language || null,
+      },
+      sources,
+    });
+  } catch (error: any) {
+    console.error('Export sources error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/coding-agent/sources/:id
  * Get a specific source by ID
  */
@@ -1269,81 +1356,6 @@ router.get('/sources/:id', authenticateToken, async (req: Request, res: Response
   }
 });
 
-/**
- * GET /api/coding-agent/sources/search
- * Search across all code sources
- */
-router.get('/sources/search', authenticateToken, async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).userId;
-    const { query, language, notebookId, limit = '20' } = req.query;
-
-    let sql = `
-      SELECT s.*, n.title as notebook_title 
-      FROM sources s
-      LEFT JOIN notebooks n ON s.notebook_id = n.id
-      WHERE s.user_id = $1 AND s.type = 'code'
-    `;
-    const params: any[] = [userId];
-    let paramIndex = 2;
-
-    // Search in title and content
-    if (query) {
-      sql += ` AND (s.title ILIKE $${paramIndex} OR s.content ILIKE $${paramIndex})`;
-      params.push(`%${query}%`);
-      paramIndex++;
-    }
-
-    // Filter by language
-    if (language) {
-      sql += ` AND s.metadata->>'language' = $${paramIndex}`;
-      params.push(language);
-      paramIndex++;
-    }
-
-    // Filter by notebook
-    if (notebookId) {
-      sql += ` AND s.notebook_id = $${paramIndex}`;
-      params.push(notebookId);
-      paramIndex++;
-    }
-
-    sql += ` ORDER BY s.updated_at DESC LIMIT $${paramIndex}`;
-    params.push(parseInt(limit as string) || 20);
-
-    const result = await pool.query(sql, params);
-
-    const sources = result.rows.map(row => {
-      const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata || {});
-      return {
-        id: row.id,
-        notebookId: row.notebook_id,
-        notebookTitle: row.notebook_title,
-        title: row.title,
-        language: metadata.language,
-        isVerified: metadata.isVerified,
-        agentName: metadata.agentName,
-        contentPreview: row.content?.substring(0, 200) + (row.content?.length > 200 ? '...' : ''),
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      };
-    });
-
-    res.json({
-      success: true,
-      sources,
-      count: sources.length,
-      query: query || null,
-      filters: {
-        language: language || null,
-        notebookId: notebookId || null,
-      },
-    });
-  } catch (error: any) {
-    console.error('Search sources error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
 /**
  * PUT /api/coding-agent/sources/:id
@@ -1434,6 +1446,141 @@ router.put('/sources/:id', authenticateToken, async (req: Request, res: Response
     });
   } catch (error: any) {
     console.error('Update source error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+/**
+ * GET /api/coding-agent/stats
+ * Get usage statistics and analytics
+ */
+router.get('/stats', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { period = 'month' } = req.query;
+
+    // Calculate date range
+    let dateFilter = '';
+    const now = new Date();
+    switch (period) {
+      case 'week':
+        dateFilter = `AND s.created_at >= NOW() - INTERVAL '7 days'`;
+        break;
+      case 'month':
+        dateFilter = `AND s.created_at >= NOW() - INTERVAL '30 days'`;
+        break;
+      case 'year':
+        dateFilter = `AND s.created_at >= NOW() - INTERVAL '365 days'`;
+        break;
+      case 'all':
+      default:
+        dateFilter = '';
+    }
+
+    // Sources by language
+    const languageResult = await pool.query(
+      `SELECT metadata->>'language' as language, COUNT(*) as count
+       FROM sources 
+       WHERE user_id = $1 AND type = 'code' ${dateFilter}
+       GROUP BY metadata->>'language'
+       ORDER BY count DESC`,
+      [userId]
+    );
+
+    // Verification score distribution
+    const scoreResult = await pool.query(
+      `SELECT 
+         CASE 
+           WHEN (metadata->'verification'->>'score')::int >= 90 THEN 'excellent (90-100)'
+           WHEN (metadata->'verification'->>'score')::int >= 70 THEN 'good (70-89)'
+           WHEN (metadata->'verification'->>'score')::int >= 50 THEN 'fair (50-69)'
+           ELSE 'needs work (<50)'
+         END as score_range,
+         COUNT(*) as count
+       FROM sources 
+       WHERE user_id = $1 AND type = 'code' AND metadata->'verification' IS NOT NULL ${dateFilter}
+       GROUP BY score_range
+       ORDER BY count DESC`,
+      [userId]
+    );
+
+    // Sources over time (by day for week, by week for month/year)
+    const timeGrouping = period === 'week' ? 'day' : 'week';
+    const timeResult = await pool.query(
+      `SELECT DATE_TRUNC('${timeGrouping}', created_at) as period, COUNT(*) as count
+       FROM sources 
+       WHERE user_id = $1 AND type = 'code' ${dateFilter}
+       GROUP BY period
+       ORDER BY period DESC
+       LIMIT 12`,
+      [userId]
+    );
+
+    // Most active notebooks
+    const notebookResult = await pool.query(
+      `SELECT n.id, n.title, COUNT(s.id) as source_count
+       FROM notebooks n
+       LEFT JOIN sources s ON s.notebook_id = n.id AND s.type = 'code' ${dateFilter.replace('s.', '')}
+       WHERE n.user_id = $1
+       GROUP BY n.id, n.title
+       ORDER BY source_count DESC
+       LIMIT 5`,
+      [userId]
+    );
+
+    // Agent activity breakdown
+    const agentResult = await pool.query(
+      `SELECT metadata->>'agentName' as agent_name, COUNT(*) as count
+       FROM sources 
+       WHERE user_id = $1 AND type = 'code' AND metadata->>'agentName' IS NOT NULL ${dateFilter}
+       GROUP BY metadata->>'agentName'
+       ORDER BY count DESC`,
+      [userId]
+    );
+
+    // Total stats
+    const totalResult = await pool.query(
+      `SELECT 
+         COUNT(*) as total_sources,
+         AVG((metadata->'verification'->>'score')::numeric) as avg_score
+       FROM sources 
+       WHERE user_id = $1 AND type = 'code' ${dateFilter}`,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      period,
+      generatedAt: new Date().toISOString(),
+      summary: {
+        totalSources: parseInt(totalResult.rows[0].total_sources) || 0,
+        averageVerificationScore: Math.round(parseFloat(totalResult.rows[0].avg_score) || 0),
+      },
+      byLanguage: languageResult.rows.map(r => ({
+        language: r.language || 'unknown',
+        count: parseInt(r.count),
+      })),
+      verificationScores: scoreResult.rows.map(r => ({
+        range: r.score_range,
+        count: parseInt(r.count),
+      })),
+      timeline: timeResult.rows.map(r => ({
+        period: r.period,
+        count: parseInt(r.count),
+      })),
+      topNotebooks: notebookResult.rows.map(r => ({
+        id: r.id,
+        title: r.title,
+        sourceCount: parseInt(r.source_count),
+      })),
+      byAgent: agentResult.rows.map(r => ({
+        agentName: r.agent_name,
+        count: parseInt(r.count),
+      })),
+    });
+  } catch (error: any) {
+    console.error('Get stats error:', error);
     res.status(500).json({ error: error.message });
   }
 });
