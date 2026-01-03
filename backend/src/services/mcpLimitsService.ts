@@ -195,9 +195,9 @@ class McpLimitsService {
       this.isUserPremium(userId),
     ]);
 
-    // Get actual token count
+    // Get actual token count (active = not revoked)
     const tokensResult = await pool.query(
-      'SELECT COUNT(*) FROM api_tokens WHERE user_id = $1 AND is_active = true',
+      'SELECT COUNT(*) FROM api_tokens WHERE user_id = $1 AND revoked_at IS NULL',
       [userId]
     );
     const tokensUsed = parseInt(tokensResult.rows[0].count) || 0;
