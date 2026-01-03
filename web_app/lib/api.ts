@@ -1,14 +1,24 @@
-// Dynamically determine API URL based on current host
-// Backend runs on port 3000, web app runs on 3000/3001
-const BACKEND_PORT = 3005;
+// API URL configuration
+// Uses environment variable or defaults to production Render backend
+const PRODUCTION_API_URL = 'https://notebookllm-ufj7.onrender.com/api';
 
 const getApiBase = () => {
-    if (typeof window === 'undefined') {
-        return process.env.NEXT_PUBLIC_API_URL || `http://localhost:${BACKEND_PORT}/api`;
+    // Check for environment variable first
+    if (process.env.NEXT_PUBLIC_API_URL) {
+        return process.env.NEXT_PUBLIC_API_URL;
     }
-    // Use same hostname as the current page but with backend port
-    const hostname = window.location.hostname;
-    return `http://${hostname}:${BACKEND_PORT}/api`;
+    
+    // In browser, check if we're on localhost for development
+    if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            // Local development - try local backend first
+            return 'http://localhost:3005/api';
+        }
+    }
+    
+    // Default to production backend
+    return PRODUCTION_API_URL;
 };
 
 const API_BASE = getApiBase();
