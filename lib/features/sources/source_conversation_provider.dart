@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../core/api/api_service.dart';
 
 /// Message model for source conversations
-/// Requirements: 3.5
+/// Requirements: 3.5, 4.2, 4.4
 class SourceMessage {
   final String id;
   final String sourceId;
@@ -49,6 +49,54 @@ class SourceMessage {
   /// Get the code update if present
   Map<String, dynamic>? get codeUpdate =>
       metadata?['codeUpdate'] as Map<String, dynamic>?;
+
+  /// Check if this message contains a code diff (Requirements: 4.4)
+  bool get hasCodeDiff => metadata != null && metadata!['codeDiff'] != null;
+
+  /// Get the code diff if present (Requirements: 4.4)
+  CodeDiff? get codeDiff {
+    final diffData = metadata?['codeDiff'] as Map<String, dynamic>?;
+    if (diffData == null) return null;
+    return CodeDiff.fromJson(diffData);
+  }
+
+  /// Check if this message contains an issue suggestion (Requirements: 4.5)
+  bool get hasIssueSuggestion =>
+      metadata != null && metadata!['issueSuggestion'] != null;
+
+  /// Get the issue suggestion if present (Requirements: 4.5)
+  Map<String, dynamic>? get issueSuggestion =>
+      metadata?['issueSuggestion'] as Map<String, dynamic>?;
+}
+
+/// Represents a code diff for displaying changes (Requirements: 4.4)
+class CodeDiff {
+  final String original;
+  final String modified;
+  final String? language;
+  final String? description;
+  final int? startLine;
+  final int? endLine;
+
+  const CodeDiff({
+    required this.original,
+    required this.modified,
+    this.language,
+    this.description,
+    this.startLine,
+    this.endLine,
+  });
+
+  factory CodeDiff.fromJson(Map<String, dynamic> json) {
+    return CodeDiff(
+      original: json['original'] as String? ?? '',
+      modified: json['modified'] as String? ?? '',
+      language: json['language'] as String?,
+      description: json['description'] as String?,
+      startLine: json['startLine'] as int?,
+      endLine: json['endLine'] as int?,
+    );
+  }
 }
 
 /// State for a source conversation
@@ -144,15 +192,24 @@ class SourceConversationNotifier
   }
 
   /// Send a follow-up message to the agent
-  /// Requirements: 3.2
-  Future<bool> sendMessage(String message) async {
+  /// Requirements: 3.2, 4.2
+  ///
+  /// For GitHub sources, includes file content in the webhook payload
+  Future<bool> sendMessage(
+    String message, {
+    Map<String, dynamic>? githubContext,
+  }) async {
     if (message.trim().isEmpty) return false;
 
     state = state.copyWith(isSending: true, error: null);
 
     try {
       final apiService = ref.read(apiServiceProvider);
-      final response = await apiService.sendFollowupMessage(sourceId, message);
+      final response = await apiService.sendFollowupMessage(
+        sourceId,
+        message,
+        githubContext: githubContext,
+      );
 
       // Add the user's message to the local state immediately
       final userMessage = SourceMessage(
@@ -169,14 +226,27 @@ class SourceConversationNotifier
 
       // If there's an agent response, add it too
       if (response['agentResponse'] != null) {
+        // Parse metadata from response for code diffs and issue suggestions
+        Map<String, dynamic>? messageMetadata;
+        if (response['codeUpdated'] == true) {
+          messageMetadata = {'codeUpdate': true};
+        }
+        if (response['codeDiff'] != null) {
+          messageMetadata ??= {};
+          messageMetadata['codeDiff'] = response['codeDiff'];
+        }
+        if (response['issueSuggestion'] != null) {
+          messageMetadata ??= {};
+          messageMetadata['issueSuggestion'] = response['issueSuggestion'];
+        }
+
         final agentMessage = SourceMessage(
           id: '${DateTime.now().millisecondsSinceEpoch}_agent',
           sourceId: sourceId,
           role: 'agent',
           content: response['agentResponse'] as String,
           timestamp: DateTime.now().add(const Duration(milliseconds: 100)),
-          metadata:
-              response['codeUpdated'] == true ? {'codeUpdate': true} : null,
+          metadata: messageMetadata,
           isRead: false,
         );
         updatedMessages.add(agentMessage);

@@ -47,6 +47,13 @@ class SourceNotifier extends StateNotifier<List<Source>> {
       state = allSources.map((sourceData) {
         debugPrint(
             '📝 Processing source: ${sourceData['id']} - ${sourceData['title']}');
+
+        // Extract metadata if present (for GitHub sources and agent-created sources)
+        Map<String, dynamic> metadata = {};
+        if (sourceData['metadata'] != null && sourceData['metadata'] is Map) {
+          metadata = Map<String, dynamic>.from(sourceData['metadata'] as Map);
+        }
+
         return Source(
           id: sourceData['id'] as String,
           notebookId: sourceData['notebook_id'] as String,
@@ -56,6 +63,7 @@ class SourceNotifier extends StateNotifier<List<Source>> {
           content: sourceData['content'] as String? ?? '',
           imageUrl: sourceData['imageUrl'] as String?,
           tagIds: [], // Tags will be handled separately if needed
+          metadata: metadata,
         );
       }).toList();
 
@@ -199,6 +207,10 @@ class SourceNotifier extends StateNotifier<List<Source>> {
         addedAt: DateTime.parse(sourceData['created_at'] as String),
         content: sourceData['content'] as String? ?? '',
         imageUrl: sourceData['imageUrl'] as String?,
+        metadata:
+            sourceData['metadata'] != null && sourceData['metadata'] is Map
+                ? Map<String, dynamic>.from(sourceData['metadata'] as Map)
+                : {},
       );
 
       state = [source, ...state];

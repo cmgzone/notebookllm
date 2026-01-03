@@ -22,6 +22,8 @@ class SourceIconHelper {
         return Icons.insert_drive_file;
       case 'code':
         return Icons.code;
+      case 'github':
+        return Icons.code;
       default:
         return Icons.description;
     }
@@ -47,6 +49,8 @@ class SourceIconHelper {
         return scheme.secondary;
       case 'code':
         return Colors.cyan.shade600;
+      case 'github':
+        return const Color(0xFF24292E); // GitHub dark color
       default:
         return scheme.tertiary;
     }
@@ -72,6 +76,8 @@ class SourceIconHelper {
         return 'File';
       case 'code':
         return 'Verified Code';
+      case 'github':
+        return 'GitHub File';
       default:
         return 'Source';
     }
@@ -97,6 +103,8 @@ class SourceIconHelper {
         return 'File content extracted and indexed';
       case 'code':
         return 'Code verified and indexed';
+      case 'github':
+        return 'GitHub file content indexed';
       default:
         return 'Content indexed';
     }

@@ -26,6 +26,7 @@ import voiceRoutes from './routes/voice.js';
 import sportsRoutes from './routes/sports.js';
 import codingAgentRoutes from './routes/codingAgent.js';
 import mcpDownloadRoutes from './routes/mcpDownload.js';
+import githubRoutes from './routes/github.js';
 
 // Import services
 import bunnyService from './services/bunnyService.js';
@@ -97,6 +98,7 @@ app.use('/api/voice', voiceRoutes);
 app.use('/api/sports', sportsRoutes);
 app.use('/api/coding-agent', codingAgentRoutes);
 app.use('/api/mcp', mcpDownloadRoutes);
+app.use('/api/github', githubRoutes);
 
 // 404 handler
 app.use((req, res) => {

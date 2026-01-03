@@ -28,6 +28,8 @@ import '../../theme/motion.dart';
 import '../../core/audio/voice_service.dart';
 import '../subscription/services/credit_manager.dart';
 import 'context_usage_widget.dart';
+import 'github_action_detector.dart';
+import '../github/github_issue_dialog.dart';
 
 class EnhancedChatScreen extends ConsumerStatefulWidget {
   const EnhancedChatScreen({super.key});
@@ -1159,6 +1161,29 @@ class _MessageBubble extends ConsumerWidget {
                           tooltip: 'Play voice',
                         ),
                       ],
+                    ),
+                    // GitHub action buttons for AI responses
+                    // Requirements: 6.1, 6.2
+                    GitHubActionButtons(
+                      messageText: displayContent,
+                      onCreateIssue: () {
+                        // Show issue creation dialog
+                        final issueSuggestion =
+                            GitHubActionDetector.detectIssueSuggestion(
+                                displayContent);
+                        if (issueSuggestion != null) {
+                          showGitHubIssueDialog(
+                            context,
+                            ref,
+                            title: issueSuggestion.title,
+                            body: issueSuggestion.body,
+                          );
+                        }
+                      },
+                      onCopyCode: (code, language) {
+                        // Code is already copied by the button, just log for analytics
+                        debugPrint('Code copied: $language');
+                      },
                     ),
                   ],
                   if (message.citations.isNotEmpty) ...[

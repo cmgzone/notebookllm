@@ -19,6 +19,8 @@ import { sourceConversationService } from '../services/sourceConversationService
 import { webhookService } from '../services/webhookService.js';
 import { agentWebSocketService } from '../services/agentWebSocketService.js';
 import { mcpLimitsService } from '../services/mcpLimitsService.js';
+import { unifiedContextBuilder } from '../services/unifiedContextBuilder.js';
+import { githubWebhookBuilder } from '../services/githubWebhookBuilder.js';
 
 const router = Router();
 
@@ -788,18 +790,35 @@ router.post('/followups/send', authenticateToken, async (req: Request, res: Resp
     const conversation = await sourceConversationService.getConversation(sourceId);
     const conversationHistory = conversation?.messages || [];
 
-    // Build payload
-    const payload = {
-      sourceId,
-      sourceTitle: source.title || 'Untitled',
-      sourceCode: source.content || '',
-      sourceLanguage: metadata.language || 'unknown',
-      message,
-      messageId: userMessage.id,
-      conversationHistory,
-      userId,
-      timestamp: new Date().toISOString(),
-    };
+    // Check if this is a GitHub source to use enhanced payload
+    const isGitHubSource = source.type === 'github' || metadata.type === 'github';
+
+    // Build payload - use GitHub webhook builder for GitHub sources (Requirement 4.2)
+    let payload: any;
+    if (isGitHubSource) {
+      // Build enhanced GitHub payload with full context
+      payload = await githubWebhookBuilder.buildPayload({
+        sourceId,
+        message,
+        conversationHistory,
+        userId,
+      });
+      payload.messageId = userMessage.id;
+      console.log(`[Coding Agent] Built GitHub-enhanced payload for source ${sourceId}`);
+    } else {
+      // Build standard payload for non-GitHub sources
+      payload = {
+        sourceId,
+        sourceTitle: source.title || 'Untitled',
+        sourceCode: source.content || '',
+        sourceLanguage: metadata.language || 'unknown',
+        message,
+        messageId: userMessage.id,
+        conversationHistory,
+        userId,
+        timestamp: new Date().toISOString(),
+      };
+    }
 
     let delivered = false;
     let deliveryMethod = 'none';
@@ -816,12 +835,20 @@ router.post('/followups/send', authenticateToken, async (req: Request, res: Resp
 
     // Fall back to webhook if WebSocket not available
     if (!delivered) {
-      const webhookPayload = await webhookService.buildPayload(
-        sourceId,
-        message,
-        conversationHistory,
-        userId
-      );
+      // Use appropriate payload builder based on source type
+      let webhookPayload;
+      if (isGitHubSource) {
+        // For GitHub sources, use the already-built enhanced payload
+        webhookPayload = payload;
+      } else {
+        // For non-GitHub sources, build standard webhook payload
+        webhookPayload = await webhookService.buildPayload(
+          sourceId,
+          message,
+          conversationHistory,
+          userId
+        );
+      }
 
       const webhookResponse = await webhookService.sendFollowup(agentSessionId, webhookPayload);
 
@@ -1581,6 +1608,186 @@ router.get('/stats', authenticateToken, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Get stats error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/coding-agent/context/:notebookId
+ * Get unified context for a notebook (includes both GitHub and agent sources)
+ * 
+ * Requirements: 5.3
+ */
+router.get('/context/:notebookId', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { notebookId } = req.params;
+    const { 
+      includeGitHubSources = 'true',
+      includeAgentSources = 'true',
+      includeTextSources = 'true',
+      includeRepoStructure = 'false',
+      maxTokens,
+      format = 'json',
+    } = req.query;
+
+    // Build context options
+    const options = {
+      includeGitHubSources: includeGitHubSources === 'true',
+      includeAgentSources: includeAgentSources === 'true',
+      includeTextSources: includeTextSources === 'true',
+      includeRepoStructure: includeRepoStructure === 'true',
+      maxTokens: maxTokens ? parseInt(maxTokens as string) : undefined,
+    };
+
+    // Build the unified context
+    const context = await unifiedContextBuilder.buildContext(notebookId, userId, options);
+
+    // Return formatted response based on format parameter
+    if (format === 'prompt') {
+      // Return as formatted string for AI prompts
+      const formattedContext = unifiedContextBuilder.formatContextForPrompt(context);
+      res.json({
+        success: true,
+        notebookId,
+        format: 'prompt',
+        context: formattedContext,
+        metadata: {
+          sourceCount: context.sources.length,
+          totalTokenEstimate: context.totalTokenEstimate,
+          hasGitHubSources: context.sources.some(s => s.type === 'github'),
+          hasAgentSources: (context.agentSources?.length || 0) > 0,
+          repoStructure: context.repoStructure,
+        },
+      });
+    } else {
+      // Return full JSON context
+      res.json({
+        success: true,
+        notebookId,
+        format: 'json',
+        context,
+      });
+    }
+
+    console.log(`[Coding Agent] Context built for notebook ${notebookId}: ${context.sources.length} sources, ~${context.totalTokenEstimate} tokens`);
+  } catch (error: any) {
+    console.error('Get context error:', error);
+    
+    if (error.message.includes('not found') || error.message.includes('access denied')) {
+      return res.status(404).json({ error: error.message });
+    }
+    
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/coding-agent/context/source/:sourceId
+ * Get context focused on a specific source (for follow-up messages)
+ * 
+ * Requirements: 5.3
+ */
+router.get('/context/source/:sourceId', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { sourceId } = req.params;
+    const { format = 'json' } = req.query;
+
+    // Build context focused on the specific source
+    const context = await unifiedContextBuilder.getContextForSource(sourceId, userId);
+
+    // Return formatted response based on format parameter
+    if (format === 'prompt') {
+      const formattedContext = unifiedContextBuilder.formatContextForPrompt(context);
+      res.json({
+        success: true,
+        sourceId,
+        format: 'prompt',
+        context: formattedContext,
+        metadata: {
+          sourceCount: context.sources.length,
+          totalTokenEstimate: context.totalTokenEstimate,
+        },
+      });
+    } else {
+      res.json({
+        success: true,
+        sourceId,
+        format: 'json',
+        context,
+      });
+    }
+
+    console.log(`[Coding Agent] Context built for source ${sourceId}: ${context.sources.length} sources`);
+  } catch (error: any) {
+    console.error('Get source context error:', error);
+    
+    if (error.message.includes('not found') || error.message.includes('access denied')) {
+      return res.status(404).json({ error: error.message });
+    }
+    
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/coding-agent/context/agent/:sessionId/:notebookId
+ * Get context for an MCP-connected coding agent
+ * 
+ * Requirements: 5.3
+ */
+router.get('/context/agent/:sessionId/:notebookId', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { sessionId, notebookId } = req.params;
+    const { format = 'json' } = req.query;
+
+    // Verify the session belongs to the user
+    const session = await agentSessionService.getSession(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Agent session not found' });
+    }
+    if (session.userId !== userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Build context for the agent
+    const context = await unifiedContextBuilder.getContextForAgent(sessionId, notebookId);
+
+    // Return formatted response based on format parameter
+    if (format === 'prompt') {
+      const formattedContext = unifiedContextBuilder.formatContextForPrompt(context);
+      res.json({
+        success: true,
+        sessionId,
+        notebookId,
+        format: 'prompt',
+        context: formattedContext,
+        metadata: {
+          sourceCount: context.sources.length,
+          totalTokenEstimate: context.totalTokenEstimate,
+          agentSourceCount: context.agentSources?.length || 0,
+        },
+      });
+    } else {
+      res.json({
+        success: true,
+        sessionId,
+        notebookId,
+        format: 'json',
+        context,
+      });
+    }
+
+    console.log(`[Coding Agent] Agent context built for session ${sessionId}, notebook ${notebookId}`);
+  } catch (error: any) {
+    console.error('Get agent context error:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({ error: error.message });
+    }
+    
     res.status(500).json({ error: error.message });
   }
 });

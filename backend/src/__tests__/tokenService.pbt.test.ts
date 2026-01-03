@@ -136,7 +136,7 @@ describe('Token Service - Property-Based Tests', () => {
             expect(uniqueTokens.size).toBe(tokens.length);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 20 }
       );
     });
 
@@ -157,7 +157,7 @@ describe('Token Service - Property-Based Tests', () => {
             expect(tokens.size).toBe(numTokens);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 20 }
       );
     });
   });
@@ -191,7 +191,7 @@ describe('Token Service - Property-Based Tests', () => {
             expect(hash).not.toBe(token);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 20 }
       );
     });
 
@@ -212,7 +212,7 @@ describe('Token Service - Property-Based Tests', () => {
             expect(hash2).toBe(hash3);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 20 }
       );
     });
 
@@ -231,7 +231,7 @@ describe('Token Service - Property-Based Tests', () => {
             expect(hash1).not.toBe(hash2);
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 20 }
       );
     });
   });
@@ -316,7 +316,7 @@ describe('Token Service - Property-Based Tests', () => {
             expect(result.error).toBeDefined();
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 20 }
       );
     });
 

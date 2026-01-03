@@ -1601,15 +1601,26 @@ class ApiService {
   }
 
   /// Send a follow-up message to an agent for a specific source
-  /// Requirements: 3.2
+  /// Requirements: 3.2, 4.2
+  ///
+  /// For GitHub sources, includes file content and repository context
+  /// in the webhook payload to enable contextual code discussions.
   Future<Map<String, dynamic>> sendFollowupMessage(
     String sourceId,
-    String message,
-  ) async {
-    final response = await post('/coding-agent/followups/send', {
+    String message, {
+    Map<String, dynamic>? githubContext,
+  }) async {
+    final body = <String, dynamic>{
       'sourceId': sourceId,
       'message': message,
-    });
+    };
+
+    // Include GitHub context if provided (Requirements: 4.2)
+    if (githubContext != null) {
+      body['githubContext'] = githubContext;
+    }
+
+    final response = await post('/coding-agent/followups/send', body);
     return response;
   }
 

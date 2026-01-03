@@ -15,6 +15,10 @@ import '../../theme/app_theme.dart';
 import '../chat/context_usage_widget.dart';
 import '../subscription/services/credit_manager.dart';
 import '../ai_browser/ai_browser_screen.dart';
+import '../chat/github_action_detector.dart';
+import '../github/github_issue_dialog.dart';
+import '../chat/github_chat_context_builder.dart';
+import '../sources/source.dart';
 
 class NotebookChatScreen extends ConsumerStatefulWidget {
   final String notebookId;
@@ -185,8 +189,35 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
     final notebookSources =
         allSources.where((s) => s.notebookId == widget.notebookId).toList();
 
-    final context =
-        notebookSources.map((s) => '${s.title}: ${s.content}').toList();
+    // Separate GitHub sources from regular sources
+    // Requirements: 2.1 - Include relevant GitHub source content in AI context
+    final githubSources =
+        notebookSources.where((s) => s.isGitHubSource).toList();
+    final regularSources =
+        notebookSources.where((s) => !s.isGitHubSource).toList();
+
+    // Build context with enhanced GitHub formatting
+    final contextList = <String>[];
+
+    // Add GitHub sources with enhanced context
+    for (final source in githubSources) {
+      final githubContext = GitHubChatContextBuilder.buildSourceContext(source);
+      contextList.add(githubContext);
+    }
+
+    // Add repository structure if we have GitHub sources
+    if (githubSources.isNotEmpty) {
+      final repoStructure =
+          GitHubChatContextBuilder.buildRepoStructureContext(githubSources);
+      if (repoStructure.isNotEmpty) {
+        contextList.add(repoStructure);
+      }
+    }
+
+    // Add regular sources
+    for (final source in regularSources) {
+      contextList.add('${source.title}: ${source.content}');
+    }
 
     // Construct history pairs
     final historyPairs = <AIPromptResponse>[];
@@ -202,7 +233,7 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
     // Generate AI response
     await ref.read(aiProvider.notifier).generateContent(
           message,
-          context: context,
+          context: contextList,
           style: _selectedStyle,
           externalHistory: historyPairs,
         );
@@ -764,7 +795,7 @@ class ChatMessage {
   });
 }
 
-class _MessageBubble extends StatelessWidget {
+class _MessageBubble extends ConsumerWidget {
   final ChatMessage message;
 
   const _MessageBubble({required this.message});
@@ -778,7 +809,7 @@ class _MessageBubble extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final isUser = message.isUser;
@@ -1121,6 +1152,30 @@ class _MessageBubble extends StatelessWidget {
                       ],
                     ],
                   ),
+                  // GitHub action buttons for AI responses
+                  // Requirements: 6.1, 6.2
+                  if (!isUser)
+                    GitHubActionButtons(
+                      messageText: message.text,
+                      onCreateIssue: () {
+                        // Show issue creation dialog
+                        final issueSuggestion =
+                            GitHubActionDetector.detectIssueSuggestion(
+                                message.text);
+                        if (issueSuggestion != null) {
+                          showGitHubIssueDialog(
+                            context,
+                            ref,
+                            title: issueSuggestion.title,
+                            body: issueSuggestion.body,
+                          );
+                        }
+                      },
+                      onCopyCode: (code, language) {
+                        // Code is already copied by the button
+                        debugPrint('Code copied: $language');
+                      },
+                    ),
                 ],
               ),
             ),

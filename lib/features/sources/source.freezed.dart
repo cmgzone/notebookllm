@@ -24,7 +24,7 @@ mixin _$Source {
   String get notebookId => throw _privateConstructorUsedError;
   String get title => throw _privateConstructorUsedError;
   String get type =>
-      throw _privateConstructorUsedError; // drive, file, url, youtube, audio, text, image
+      throw _privateConstructorUsedError; // drive, file, url, youtube, audio, text, image, github, code
   DateTime get addedAt => throw _privateConstructorUsedError;
   String get content =>
       throw _privateConstructorUsedError; // raw text or transcript
@@ -35,6 +35,7 @@ mixin _$Source {
   String? get thumbnailUrl =>
       throw _privateConstructorUsedError; // Optional thumbnail for previews
   List<String> get tagIds => throw _privateConstructorUsedError;
+  Map<String, dynamic> get metadata => throw _privateConstructorUsedError;
 
   /// Serializes this Source to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -61,7 +62,8 @@ abstract class $SourceCopyWith<$Res> {
       DateTime? summaryGeneratedAt,
       String? imageUrl,
       String? thumbnailUrl,
-      List<String> tagIds});
+      List<String> tagIds,
+      Map<String, dynamic> metadata});
 }
 
 /// @nodoc
@@ -90,6 +92,7 @@ class _$SourceCopyWithImpl<$Res, $Val extends Source>
     Object? imageUrl = freezed,
     Object? thumbnailUrl = freezed,
     Object? tagIds = null,
+    Object? metadata = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -136,6 +139,10 @@ class _$SourceCopyWithImpl<$Res, $Val extends Source>
           ? _value.tagIds
           : tagIds // ignore: cast_nullable_to_non_nullable
               as List<String>,
+      metadata: null == metadata
+          ? _value.metadata
+          : metadata // ignore: cast_nullable_to_non_nullable
+              as Map<String, dynamic>,
     ) as $Val);
   }
 }
@@ -158,7 +165,8 @@ abstract class _$$SourceImplCopyWith<$Res> implements $SourceCopyWith<$Res> {
       DateTime? summaryGeneratedAt,
       String? imageUrl,
       String? thumbnailUrl,
-      List<String> tagIds});
+      List<String> tagIds,
+      Map<String, dynamic> metadata});
 }
 
 /// @nodoc
@@ -185,6 +193,7 @@ class __$$SourceImplCopyWithImpl<$Res>
     Object? imageUrl = freezed,
     Object? thumbnailUrl = freezed,
     Object? tagIds = null,
+    Object? metadata = null,
   }) {
     return _then(_$SourceImpl(
       id: null == id
@@ -231,6 +240,10 @@ class __$$SourceImplCopyWithImpl<$Res>
           ? _value._tagIds
           : tagIds // ignore: cast_nullable_to_non_nullable
               as List<String>,
+      metadata: null == metadata
+          ? _value._metadata
+          : metadata // ignore: cast_nullable_to_non_nullable
+              as Map<String, dynamic>,
     ));
   }
 }
@@ -249,8 +262,10 @@ class _$SourceImpl implements _Source {
       this.summaryGeneratedAt,
       this.imageUrl,
       this.thumbnailUrl,
-      final List<String> tagIds = const []})
-      : _tagIds = tagIds;
+      final List<String> tagIds = const [],
+      final Map<String, dynamic> metadata = const {}})
+      : _tagIds = tagIds,
+        _metadata = metadata;
 
   factory _$SourceImpl.fromJson(Map<String, dynamic> json) =>
       _$$SourceImplFromJson(json);
@@ -263,7 +278,7 @@ class _$SourceImpl implements _Source {
   final String title;
   @override
   final String type;
-// drive, file, url, youtube, audio, text, image
+// drive, file, url, youtube, audio, text, image, github, code
   @override
   final DateTime addedAt;
   @override
@@ -289,9 +304,18 @@ class _$SourceImpl implements _Source {
     return EqualUnmodifiableListView(_tagIds);
   }
 
+  final Map<String, dynamic> _metadata;
+  @override
+  @JsonKey()
+  Map<String, dynamic> get metadata {
+    if (_metadata is EqualUnmodifiableMapView) return _metadata;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableMapView(_metadata);
+  }
+
   @override
   String toString() {
-    return 'Source(id: $id, notebookId: $notebookId, title: $title, type: $type, addedAt: $addedAt, content: $content, summary: $summary, summaryGeneratedAt: $summaryGeneratedAt, imageUrl: $imageUrl, thumbnailUrl: $thumbnailUrl, tagIds: $tagIds)';
+    return 'Source(id: $id, notebookId: $notebookId, title: $title, type: $type, addedAt: $addedAt, content: $content, summary: $summary, summaryGeneratedAt: $summaryGeneratedAt, imageUrl: $imageUrl, thumbnailUrl: $thumbnailUrl, tagIds: $tagIds, metadata: $metadata)';
   }
 
   @override
@@ -313,7 +337,8 @@ class _$SourceImpl implements _Source {
                 other.imageUrl == imageUrl) &&
             (identical(other.thumbnailUrl, thumbnailUrl) ||
                 other.thumbnailUrl == thumbnailUrl) &&
-            const DeepCollectionEquality().equals(other._tagIds, _tagIds));
+            const DeepCollectionEquality().equals(other._tagIds, _tagIds) &&
+            const DeepCollectionEquality().equals(other._metadata, _metadata));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -330,7 +355,8 @@ class _$SourceImpl implements _Source {
       summaryGeneratedAt,
       imageUrl,
       thumbnailUrl,
-      const DeepCollectionEquality().hash(_tagIds));
+      const DeepCollectionEquality().hash(_tagIds),
+      const DeepCollectionEquality().hash(_metadata));
 
   /// Create a copy of Source
   /// with the given fields replaced by the non-null parameter values.
@@ -360,7 +386,8 @@ abstract class _Source implements Source {
       final DateTime? summaryGeneratedAt,
       final String? imageUrl,
       final String? thumbnailUrl,
-      final List<String> tagIds}) = _$SourceImpl;
+      final List<String> tagIds,
+      final Map<String, dynamic> metadata}) = _$SourceImpl;
 
   factory _Source.fromJson(Map<String, dynamic> json) = _$SourceImpl.fromJson;
 
@@ -371,7 +398,8 @@ abstract class _Source implements Source {
   @override
   String get title;
   @override
-  String get type; // drive, file, url, youtube, audio, text, image
+  String
+      get type; // drive, file, url, youtube, audio, text, image, github, code
   @override
   DateTime get addedAt;
   @override
@@ -386,6 +414,8 @@ abstract class _Source implements Source {
   String? get thumbnailUrl; // Optional thumbnail for previews
   @override
   List<String> get tagIds;
+  @override
+  Map<String, dynamic> get metadata;
 
   /// Create a copy of Source
   /// with the given fields replaced by the non-null parameter values.

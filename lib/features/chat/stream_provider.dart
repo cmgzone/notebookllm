@@ -6,11 +6,13 @@ import 'stream_token.dart';
 import '../../core/ai/ai_settings_service.dart';
 import '../../core/services/wakelock_service.dart';
 import '../sources/source_provider.dart';
+import '../sources/source.dart';
 import '../gamification/gamification_provider.dart';
 import '../../core/search/serper_service.dart';
 import 'message.dart';
 import '../../core/ai/ai_models_provider.dart';
 import '../../core/api/api_service.dart';
+import 'github_chat_context_builder.dart';
 
 class StreamNotifier extends StateNotifier<List<StreamToken>> {
   StreamNotifier(this.ref) : super([]);
@@ -51,25 +53,73 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
     const reservedChars = 2000;
     final availableForContext = maxContextChars - reservedChars;
 
-    // Add sources context (dynamically limited)
+    // Separate GitHub sources from regular sources
+    final githubSources = sources.where((s) => s.isGitHubSource).toList();
+    final regularSources = sources.where((s) => !s.isGitHubSource).toList();
+
+    // Add GitHub sources context first (with enhanced formatting)
+    // Requirements: 2.1 - Include relevant GitHub source content in AI context
+    if (githubSources.isNotEmpty) {
+      buffer.writeln('=== GITHUB CODE SOURCES ===');
+      buffer.writeln(
+          'You have access to ${githubSources.length} GitHub code files. Reference specific line numbers when discussing code:');
+      buffer.writeln();
+
+      final maxGitHubChars =
+          (availableForContext * 0.4).toInt(); // 40% for GitHub sources
+      int githubChars = 0;
+
+      for (final source in githubSources) {
+        if (githubChars >= maxGitHubChars) {
+          buffer.writeln(
+              '... (${githubSources.length - githubSources.indexOf(source)} more GitHub sources truncated)');
+          break;
+        }
+
+        // Build enhanced GitHub context using the context builder
+        final githubContext = GitHubChatContextBuilder.buildSourceContext(
+          source,
+          maxContentLength:
+              ((maxGitHubChars - githubChars) * 0.8).toInt().clamp(500, 5000),
+        );
+
+        buffer.write(githubContext);
+        githubChars += githubContext.length;
+      }
+
+      // Add repository structure if available
+      final repoStructure =
+          GitHubChatContextBuilder.buildRepoStructureContext(githubSources);
+      if (repoStructure.isNotEmpty) {
+        buffer.writeln(repoStructure);
+      }
+
+      buffer.writeln('=== END GITHUB SOURCES ===');
+      buffer.writeln();
+      currentChars += githubChars;
+    }
+
+    // Add regular sources context (dynamically limited)
     buffer.writeln('=== AVAILABLE SOURCES ===');
-    if (sources.isEmpty) {
+    if (regularSources.isEmpty && githubSources.isEmpty) {
       buffer.writeln('You have 0 sources available.');
       buffer.writeln(
           'If the user asks about their sources, inform them that no sources have been added yet.');
+    } else if (regularSources.isEmpty) {
+      buffer.writeln('No additional non-code sources available.');
     } else {
       buffer.writeln(
-          'You have access to ${sources.length} sources. Use them to provide accurate, cited responses:');
+          'You have access to ${regularSources.length} additional sources:');
       buffer.writeln();
 
       final maxSourceChars =
-          (availableForContext * 0.6).toInt(); // 60% for sources
+          (availableForContext * 0.4).toInt(); // 40% for regular sources
       int sourcesAdded = 0;
 
-      for (final source in sources) {
+      for (final source in regularSources) {
         if (currentChars >= maxSourceChars) {
           buffer.writeln(
-              '... (${sources.length - sourcesAdded} more sources truncated due to context limits)');
+              '... (${regularSources.length - sourcesAdded} more sources truncated due to context limits)');
           break;
         }
 

@@ -23,6 +23,7 @@ _$SourceImpl _$$SourceImplFromJson(Map<String, dynamic> json) => _$SourceImpl(
               ?.map((e) => e as String)
               .toList() ??
           const [],
+      metadata: json['metadata'] as Map<String, dynamic>? ?? const {},
     );
 
 Map<String, dynamic> _$$SourceImplToJson(_$SourceImpl instance) =>
@@ -38,4 +39,5 @@ Map<String, dynamic> _$$SourceImplToJson(_$SourceImpl instance) =>
       'imageUrl': instance.imageUrl,
       'thumbnailUrl': instance.thumbnailUrl,
       'tagIds': instance.tagIds,
+      'metadata': instance.metadata,
     };
