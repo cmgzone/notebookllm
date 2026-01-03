@@ -12,6 +12,7 @@ import PaymentTransactions from './pages/PaymentTransactions';
 import CreditPackages from './pages/CreditPackages';
 import AIModels from './pages/AIModels';
 import StorageManager from './pages/StorageManager';
+import McpSettings from './pages/McpSettings';
 
 function ProtectedRoute() {
   const { user, loading } = useAuth();
@@ -44,6 +45,7 @@ function Router() {
               <Route path="/onboarding" element={<OnboardingManager />} />
               <Route path="/privacy" element={<PrivacyPolicyEditor />} />
               <Route path="/ai-models" element={<AIModels />} />
+              <Route path="/mcp-settings" element={<McpSettings />} />
             </Route>
           </Route>
         </Routes>

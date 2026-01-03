@@ -18,6 +18,7 @@ import { agentNotebookService } from '../services/agentNotebookService.js';
 import { sourceConversationService } from '../services/sourceConversationService.js';
 import { webhookService } from '../services/webhookService.js';
 import { agentWebSocketService } from '../services/agentWebSocketService.js';
+import { mcpLimitsService } from '../services/mcpLimitsService.js';
 
 const router = Router();
 
@@ -69,6 +70,17 @@ router.post('/verify-and-save', authenticateToken, async (req: Request, res: Res
     if (!code || !language || !title) {
       return res.status(400).json({ 
         error: 'Missing required fields: code, language, title' 
+      });
+    }
+
+    // Check if user can create a new source (quota check)
+    const canCreate = await mcpLimitsService.canCreateSource(userId);
+    if (!canCreate.allowed) {
+      return res.status(403).json({
+        success: false,
+        error: 'Quota exceeded',
+        message: canCreate.reason,
+        quotaExceeded: true,
       });
     }
 
@@ -124,6 +136,9 @@ router.post('/verify-and-save', authenticateToken, async (req: Request, res: Res
       ]
     );
 
+    // Increment user's source count
+    await mcpLimitsService.incrementSourceCount(userId);
+
     res.json({
       success: true,
       source: result.rows[0],
@@ -174,6 +189,25 @@ router.get('/sources', authenticateToken, async (req: Request, res: Response) =>
     });
   } catch (error: any) {
     console.error('Get sources error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/coding-agent/quota
+ * Get user's MCP quota and usage
+ */
+router.get('/quota', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const quota = await mcpLimitsService.getUserQuota(userId);
+
+    res.json({
+      success: true,
+      quota,
+    });
+  } catch (error: any) {
+    console.error('Get quota error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -275,6 +309,9 @@ router.delete('/sources/:id', authenticateToken, async (req: Request, res: Respo
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Source not found' });
     }
+
+    // Decrement user's source count
+    await mcpLimitsService.decrementSourceCount(userId);
 
     res.json({
       success: true,
@@ -382,6 +419,17 @@ router.post('/sources/with-context', authenticateToken, async (req: Request, res
       });
     }
 
+    // Check if user can create a new source (quota check)
+    const canCreate = await mcpLimitsService.canCreateSource(userId);
+    if (!canCreate.allowed) {
+      return res.status(403).json({
+        success: false,
+        error: 'Quota exceeded',
+        message: canCreate.reason,
+        quotaExceeded: true,
+      });
+    }
+
     // Verify the notebook belongs to the user and is an agent notebook
     const notebookResult = await pool.query(
       `SELECT * FROM notebooks WHERE id = $1 AND user_id = $2`,
@@ -446,6 +494,9 @@ router.post('/sources/with-context', authenticateToken, async (req: Request, res
     if (conversationContext) {
       await sourceConversationService.getOrCreateConversation(sourceId, sessionId);
     }
+
+    // Increment user's source count
+    await mcpLimitsService.incrementSourceCount(userId);
 
     console.log(`[Coding Agent] Source saved with context: ${sourceId} by ${agentName}`);
 

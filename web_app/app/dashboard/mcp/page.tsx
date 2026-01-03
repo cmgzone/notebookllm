@@ -19,17 +19,21 @@ import {
     ArrowLeft,
     Eye,
     EyeOff,
+    Gauge,
+    AlertTriangle,
+    Crown,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
-import api, { ApiToken, McpStats, McpUsageEntry, VerifiedSource, AgentNotebook } from "@/lib/api";
+import api, { ApiToken, McpStats, McpUsageEntry, VerifiedSource, AgentNotebook, McpQuota } from "@/lib/api";
 
 export default function McpDashboardPage() {
     const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
     const router = useRouter();
     const [stats, setStats] = useState<McpStats | null>(null);
+    const [quota, setQuota] = useState<McpQuota | null>(null);
     const [tokens, setTokens] = useState<ApiToken[]>([]);
     const [usage, setUsage] = useState<McpUsageEntry[]>([]);
     const [sources, setSources] = useState<VerifiedSource[]>([]);
@@ -50,14 +54,16 @@ export default function McpDashboardPage() {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [statsData, tokensData, usageData, sourcesData, notebooksData] = await Promise.all([
+            const [statsData, quotaData, tokensData, usageData, sourcesData, notebooksData] = await Promise.all([
                 api.getMcpStats().catch(() => null),
+                api.getMcpQuota().catch(() => null),
                 api.getApiTokens().catch(() => []),
                 api.getMcpUsage(20).catch(() => []),
                 api.getVerifiedSources().catch(() => []),
                 api.getAgentNotebooks().catch(() => []),
             ]);
             setStats(statsData);
+            setQuota(quotaData);
             setTokens(tokensData);
             setUsage(usageData);
             setSources(sourcesData);
@@ -127,10 +133,10 @@ export default function McpDashboardPage() {
                     </div>
                 ) : (
                     <>
-                        {activeTab === "overview" && <OverviewTab stats={stats} tokens={tokens} usage={usage} notebooks={notebooks} />}
-                        {activeTab === "tokens" && <TokensTab tokens={tokens} onRefresh={loadData} />}
-                        {activeTab === "usage" && <UsageTab usage={usage} />}
-                        {activeTab === "sources" && <SourcesTab sources={sources} />}
+                        {activeTab === "overview" && <OverviewTab stats={stats} quota={quota} tokens={tokens} usage={usage} notebooks={notebooks} />}
+                        {activeTab === "tokens" && <TokensTab tokens={tokens} quota={quota} onRefresh={loadData} />}
+                        {activeTab === "usage" && <UsageTab usage={usage} quota={quota} />}
+                        {activeTab === "sources" && <SourcesTab sources={sources} quota={quota} />}
                     </>
                 )}
             </main>
@@ -176,9 +182,51 @@ function StatCard({ title, value, icon, color }: { title: string; value: string 
     );
 }
 
-function OverviewTab({ stats, tokens, usage, notebooks }: { stats: McpStats | null; tokens: ApiToken[]; usage: McpUsageEntry[]; notebooks: AgentNotebook[] }) {
+function OverviewTab({ stats, quota, tokens, usage, notebooks }: { stats: McpStats | null; quota: McpQuota | null; tokens: ApiToken[]; usage: McpUsageEntry[]; notebooks: AgentNotebook[] }) {
     return (
         <div className="space-y-6">
+            {/* MCP Disabled Warning */}
+            {quota && !quota.isMcpEnabled && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-center gap-3">
+                    <AlertTriangle className="text-amber-400" size={24} />
+                    <div>
+                        <div className="font-semibold text-amber-400">MCP is Currently Disabled</div>
+                        <div className="text-sm text-neutral-400">MCP functionality has been disabled by the administrator.</div>
+                    </div>
+                </div>
+            )}
+
+            {/* Quota Card */}
+            {quota && (
+                <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6 backdrop-blur-sm">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold flex items-center gap-2">
+                            <Gauge size={20} className="text-blue-400" />
+                            Your Usage Quota
+                        </h3>
+                        {quota.isPremium && (
+                            <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-purple-500/20 text-purple-400 text-sm">
+                                <Crown size={14} />
+                                Premium
+                            </span>
+                        )}
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-3">
+                        <QuotaBar label="Sources" used={quota.sourcesUsed} limit={quota.sourcesLimit} color="green" />
+                        <QuotaBar label="API Tokens" used={quota.tokensUsed} limit={quota.tokensLimit} color="amber" />
+                        <QuotaBar label="API Calls Today" used={quota.apiCallsUsed} limit={quota.apiCallsLimit} color="blue" />
+                    </div>
+                    {!quota.isPremium && (
+                        <div className="mt-4 pt-4 border-t border-white/5 text-sm text-neutral-400">
+                            <Link href="/plans" className="text-blue-400 hover:text-blue-300">
+                                Upgrade to Premium
+                            </Link>{" "}
+                            for higher limits and more features.
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Stats Grid */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard title="Active Tokens" value={stats?.activeTokens || 0} icon={<Key size={20} />} color="text-amber-400" />
@@ -239,13 +287,43 @@ function OverviewTab({ stats, tokens, usage, notebooks }: { stats: McpStats | nu
     );
 }
 
+function QuotaBar({ label, used, limit, color }: { label: string; used: number; limit: number; color: string }) {
+    const percentage = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+    const isNearLimit = percentage >= 80;
+    const colorClasses = {
+        green: { bar: "bg-green-500", text: "text-green-400" },
+        amber: { bar: "bg-amber-500", text: "text-amber-400" },
+        blue: { bar: "bg-blue-500", text: "text-blue-400" },
+    };
+    const colors = colorClasses[color as keyof typeof colorClasses] || colorClasses.blue;
 
-function TokensTab({ tokens, onRefresh }: { tokens: ApiToken[]; onRefresh: () => void }) {
+    return (
+        <div>
+            <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-neutral-400">{label}</span>
+                <span className={`text-sm font-mono ${isNearLimit ? "text-red-400" : colors.text}`}>
+                    {used} / {limit}
+                </span>
+            </div>
+            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                    className={`h-full ${isNearLimit ? "bg-red-500" : colors.bar} transition-all duration-300`}
+                    style={{ width: `${percentage}%` }}
+                />
+            </div>
+        </div>
+    );
+}
+
+
+function TokensTab({ tokens, quota, onRefresh }: { tokens: ApiToken[]; quota: McpQuota | null; onRefresh: () => void }) {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [newTokenName, setNewTokenName] = useState("");
     const [newToken, setNewToken] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
     const [copied, setCopied] = useState(false);
+
+    const canCreateToken = quota ? quota.tokensRemaining > 0 : true;
 
     const handleCreateToken = async () => {
         if (!newTokenName.trim()) return;
@@ -255,9 +333,9 @@ function TokensTab({ tokens, onRefresh }: { tokens: ApiToken[]; onRefresh: () =>
             setNewToken(result.token);
             setNewTokenName("");
             onRefresh();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to create token:", error);
-            alert("Failed to create token");
+            alert(error.message || "Failed to create token");
         } finally {
             setIsCreating(false);
         }
@@ -283,12 +361,41 @@ function TokensTab({ tokens, onRefresh }: { tokens: ApiToken[]; onRefresh: () =>
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">API Tokens</h3>
-                <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors text-sm font-medium">
+                <div className="flex items-center gap-4">
+                    <h3 className="text-lg font-semibold">API Tokens</h3>
+                    {quota && (
+                        <span className="text-sm text-neutral-400">
+                            {quota.tokensUsed} / {quota.tokensLimit} used
+                        </span>
+                    )}
+                </div>
+                <button 
+                    onClick={() => setShowCreateModal(true)} 
+                    disabled={!canCreateToken}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-700 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+                >
                     <Plus size={16} />
                     Create Token
                 </button>
             </div>
+
+            {/* Quota Warning */}
+            {quota && !canCreateToken && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-center gap-3">
+                    <AlertTriangle className="text-amber-400" size={20} />
+                    <div className="flex-1">
+                        <div className="font-medium text-amber-400">Token Limit Reached</div>
+                        <div className="text-sm text-neutral-400">
+                            You've reached your limit of {quota.tokensLimit} API tokens.{" "}
+                            {!quota.isPremium && (
+                                <Link href="/plans" className="text-blue-400 hover:text-blue-300">
+                                    Upgrade to Premium
+                                </Link>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* New Token Display */}
             {newToken && (
@@ -386,10 +493,17 @@ function TokensTab({ tokens, onRefresh }: { tokens: ApiToken[]; onRefresh: () =>
 }
 
 
-function UsageTab({ usage }: { usage: McpUsageEntry[] }) {
+function UsageTab({ usage, quota }: { usage: McpUsageEntry[]; quota: McpQuota | null }) {
     return (
         <div className="space-y-6">
-            <h3 className="text-lg font-semibold">API Usage History</h3>
+            <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">API Usage History</h3>
+                {quota && (
+                    <span className="text-sm text-neutral-400">
+                        {quota.apiCallsUsed} / {quota.apiCallsLimit} calls today
+                    </span>
+                )}
+            </div>
             <div className="rounded-xl border border-white/5 bg-neutral-900/50 overflow-hidden">
                 {usage.length === 0 ? (
                     <div className="p-8 text-center text-neutral-500">
@@ -426,7 +540,7 @@ function UsageTab({ usage }: { usage: McpUsageEntry[] }) {
     );
 }
 
-function SourcesTab({ sources }: { sources: VerifiedSource[] }) {
+function SourcesTab({ sources, quota }: { sources: VerifiedSource[]; quota: McpQuota | null }) {
     const [expandedSource, setExpandedSource] = useState<string | null>(null);
 
     const getLanguageColor = (lang: string) => {
@@ -442,7 +556,14 @@ function SourcesTab({ sources }: { sources: VerifiedSource[] }) {
 
     return (
         <div className="space-y-6">
-            <h3 className="text-lg font-semibold">Verified Code Sources</h3>
+            <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Verified Code Sources</h3>
+                {quota && (
+                    <span className="text-sm text-neutral-400">
+                        {quota.sourcesUsed} / {quota.sourcesLimit} sources
+                    </span>
+                )}
+            </div>
             {sources.length === 0 ? (
                 <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-8 text-center text-neutral-500">
                     <Code size={40} className="mx-auto mb-4 opacity-50" />

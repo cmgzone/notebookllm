@@ -129,6 +129,20 @@ export interface AgentNotebook {
     };
 }
 
+export interface McpQuota {
+    sourcesLimit: number;
+    sourcesUsed: number;
+    sourcesRemaining: number;
+    tokensLimit: number;
+    tokensUsed: number;
+    tokensRemaining: number;
+    apiCallsLimit: number;
+    apiCallsUsed: number;
+    apiCallsRemaining: number;
+    isPremium: boolean;
+    isMcpEnabled: boolean;
+}
+
 class ApiService {
     private token: string | null = null;
 
@@ -301,6 +315,11 @@ class ApiService {
     async getAgentNotebooks(): Promise<AgentNotebook[]> {
         const data = await this.fetch<{ notebooks: AgentNotebook[] }>('/coding-agent/notebooks');
         return data.notebooks;
+    }
+
+    async getMcpQuota(): Promise<McpQuota> {
+        const data = await this.fetch<{ quota: McpQuota }>('/coding-agent/quota');
+        return data.quota;
     }
 }
 

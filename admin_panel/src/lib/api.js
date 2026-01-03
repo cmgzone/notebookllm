@@ -218,6 +218,23 @@ class ApiService {
     async getStorageStats() {
         return this.get('/admin/storage-stats');
     }
+
+    // ============ ADMIN - MCP SETTINGS ============
+    async getMcpSettings() {
+        return this.get('/admin/mcp-settings');
+    }
+
+    async updateMcpSettings(settings) {
+        return this.put('/admin/mcp-settings', settings);
+    }
+
+    async getMcpUsage(limit = 50) {
+        return this.get(`/admin/mcp-usage?limit=${limit}`);
+    }
+
+    async getMcpStats() {
+        return this.get('/admin/mcp-stats');
+    }
 }
 
 export const api = new ApiService();

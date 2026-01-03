@@ -1,6 +1,7 @@
 import express, { type Response } from 'express';
 import pool from '../config/database.js';
 import { authenticateToken, requireAdmin, type AuthRequest } from '../middleware/auth.js';
+import { mcpLimitsService } from '../services/mcpLimitsService.js';
 
 const router = express.Router();
 
@@ -587,6 +588,131 @@ router.get('/storage-stats', async (_req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error('Error fetching storage stats:', error);
         res.status(500).json({ error: 'Failed to fetch storage stats' });
+    }
+});
+
+// ==================== MCP SETTINGS ====================
+
+router.get('/mcp-settings', async (req: AuthRequest, res: Response) => {
+    try {
+        const settings = await mcpLimitsService.getSettings();
+        res.json({ success: true, settings });
+    } catch (error) {
+        console.error('Error fetching MCP settings:', error);
+        res.status(500).json({ error: 'Failed to fetch MCP settings' });
+    }
+});
+
+router.put('/mcp-settings', async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId!;
+        const {
+            freeSourcesLimit,
+            freeTokensLimit,
+            freeApiCallsPerDay,
+            premiumSourcesLimit,
+            premiumTokensLimit,
+            premiumApiCallsPerDay,
+            isMcpEnabled,
+        } = req.body;
+
+        const settings = await mcpLimitsService.updateSettings(
+            {
+                freeSourcesLimit,
+                freeTokensLimit,
+                freeApiCallsPerDay,
+                premiumSourcesLimit,
+                premiumTokensLimit,
+                premiumApiCallsPerDay,
+                isMcpEnabled,
+            },
+            userId
+        );
+
+        res.json({ success: true, settings });
+    } catch (error) {
+        console.error('Error updating MCP settings:', error);
+        res.status(500).json({ error: 'Failed to update MCP settings' });
+    }
+});
+
+router.get('/mcp-usage', async (req: AuthRequest, res: Response) => {
+    try {
+        const limit = parseInt(req.query.limit as string) || 50;
+        const offset = parseInt(req.query.offset as string) || 0;
+
+        // Get all users with their MCP usage
+        const result = await pool.query(`
+            SELECT 
+                u.id, u.email, u.display_name,
+                COALESCE(umu.sources_count, 0) as sources_count,
+                COALESCE(umu.api_calls_today, 0) as api_calls_today,
+                umu.last_api_call_date,
+                sp.name as plan_name,
+                sp.is_free_plan,
+                (SELECT COUNT(*) FROM api_tokens WHERE user_id = u.id AND is_active = true) as active_tokens
+            FROM users u
+            LEFT JOIN user_mcp_usage umu ON u.id = umu.user_id
+            LEFT JOIN user_subscriptions us ON u.id = us.user_id
+            LEFT JOIN subscription_plans sp ON us.plan_id = sp.id
+            ORDER BY COALESCE(umu.sources_count, 0) DESC, u.created_at DESC
+            LIMIT $1 OFFSET $2
+        `, [limit, offset]);
+
+        const countResult = await pool.query('SELECT COUNT(*) FROM users');
+
+        res.json({
+            success: true,
+            users: result.rows.map(row => ({
+                id: row.id,
+                email: row.email,
+                displayName: row.display_name,
+                sourcesCount: parseInt(row.sources_count) || 0,
+                apiCallsToday: parseInt(row.api_calls_today) || 0,
+                lastApiCallDate: row.last_api_call_date,
+                planName: row.plan_name || 'Free',
+                isPremium: !row.is_free_plan,
+                activeTokens: parseInt(row.active_tokens) || 0,
+            })),
+            total: parseInt(countResult.rows[0].count),
+        });
+    } catch (error) {
+        console.error('Error fetching MCP usage:', error);
+        res.status(500).json({ error: 'Failed to fetch MCP usage' });
+    }
+});
+
+router.get('/mcp-stats', async (req: AuthRequest, res: Response) => {
+    try {
+        const settings = await mcpLimitsService.getSettings();
+
+        // Get aggregate stats
+        const statsResult = await pool.query(`
+            SELECT 
+                COUNT(DISTINCT umu.user_id) as users_with_usage,
+                COALESCE(SUM(umu.sources_count), 0) as total_sources,
+                COALESCE(SUM(umu.api_calls_today), 0) as total_api_calls_today,
+                (SELECT COUNT(*) FROM api_tokens WHERE is_active = true) as total_active_tokens,
+                (SELECT COUNT(*) FROM sources WHERE type = 'code' AND (metadata->>'isVerified')::boolean = true) as total_verified_sources
+            FROM user_mcp_usage umu
+        `);
+
+        const stats = statsResult.rows[0];
+
+        res.json({
+            success: true,
+            settings,
+            stats: {
+                usersWithUsage: parseInt(stats.users_with_usage) || 0,
+                totalSources: parseInt(stats.total_sources) || 0,
+                totalApiCallsToday: parseInt(stats.total_api_calls_today) || 0,
+                totalActiveTokens: parseInt(stats.total_active_tokens) || 0,
+                totalVerifiedSources: parseInt(stats.total_verified_sources) || 0,
+            },
+        });
+    } catch (error) {
+        console.error('Error fetching MCP stats:', error);
+        res.status(500).json({ error: 'Failed to fetch MCP stats' });
     }
 });
 

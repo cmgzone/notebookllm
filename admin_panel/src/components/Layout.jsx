@@ -12,7 +12,8 @@ import {
     Package,
     Receipt,
     Bot,
-    Cloud
+    Cloud,
+    Cpu
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -27,6 +28,7 @@ export default function Layout() {
         { name: 'Credit Packages', href: '/credit-packages', icon: Package },
         { name: 'Transactions', href: '/transactions', icon: Receipt },
         { name: 'Storage & CDN', href: '/storage', icon: Cloud },
+        { name: 'MCP Settings', href: '/mcp-settings', icon: Cpu },
         { name: 'Onboarding', href: '/onboarding', icon: Smartphone },
         { name: 'Privacy Policy', href: '/privacy', icon: Shield },
         { name: 'AI Models', href: '/ai-models', icon: Bot },
