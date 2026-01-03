@@ -1145,6 +1145,83 @@ router.get('/notebooks/list', authenticateToken, async (req: Request, res: Respo
 });
 
 /**
+ * GET /api/coding-agent/sources/search
+ * Search across all code sources
+ * NOTE: This route MUST be defined before /sources/:id to avoid route conflicts
+ */
+router.get('/sources/search', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { query, language, notebookId, limit = '20' } = req.query;
+
+    let sql = `
+      SELECT s.*, n.title as notebook_title 
+      FROM sources s
+      LEFT JOIN notebooks n ON s.notebook_id = n.id
+      WHERE s.user_id = $1 AND s.type = 'code'
+    `;
+    const params: any[] = [userId];
+    let paramIndex = 2;
+
+    // Search in title and content
+    if (query) {
+      sql += ` AND (s.title ILIKE $${paramIndex} OR s.content ILIKE $${paramIndex})`;
+      params.push(`%${query}%`);
+      paramIndex++;
+    }
+
+    // Filter by language
+    if (language) {
+      sql += ` AND s.metadata->>'language' = $${paramIndex}`;
+      params.push(language);
+      paramIndex++;
+    }
+
+    // Filter by notebook
+    if (notebookId) {
+      sql += ` AND s.notebook_id = $${paramIndex}`;
+      params.push(notebookId);
+      paramIndex++;
+    }
+
+    sql += ` ORDER BY s.updated_at DESC LIMIT $${paramIndex}`;
+    params.push(parseInt(limit as string) || 20);
+
+    const result = await pool.query(sql, params);
+
+    const sources = result.rows.map(row => {
+      const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata || {});
+      return {
+        id: row.id,
+        notebookId: row.notebook_id,
+        notebookTitle: row.notebook_title,
+        title: row.title,
+        language: metadata.language,
+        isVerified: metadata.isVerified,
+        agentName: metadata.agentName,
+        contentPreview: row.content?.substring(0, 200) + (row.content?.length > 200 ? '...' : ''),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    });
+
+    res.json({
+      success: true,
+      sources,
+      count: sources.length,
+      query: query || null,
+      filters: {
+        language: language || null,
+        notebookId: notebookId || null,
+      },
+    });
+  } catch (error: any) {
+    console.error('Search sources error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/coding-agent/sources/:id
  * Get a specific source by ID
  */
