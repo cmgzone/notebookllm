@@ -12,6 +12,10 @@
  * - analyze_code: Deep analysis with suggestions
  * - get_verified_sources: Retrieve saved verified sources
  * - get_quota: Get current MCP usage quota and limits
+ * - list_notebooks: List all notebooks with source counts
+ * - get_source: Get a specific source by ID
+ * - search_sources: Search across all code sources
+ * - update_source: Update existing source without quota hit
  * 
  * Agent Communication Tools (Requirements 1.1, 1.2, 2.1-2.3, 3.2, 3.3, 5.1):
  * - create_agent_notebook: Create a dedicated notebook for the agent
@@ -437,6 +441,130 @@ Use this to check your remaining quota before saving sources or making API calls
       properties: {},
     },
   },
+  {
+    name: 'list_notebooks',
+    description: `List all your notebooks with their source counts.
+    
+Returns a list of notebooks including:
+- id, title, description, icon
+- isAgentNotebook: Whether created by an agent
+- sourceCount: Number of code sources in the notebook
+- createdAt, updatedAt
+
+Use this to find notebooks to save code to or to browse your previous work.`,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'get_source',
+    description: `Get a specific code source by ID.
+    
+Returns the full source including:
+- id, title, notebookId, notebookTitle
+- content: The full code
+- language, verification result
+- agentName: Which agent created it
+- originalContext: The conversation context when created
+- createdAt, updatedAt
+
+Use this to retrieve previously saved code for reference or modification.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sourceId: {
+          type: 'string',
+          description: 'The ID of the source to retrieve',
+        },
+      },
+      required: ['sourceId'],
+    },
+  },
+  {
+    name: 'search_sources',
+    description: `Search across all your code sources.
+    
+Search by:
+- query: Text to search in title and code content
+- language: Filter by programming language
+- notebookId: Filter by specific notebook
+
+Returns matching sources with:
+- id, title, notebookId, notebookTitle
+- language, isVerified, agentName
+- contentPreview: First 200 characters of code
+
+Use this to find relevant code from previous sessions.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Text to search for in title and code content',
+        },
+        language: {
+          type: 'string',
+          description: 'Filter by programming language (e.g., typescript, python)',
+        },
+        notebookId: {
+          type: 'string',
+          description: 'Filter by specific notebook ID',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum results to return (default: 20)',
+          default: 20,
+        },
+      },
+    },
+  },
+  {
+    name: 'update_source',
+    description: `Update an existing code source without using quota.
+    
+Update:
+- code: The new code content
+- title: New title
+- description: New description
+- language: Change language
+- revalidate: Re-run verification on updated code
+
+This does NOT count against your source quota - use it to iterate on existing code.
+
+Returns the updated source and optionally new verification results.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sourceId: {
+          type: 'string',
+          description: 'The ID of the source to update',
+        },
+        code: {
+          type: 'string',
+          description: 'The updated code content',
+        },
+        title: {
+          type: 'string',
+          description: 'New title for the source',
+        },
+        description: {
+          type: 'string',
+          description: 'New description',
+        },
+        language: {
+          type: 'string',
+          description: 'Change the programming language',
+        },
+        revalidate: {
+          type: 'boolean',
+          description: 'Re-run code verification after update',
+          default: false,
+        },
+      },
+      required: ['sourceId'],
+    },
+  },
 ];
 
 // Input validation schemas
@@ -528,6 +656,28 @@ const RegisterWebhookSchema = z.object({
   agentIdentifier: z.string().optional(),
   webhookUrl: z.string().url(),
   webhookSecret: z.string().min(16),
+});
+
+// ==================== NEW TOOL SCHEMAS ====================
+
+const GetSourceSchema = z.object({
+  sourceId: z.string().min(1),
+});
+
+const SearchSourcesSchema = z.object({
+  query: z.string().optional(),
+  language: z.string().optional(),
+  notebookId: z.string().optional(),
+  limit: z.number().optional().default(20),
+});
+
+const UpdateSourceSchema = z.object({
+  sourceId: z.string().min(1),
+  code: z.string().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  language: z.string().optional(),
+  revalidate: z.boolean().optional().default(false),
 });
 
 // Create MCP Server
@@ -709,6 +859,64 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
 
       case 'get_quota': {
         const response = await api.get('/quota');
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'list_notebooks': {
+        const response = await api.get('/notebooks/list');
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_source': {
+        const input = GetSourceSchema.parse(args);
+        const response = await api.get(`/sources/${input.sourceId}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'search_sources': {
+        const input = SearchSourcesSchema.parse(args);
+        const params = new URLSearchParams();
+        if (input.query) params.append('query', input.query);
+        if (input.language) params.append('language', input.language);
+        if (input.notebookId) params.append('notebookId', input.notebookId);
+        if (input.limit) params.append('limit', input.limit.toString());
+        
+        const response = await api.get(`/sources/search?${params.toString()}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'update_source': {
+        const input = UpdateSourceSchema.parse(args);
+        const { sourceId, ...body } = input;
+        const response = await api.put(`/sources/${sourceId}`, body);
         return {
           content: [
             {

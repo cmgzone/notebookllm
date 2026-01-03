@@ -1102,4 +1102,263 @@ router.get('/websocket/info', optionalAuth, async (req: Request, res: Response) 
   });
 });
 
+/**
+ * GET /api/coding-agent/notebooks/list
+ * List all notebooks with their sources for the current user
+ */
+router.get('/notebooks/list', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { includeSourceCount } = req.query;
+
+    // Get all notebooks for this user
+    const notebooksResult = await pool.query(
+      `SELECT n.*, 
+              (SELECT COUNT(*) FROM sources s WHERE s.notebook_id = n.id AND s.type = 'code') as source_count
+       FROM notebooks n 
+       WHERE n.user_id = $1 
+       ORDER BY n.updated_at DESC`,
+      [userId]
+    );
+
+    const notebooks = notebooksResult.rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      icon: row.icon,
+      isAgentNotebook: row.is_agent_notebook || false,
+      agentSessionId: row.agent_session_id,
+      sourceCount: parseInt(row.source_count) || 0,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+
+    res.json({
+      success: true,
+      notebooks,
+      count: notebooks.length,
+    });
+  } catch (error: any) {
+    console.error('List notebooks error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/coding-agent/sources/:id
+ * Get a specific source by ID
+ */
+router.get('/sources/:id', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `SELECT s.*, n.title as notebook_title 
+       FROM sources s
+       LEFT JOIN notebooks n ON s.notebook_id = n.id
+       WHERE s.id = $1 AND s.user_id = $2`,
+      [id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Source not found' });
+    }
+
+    const row = result.rows[0];
+    const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata || {});
+
+    res.json({
+      success: true,
+      source: {
+        id: row.id,
+        notebookId: row.notebook_id,
+        notebookTitle: row.notebook_title,
+        title: row.title,
+        type: row.type,
+        content: row.content,
+        language: metadata.language,
+        verification: metadata.verification,
+        isVerified: metadata.isVerified,
+        agentName: metadata.agentName,
+        originalContext: metadata.originalContext,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      },
+    });
+  } catch (error: any) {
+    console.error('Get source error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/coding-agent/sources/search
+ * Search across all code sources
+ */
+router.get('/sources/search', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { query, language, notebookId, limit = '20' } = req.query;
+
+    let sql = `
+      SELECT s.*, n.title as notebook_title 
+      FROM sources s
+      LEFT JOIN notebooks n ON s.notebook_id = n.id
+      WHERE s.user_id = $1 AND s.type = 'code'
+    `;
+    const params: any[] = [userId];
+    let paramIndex = 2;
+
+    // Search in title and content
+    if (query) {
+      sql += ` AND (s.title ILIKE $${paramIndex} OR s.content ILIKE $${paramIndex})`;
+      params.push(`%${query}%`);
+      paramIndex++;
+    }
+
+    // Filter by language
+    if (language) {
+      sql += ` AND s.metadata->>'language' = $${paramIndex}`;
+      params.push(language);
+      paramIndex++;
+    }
+
+    // Filter by notebook
+    if (notebookId) {
+      sql += ` AND s.notebook_id = $${paramIndex}`;
+      params.push(notebookId);
+      paramIndex++;
+    }
+
+    sql += ` ORDER BY s.updated_at DESC LIMIT $${paramIndex}`;
+    params.push(parseInt(limit as string) || 20);
+
+    const result = await pool.query(sql, params);
+
+    const sources = result.rows.map(row => {
+      const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata || {});
+      return {
+        id: row.id,
+        notebookId: row.notebook_id,
+        notebookTitle: row.notebook_title,
+        title: row.title,
+        language: metadata.language,
+        isVerified: metadata.isVerified,
+        agentName: metadata.agentName,
+        contentPreview: row.content?.substring(0, 200) + (row.content?.length > 200 ? '...' : ''),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    });
+
+    res.json({
+      success: true,
+      sources,
+      count: sources.length,
+      query: query || null,
+      filters: {
+        language: language || null,
+        notebookId: notebookId || null,
+      },
+    });
+  } catch (error: any) {
+    console.error('Search sources error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/coding-agent/sources/:id
+ * Update an existing source (doesn't count against quota)
+ */
+router.put('/sources/:id', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { id } = req.params;
+    const { code, title, description, language, revalidate = false } = req.body;
+
+    // Verify source exists and belongs to user
+    const existingResult = await pool.query(
+      `SELECT * FROM sources WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    );
+
+    if (existingResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Source not found' });
+    }
+
+    const existing = existingResult.rows[0];
+    const existingMetadata = typeof existing.metadata === 'string' 
+      ? JSON.parse(existing.metadata) 
+      : (existing.metadata || {});
+
+    // Optionally re-verify the code
+    let verification = existingMetadata.verification;
+    if (revalidate && code) {
+      verification = await codeVerificationService.verifyCode({
+        code,
+        language: language || existingMetadata.language,
+        strictMode: false,
+      });
+    }
+
+    // Build update
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (code !== undefined) {
+      updates.push(`content = $${paramIndex++}`);
+      values.push(code);
+    }
+
+    if (title !== undefined) {
+      updates.push(`title = $${paramIndex++}`);
+      values.push(title);
+    }
+
+    // Update metadata
+    const newMetadata = {
+      ...existingMetadata,
+      ...(language && { language }),
+      ...(description && { description }),
+      ...(verification && { verification, isVerified: verification.isValid }),
+      lastUpdatedAt: new Date().toISOString(),
+    };
+
+    updates.push(`metadata = $${paramIndex++}`);
+    values.push(JSON.stringify(newMetadata));
+
+    updates.push(`updated_at = NOW()`);
+
+    values.push(id);
+    values.push(userId);
+
+    const result = await pool.query(
+      `UPDATE sources SET ${updates.join(', ')} 
+       WHERE id = $${paramIndex++} AND user_id = $${paramIndex}
+       RETURNING *`,
+      values
+    );
+
+    console.log(`[Coding Agent] Source ${id} updated`);
+
+    res.json({
+      success: true,
+      source: {
+        id: result.rows[0].id,
+        title: result.rows[0].title,
+        content: result.rows[0].content,
+        metadata: newMetadata,
+        updatedAt: result.rows[0].updated_at,
+      },
+      verification: revalidate ? verification : null,
+    });
+  } catch (error: any) {
+    console.error('Update source error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
