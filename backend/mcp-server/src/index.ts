@@ -11,6 +11,7 @@
  * - batch_verify: Verify multiple code snippets at once
  * - analyze_code: Deep analysis with suggestions
  * - get_verified_sources: Retrieve saved verified sources
+ * - get_quota: Get current MCP usage quota and limits
  * 
  * Agent Communication Tools (Requirements 1.1, 1.2, 2.1-2.3, 3.2, 3.3, 5.1):
  * - create_agent_notebook: Create a dedicated notebook for the agent
@@ -419,6 +420,23 @@ Use this for the most responsive agent experience.`,
       properties: {},
     },
   },
+  {
+    name: 'get_quota',
+    description: `Get your current MCP usage quota and limits.
+    
+Returns quota information including:
+- sourcesLimit/sourcesUsed/sourcesRemaining: Code source storage limits
+- tokensLimit/tokensUsed/tokensRemaining: API token limits
+- apiCallsLimit/apiCallsUsed/apiCallsRemaining: Daily API call limits
+- isPremium: Whether user has premium plan
+- isMcpEnabled: Whether MCP is enabled by administrator
+
+Use this to check your remaining quota before saving sources or making API calls.`,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
 ];
 
 // Input validation schemas
@@ -679,6 +697,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
 
       case 'get_websocket_info': {
         const response = await api.get('/websocket/info');
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_quota': {
+        const response = await api.get('/quota');
         return {
           content: [
             {
