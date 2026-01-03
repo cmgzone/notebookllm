@@ -156,9 +156,48 @@ class GitHubService {
    * Connect GitHub account using Personal Access Token
    */
   async connectWithPAT(userId: string, token: string): Promise<GitHubConnection> {
-    // Validate token by fetching user info
-    const octokit = new Octokit({ auth: token });
-    const { data: user } = await octokit.users.getAuthenticated();
+    // Validate token by fetching user info with timeout and retry
+    const octokit = new Octokit({ 
+      auth: token,
+      request: {
+        timeout: 30000, // 30 second timeout
+      },
+    });
+    
+    let user;
+    let lastError: Error | null = null;
+    
+    // Retry up to 3 times for transient network issues
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const response = await octokit.users.getAuthenticated();
+        user = response.data;
+        break; // Success, exit retry loop
+      } catch (error: any) {
+        lastError = error;
+        
+        // Don't retry auth errors
+        if (error.name === 'HttpError' && error.status === 401) {
+          throw new Error('Invalid GitHub token. Please check your Personal Access Token.');
+        }
+        
+        // Log retry attempt
+        console.log(`GitHub connect attempt ${attempt}/3 failed:`, error.message);
+        
+        // If not last attempt, wait before retry
+        if (attempt < 3) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+        }
+      }
+    }
+    
+    if (!user) {
+      const errorMsg = lastError?.message || 'Unknown error';
+      if (errorMsg.includes('timeout') || errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ECONNRESET')) {
+        throw new Error('Connection to GitHub timed out after multiple attempts. Please check your network and try again.');
+      }
+      throw new Error(`Failed to connect to GitHub: ${errorMsg}`);
+    }
 
     // Check if connection already exists
     const existing = await pool.query(
@@ -256,7 +295,12 @@ class GitHubService {
       [userId]
     );
 
-    return new Octokit({ auth: token });
+    return new Octokit({ 
+      auth: token,
+      request: {
+        timeout: 30000, // 30 second timeout
+      },
+    });
   }
 
   // ==================== REPOSITORIES ====================
