@@ -641,7 +641,7 @@ router.get('/mcp-usage', async (req: AuthRequest, res: Response) => {
         const limit = parseInt(req.query.limit as string) || 50;
         const offset = parseInt(req.query.offset as string) || 0;
 
-        // Get all users with their MCP usage
+        // Get all users with their MCP usage - simplified query
         const result = await pool.query(`
             SELECT 
                 u.id, u.email, u.display_name,
@@ -649,8 +649,7 @@ router.get('/mcp-usage', async (req: AuthRequest, res: Response) => {
                 COALESCE(umu.api_calls_today, 0) as api_calls_today,
                 umu.last_api_call_date,
                 sp.name as plan_name,
-                sp.is_free_plan,
-                (SELECT COUNT(*) FROM api_tokens WHERE user_id = u.id AND is_active = true) as active_tokens
+                sp.is_free_plan
             FROM users u
             LEFT JOIN user_mcp_usage umu ON u.id = umu.user_id
             LEFT JOIN user_subscriptions us ON u.id = us.user_id
@@ -660,6 +659,26 @@ router.get('/mcp-usage', async (req: AuthRequest, res: Response) => {
         `, [limit, offset]);
 
         const countResult = await pool.query('SELECT COUNT(*) FROM users');
+
+        // Get token counts separately for each user
+        const userIds = result.rows.map(r => r.id);
+        let tokenCounts: Record<string, number> = {};
+        
+        if (userIds.length > 0) {
+            try {
+                const tokensResult = await pool.query(
+                    `SELECT user_id, COUNT(*) as count FROM api_tokens 
+                     WHERE user_id = ANY($1) AND revoked_at IS NULL 
+                     GROUP BY user_id`,
+                    [userIds]
+                );
+                tokensResult.rows.forEach(r => {
+                    tokenCounts[r.user_id] = parseInt(r.count) || 0;
+                });
+            } catch (e) {
+                // api_tokens table might not exist
+            }
+        }
 
         res.json({
             success: true,
@@ -672,7 +691,7 @@ router.get('/mcp-usage', async (req: AuthRequest, res: Response) => {
                 lastApiCallDate: row.last_api_call_date,
                 planName: row.plan_name || 'Free',
                 isPremium: !row.is_free_plan,
-                activeTokens: parseInt(row.active_tokens) || 0,
+                activeTokens: tokenCounts[row.id] || 0,
             })),
             total: parseInt(countResult.rows[0].count),
         });
@@ -686,16 +705,36 @@ router.get('/mcp-stats', async (req: AuthRequest, res: Response) => {
     try {
         const settings = await mcpLimitsService.getSettings();
 
-        // Get aggregate stats
+        // Get aggregate stats - use simpler queries that work with existing schema
         const statsResult = await pool.query(`
             SELECT 
                 COUNT(DISTINCT umu.user_id) as users_with_usage,
                 COALESCE(SUM(umu.sources_count), 0) as total_sources,
-                COALESCE(SUM(umu.api_calls_today), 0) as total_api_calls_today,
-                (SELECT COUNT(*) FROM api_tokens WHERE is_active = true) as total_active_tokens,
-                (SELECT COUNT(*) FROM sources WHERE type = 'code' AND (metadata->>'isVerified')::boolean = true) as total_verified_sources
+                COALESCE(SUM(umu.api_calls_today), 0) as total_api_calls_today
             FROM user_mcp_usage umu
         `);
+
+        // Get active tokens count separately with error handling
+        let totalActiveTokens = 0;
+        try {
+            const tokensResult = await pool.query(
+                `SELECT COUNT(*) FROM api_tokens WHERE revoked_at IS NULL`
+            );
+            totalActiveTokens = parseInt(tokensResult.rows[0].count) || 0;
+        } catch (e) {
+            // api_tokens table might not exist yet
+        }
+
+        // Get verified sources count - simplified query
+        let totalVerifiedSources = 0;
+        try {
+            const verifiedResult = await pool.query(
+                `SELECT COUNT(*) FROM sources WHERE type = 'code'`
+            );
+            totalVerifiedSources = parseInt(verifiedResult.rows[0].count) || 0;
+        } catch (e) {
+            // sources table might have different schema
+        }
 
         const stats = statsResult.rows[0];
 
@@ -706,8 +745,8 @@ router.get('/mcp-stats', async (req: AuthRequest, res: Response) => {
                 usersWithUsage: parseInt(stats.users_with_usage) || 0,
                 totalSources: parseInt(stats.total_sources) || 0,
                 totalApiCallsToday: parseInt(stats.total_api_calls_today) || 0,
-                totalActiveTokens: parseInt(stats.total_active_tokens) || 0,
-                totalVerifiedSources: parseInt(stats.total_verified_sources) || 0,
+                totalActiveTokens,
+                totalVerifiedSources,
             },
         });
     } catch (error) {

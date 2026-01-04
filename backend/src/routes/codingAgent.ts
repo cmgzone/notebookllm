@@ -31,11 +31,17 @@ const router = Router();
 router.post('/verify', optionalAuth, async (req: Request, res: Response) => {
   try {
     const { code, language, context, strictMode } = req.body;
+    const userId = (req as any).userId;
 
     if (!code || !language) {
       return res.status(400).json({ 
         error: 'Missing required fields: code, language' 
       });
+    }
+
+    // Track API call if user is authenticated
+    if (userId) {
+      await mcpLimitsService.incrementApiCallCount(userId);
     }
 
     const request: CodeVerificationRequest = {
@@ -74,6 +80,9 @@ router.post('/verify-and-save', authenticateToken, async (req: Request, res: Res
         error: 'Missing required fields: code, language, title' 
       });
     }
+
+    // Track API call
+    await mcpLimitsService.incrementApiCallCount(userId);
 
     // Check if user can create a new source (quota check)
     const canCreate = await mcpLimitsService.canCreateSource(userId);
@@ -162,6 +171,9 @@ router.get('/sources', authenticateToken, async (req: Request, res: Response) =>
     const userId = (req as any).userId;
     const { notebookId, language } = req.query;
 
+    // Track API call
+    await mcpLimitsService.incrementApiCallCount(userId);
+
     let query = `
       SELECT * FROM sources 
       WHERE user_id = $1 
@@ -202,6 +214,10 @@ router.get('/sources', authenticateToken, async (req: Request, res: Response) =>
 router.get('/quota', authenticateToken, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).userId;
+
+    // Track API call
+    await mcpLimitsService.incrementApiCallCount(userId);
+
     const quota = await mcpLimitsService.getUserQuota(userId);
 
     res.json({
@@ -221,11 +237,17 @@ router.get('/quota', authenticateToken, async (req: Request, res: Response) => {
 router.post('/batch-verify', optionalAuth, async (req: Request, res: Response) => {
   try {
     const { snippets } = req.body;
+    const userId = (req as any).userId;
 
     if (!snippets || !Array.isArray(snippets)) {
       return res.status(400).json({ 
         error: 'Missing required field: snippets (array)' 
       });
+    }
+
+    // Track API call if user is authenticated
+    if (userId) {
+      await mcpLimitsService.incrementApiCallCount(userId);
     }
 
     const results = await Promise.all(
@@ -266,11 +288,17 @@ router.post('/batch-verify', optionalAuth, async (req: Request, res: Response) =
 router.post('/analyze', optionalAuth, async (req: Request, res: Response) => {
   try {
     const { code, language, analysisType } = req.body;
+    const userId = (req as any).userId;
 
     if (!code || !language) {
       return res.status(400).json({ 
         error: 'Missing required fields: code, language' 
       });
+    }
+
+    // Track API call if user is authenticated
+    if (userId) {
+      await mcpLimitsService.incrementApiCallCount(userId);
     }
 
     // Run verification with strict mode for deep analysis
@@ -346,6 +374,9 @@ router.post('/notebooks', authenticateToken, async (req: Request, res: Response)
       metadata = {}
     } = req.body;
 
+    // Track API call
+    await mcpLimitsService.incrementApiCallCount(userId);
+
     // Validate required fields
     if (!agentName || !agentIdentifier) {
       return res.status(400).json({ 
@@ -413,6 +444,9 @@ router.post('/sources/with-context', authenticateToken, async (req: Request, res
       verification,
       strictMode = false
     } = req.body;
+
+    // Track API call
+    await mcpLimitsService.incrementApiCallCount(userId);
 
     // Validate required fields
     if (!code || !language || !title || !notebookId) {
