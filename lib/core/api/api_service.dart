@@ -158,6 +158,10 @@ class ApiService {
       return _handleResponse(response);
     } catch (e) {
       developer.log('[API] GET $endpoint - ERROR: $e', name: 'ApiService');
+      // Re-throw if it's already an Exception with a message, otherwise wrap it
+      if (e is Exception) {
+        rethrow;
+      }
       throw Exception('Network error: $e');
     }
   }
@@ -176,6 +180,10 @@ class ApiService {
 
       return _handleResponse(response);
     } catch (e) {
+      // Re-throw if it's already an Exception with a message, otherwise wrap it
+      if (e is Exception) {
+        rethrow;
+      }
       throw Exception('Network error: $e');
     }
   }
@@ -194,6 +202,10 @@ class ApiService {
 
       return _handleResponse(response);
     } catch (e) {
+      // Re-throw if it's already an Exception with a message, otherwise wrap it
+      if (e is Exception) {
+        rethrow;
+      }
       throw Exception('Network error: $e');
     }
   }
@@ -208,6 +220,10 @@ class ApiService {
 
       return _handleResponse(response);
     } catch (e) {
+      // Re-throw if it's already an Exception with a message, otherwise wrap it
+      if (e is Exception) {
+        rethrow;
+      }
       throw Exception('Network error: $e');
     }
   }
@@ -226,6 +242,12 @@ class ApiService {
       if (clearTokenOn401) {
         clearToken();
       }
+      // Check for GitHub-specific not connected error
+      final errorCode = body['error'];
+      if (errorCode == 'GITHUB_NOT_CONNECTED') {
+        throw Exception(body['message'] ??
+            'GitHub account not connected. Please connect your GitHub account in Settings.');
+      }
       throw Exception('Unauthorized - please login again');
     } else if (response.statusCode == 403) {
       developer.log(
@@ -233,9 +255,17 @@ class ApiService {
           name: 'ApiService');
       // 403 means token is invalid or expired - don't auto-clear, let auth system handle it
       throw Exception('Session expired - please login again');
+    } else if (response.statusCode == 429) {
+      // Rate limit error
+      final message =
+          body['message'] ?? 'Rate limit exceeded. Please try again later.';
+      throw Exception(message);
     } else {
-      throw Exception(
-          body['error'] ?? 'Request failed: ${response.statusCode}');
+      // For other errors, prefer the message field over the error code
+      final message = body['message'] ??
+          body['error'] ??
+          'Request failed: ${response.statusCode}';
+      throw Exception(message);
     }
   }
 

@@ -23,6 +23,9 @@ curl -fsSL https://raw.githubusercontent.com/cmgzone/notebookllm/master/scripts/
 - **Source Management**: Save verified code as sources in your app
 - **Batch Processing**: Verify multiple code snippets at once
 - **Multi-Language Support**: JavaScript, TypeScript, Python, Dart, JSON, and more
+- **Planning Mode**: Create and manage implementation plans with tasks
+- **Task Tracking**: Update task status, add outputs, and track progress
+- **GitHub Integration**: Access repositories, files, and create issues
 
 ## Tools Available
 
@@ -81,6 +84,92 @@ Retrieve previously saved verified code sources.
 {
   "notebookId": "optional-filter",
   "language": "optional-filter"
+}
+```
+
+## Planning Mode Tools
+
+The MCP server also provides tools for managing plans and tasks, enabling coding agents to work on structured implementation plans.
+
+### `list_plans`
+List all plans accessible to the authenticated user.
+
+```json
+{
+  "status": "active",
+  "includeArchived": false,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+### `get_plan`
+Get a specific plan with full details including requirements, design notes, and tasks.
+
+```json
+{
+  "planId": "plan-uuid-here",
+  "includeRelations": true
+}
+```
+
+### `create_plan`
+Create a new plan following the spec-driven format.
+
+```json
+{
+  "title": "My Feature Plan",
+  "description": "Implementation plan for new feature",
+  "isPrivate": true
+}
+```
+
+### `create_task`
+Create a new task in a plan.
+
+```json
+{
+  "planId": "plan-uuid-here",
+  "title": "Implement user authentication",
+  "description": "Add login and registration functionality",
+  "priority": "high",
+  "requirementIds": ["req-1", "req-2"]
+}
+```
+
+### `update_task_status`
+Update a task's status (not_started, in_progress, paused, blocked, completed).
+
+```json
+{
+  "planId": "plan-uuid-here",
+  "taskId": "task-uuid-here",
+  "status": "in_progress",
+  "reason": "Optional reason for status change"
+}
+```
+
+### `add_task_output`
+Add an output to a task (comment, code, file, or completion note).
+
+```json
+{
+  "planId": "plan-uuid-here",
+  "taskId": "task-uuid-here",
+  "type": "code",
+  "content": "function authenticate() { ... }",
+  "agentName": "Kiro"
+}
+```
+
+### `complete_task`
+Complete a task with an optional summary.
+
+```json
+{
+  "planId": "plan-uuid-here",
+  "taskId": "task-uuid-here",
+  "summary": "Implemented authentication with JWT tokens"
 }
 ```
 

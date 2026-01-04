@@ -1341,8 +1341,8 @@ router.post('/analyze', authenticateToken, async (req: Request, res: Response) =
       focus: focus || 'general',
     };
 
-    // Generate AI analysis using the AI service
-    const { generateWithGemini } = await import('../services/aiService.js');
+    // Generate AI analysis using the AI service (with fallback)
+    const { generateWithGemini, generateWithOpenRouter } = await import('../services/aiService.js');
     
     const prompt = `Analyze this GitHub repository and provide insights:
 
@@ -1370,7 +1370,19 @@ Please provide:
 5. Recommendations - Improvements or best practices
 ${focus ? `6. Specific ${focus} Analysis` : ''}`;
 
-    const analysis = await generateWithGemini([{ role: 'user', content: prompt }]);
+    // Try Gemini first, fallback to OpenRouter if Gemini fails
+    let analysis: string;
+    try {
+      analysis = await generateWithGemini([{ role: 'user', content: prompt }]);
+    } catch (geminiError: any) {
+      console.log('Gemini failed, falling back to OpenRouter:', geminiError.message);
+      try {
+        analysis = await generateWithOpenRouter([{ role: 'user', content: prompt }]);
+      } catch (openRouterError: any) {
+        console.error('Both AI services failed:', { gemini: geminiError.message, openRouter: openRouterError.message });
+        throw new Error('AI analysis unavailable. Please check that GEMINI_API_KEY or OPENROUTER_API_KEY is configured in the backend.');
+      }
+    }
 
     // Log successful operation
     await auditLoggerService.log({

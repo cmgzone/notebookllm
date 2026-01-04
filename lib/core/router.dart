@@ -51,6 +51,11 @@ import '../features/language_learning/language_session_screen.dart';
 import '../features/admin/ai_models_manager_screen.dart';
 import '../features/ai_browser/ai_browser_screen.dart';
 import '../features/settings/agent_connections_screen.dart';
+import '../features/github/github_connect_screen.dart';
+import '../features/github/github_repos_screen.dart';
+import '../features/planning/ui/plans_list_screen.dart';
+import '../features/planning/ui/plan_detail_screen.dart';
+import '../features/planning/ui/planning_ai_screen.dart';
 
 String getInitialLocation(bool hasSeenOnboarding) {
   return hasSeenOnboarding ? '/home' : '/onboarding';
@@ -355,6 +360,45 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             name: 'agent-connections',
             pageBuilder: (context, state) =>
                 buildTransitionPage(child: const AgentConnectionsScreen()),
+          ),
+          GoRoute(
+            path: '/github',
+            name: 'github',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GitHubConnectScreen()),
+          ),
+          GoRoute(
+            path: '/github/repos',
+            name: 'github-repos',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GitHubReposScreen()),
+          ),
+          // Planning Mode routes
+          GoRoute(
+            path: '/planning',
+            name: 'planning',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const PlansListScreen()),
+          ),
+          GoRoute(
+            path: '/planning/:id',
+            name: 'plan-detail',
+            pageBuilder: (context, state) {
+              final planId = state.pathParameters['id']!;
+              return buildTransitionPage(
+                child: PlanDetailScreen(planId: planId),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/planning/:id/ai',
+            name: 'planning-ai',
+            pageBuilder: (context, state) {
+              final planId = state.pathParameters['id'];
+              return buildTransitionPage(
+                child: PlanningAIScreen(planId: planId),
+              );
+            },
           ),
         ],
       ),

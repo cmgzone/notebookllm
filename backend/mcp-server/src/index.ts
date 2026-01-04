@@ -38,6 +38,15 @@
  * - github_add_comment: Comment on issues/PRs
  * - github_add_as_source: Import GitHub file as notebook source
  * - github_analyze_repo: AI analysis of repository
+ * 
+ * Planning Mode Tools (Requirements 5.1, 5.2, 5.3, 5.4, 5.5, 5.6):
+ * - list_plans: List all accessible plans
+ * - get_plan: Get a specific plan with full details
+ * - create_plan: Create a new plan
+ * - create_task: Create a task in a plan
+ * - update_task_status: Update task status
+ * - add_task_output: Add output to a task
+ * - complete_task: Complete a task with summary
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -1007,6 +1016,280 @@ Use this to get intelligent insights about a codebase.`,
       required: ['owner', 'repo'],
     },
   },
+  // ==================== PLANNING MODE TOOLS ====================
+  {
+    name: 'list_plans',
+    description: `List all plans accessible to the authenticated user.
+    
+Returns plans with:
+- id, title, description, status
+- isPrivate: Whether the plan is private
+- taskSummary: Count of tasks by status
+- createdAt, updatedAt
+
+Query options:
+- status: Filter by plan status (draft, active, completed, archived)
+- includeArchived: Include archived plans (default: false)
+- limit: Max results (default: 50)
+- offset: Pagination offset
+
+Use this to discover plans to work on.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: {
+          type: 'string',
+          description: 'Filter by status: draft, active, completed, archived',
+          enum: ['draft', 'active', 'completed', 'archived'],
+        },
+        includeArchived: {
+          type: 'boolean',
+          description: 'Include archived plans',
+          default: false,
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum results to return (default: 50)',
+          default: 50,
+        },
+        offset: {
+          type: 'number',
+          description: 'Pagination offset (default: 0)',
+          default: 0,
+        },
+      },
+    },
+  },
+  {
+    name: 'get_plan',
+    description: `Get a specific plan with full details.
+    
+Returns the complete plan including:
+- id, title, description, status, isPrivate
+- requirements: Array of requirements with EARS patterns
+- designNotes: Array of design notes linked to requirements
+- tasks: Array of tasks with status and hierarchy
+- taskSummary: Count of tasks by status
+- completionPercentage: Overall progress
+- createdAt, updatedAt, completedAt
+
+Use this to get all details needed to work on a plan.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        planId: {
+          type: 'string',
+          description: 'The ID of the plan to retrieve',
+        },
+        includeRelations: {
+          type: 'boolean',
+          description: 'Include requirements, design notes, and tasks (default: true)',
+          default: true,
+        },
+      },
+      required: ['planId'],
+    },
+  },
+  {
+    name: 'create_plan',
+    description: `Create a new plan following the spec-driven format.
+    
+Creates a plan with:
+- title: Plan title (required)
+- description: Plan description
+- isPrivate: Whether the plan is private (default: true)
+
+The plan is created with 'draft' status and empty task list.
+
+Returns the created plan with ID.
+
+Use this to start a new project or feature plan.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Plan title (required)',
+        },
+        description: {
+          type: 'string',
+          description: 'Plan description',
+        },
+        isPrivate: {
+          type: 'boolean',
+          description: 'Whether the plan is private (default: true)',
+          default: true,
+        },
+      },
+      required: ['title'],
+    },
+  },
+  {
+    name: 'create_task',
+    description: `Create a new task in a plan.
+    
+Creates a task with:
+- title: Task title (required)
+- description: Task description
+- parentTaskId: Parent task ID for sub-tasks
+- requirementIds: Array of requirement IDs this task implements
+- priority: low, medium, high, critical (default: medium)
+
+The task is created with 'not_started' status.
+
+Returns the created task with ID.
+
+Use this to add implementation tasks to a plan.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        planId: {
+          type: 'string',
+          description: 'The plan ID to add the task to (required)',
+        },
+        title: {
+          type: 'string',
+          description: 'Task title (required)',
+        },
+        description: {
+          type: 'string',
+          description: 'Task description',
+        },
+        parentTaskId: {
+          type: 'string',
+          description: 'Parent task ID for creating sub-tasks',
+        },
+        requirementIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of requirement IDs this task implements',
+        },
+        priority: {
+          type: 'string',
+          description: 'Task priority: low, medium, high, critical',
+          enum: ['low', 'medium', 'high', 'critical'],
+          default: 'medium',
+        },
+      },
+      required: ['planId', 'title'],
+    },
+  },
+  {
+    name: 'update_task_status',
+    description: `Update a task's status.
+    
+Valid statuses:
+- not_started: Task has not been started
+- in_progress: Task is being worked on
+- paused: Task is temporarily paused
+- blocked: Task is blocked (requires reason)
+- completed: Task is finished
+
+Each status change is recorded in the task's history with timestamp.
+
+Returns the updated task.
+
+Use this to track progress on tasks.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        planId: {
+          type: 'string',
+          description: 'The plan ID containing the task (required)',
+        },
+        taskId: {
+          type: 'string',
+          description: 'The task ID to update (required)',
+        },
+        status: {
+          type: 'string',
+          description: 'New status: not_started, in_progress, paused, blocked, completed',
+          enum: ['not_started', 'in_progress', 'paused', 'blocked', 'completed'],
+        },
+        reason: {
+          type: 'string',
+          description: 'Reason for status change (required for blocked status)',
+        },
+      },
+      required: ['planId', 'taskId', 'status'],
+    },
+  },
+  {
+    name: 'add_task_output',
+    description: `Add an output to a task (comment, code, file, or completion note).
+    
+Output types:
+- comment: General comment or note
+- code: Code snippet or implementation
+- file: File path or content reference
+- completion: Completion summary
+
+Returns the created output with ID.
+
+Use this to record work done on a task.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        planId: {
+          type: 'string',
+          description: 'The plan ID containing the task (required)',
+        },
+        taskId: {
+          type: 'string',
+          description: 'The task ID to add output to (required)',
+        },
+        type: {
+          type: 'string',
+          description: 'Output type: comment, code, file, completion',
+          enum: ['comment', 'code', 'file', 'completion'],
+        },
+        content: {
+          type: 'string',
+          description: 'Output content (required)',
+        },
+        agentName: {
+          type: 'string',
+          description: 'Name of the agent adding the output',
+        },
+        metadata: {
+          type: 'object',
+          description: 'Additional metadata for the output',
+        },
+      },
+      required: ['planId', 'taskId', 'type', 'content'],
+    },
+  },
+  {
+    name: 'complete_task',
+    description: `Complete a task with an optional summary.
+    
+This:
+- Sets the task status to 'completed'
+- Records the completion timestamp
+- Optionally adds a completion summary
+
+Returns the completed task and whether all sibling sub-tasks are now complete.
+
+Use this when you finish working on a task.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        planId: {
+          type: 'string',
+          description: 'The plan ID containing the task (required)',
+        },
+        taskId: {
+          type: 'string',
+          description: 'The task ID to complete (required)',
+        },
+        summary: {
+          type: 'string',
+          description: 'Completion summary describing what was done',
+        },
+      },
+      required: ['planId', 'taskId'],
+    },
+  },
 ];
 
 // Input validation schemas
@@ -1202,9 +1485,70 @@ const GitHubAnalyzeRepoSchema = z.object({
   includeFiles: z.array(z.string()).optional(),
 });
 
+// ==================== PLANNING MODE SCHEMAS ====================
+
+const ListPlansSchema = z.object({
+  status: z.enum(['draft', 'active', 'completed', 'archived']).optional(),
+  includeArchived: z.boolean().optional().default(false),
+  limit: z.number().optional().default(50),
+  offset: z.number().optional().default(0),
+});
+
+const GetPlanSchema = z.object({
+  planId: z.string().min(1),
+  includeRelations: z.boolean().optional().default(true),
+});
+
+const CreatePlanSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional(),
+  isPrivate: z.boolean().optional().default(true),
+});
+
+const CreateTaskSchema = z.object({
+  planId: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().optional(),
+  parentTaskId: z.string().optional(),
+  requirementIds: z.array(z.string()).optional(),
+  priority: z.enum(['low', 'medium', 'high', 'critical']).optional().default('medium'),
+});
+
+const UpdateTaskStatusSchema = z.object({
+  planId: z.string().min(1),
+  taskId: z.string().min(1),
+  status: z.enum(['not_started', 'in_progress', 'paused', 'blocked', 'completed']),
+  reason: z.string().optional(),
+});
+
+const AddTaskOutputSchema = z.object({
+  planId: z.string().min(1),
+  taskId: z.string().min(1),
+  type: z.enum(['comment', 'code', 'file', 'completion']),
+  content: z.string().min(1),
+  agentName: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
+});
+
+const CompleteTaskSchema = z.object({
+  planId: z.string().min(1),
+  taskId: z.string().min(1),
+  summary: z.string().optional(),
+});
+
 // GitHub API instance (uses different base URL)
 const githubApi = axios.create({
   baseURL: `${BACKEND_URL}/api/github`,
+  headers: {
+    'Content-Type': 'application/json',
+    ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
+  },
+  timeout: 30000,
+});
+
+// Planning API instance
+const planningApi = axios.create({
+  baseURL: `${BACKEND_URL}/api/planning`,
   headers: {
     'Content-Type': 'application/json',
     ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
@@ -1645,6 +1989,112 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
       case 'github_analyze_repo': {
         const input = GitHubAnalyzeRepoSchema.parse(args);
         const response = await githubApi.post('/analyze', input);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      // ==================== PLANNING MODE TOOL HANDLERS ====================
+
+      case 'list_plans': {
+        const input = ListPlansSchema.parse(args);
+        const params = new URLSearchParams();
+        if (input.status) params.append('status', input.status);
+        if (input.includeArchived !== undefined) params.append('includeArchived', input.includeArchived.toString());
+        if (input.limit) params.append('limit', input.limit.toString());
+        if (input.offset) params.append('offset', input.offset.toString());
+        
+        const response = await planningApi.get(`/?${params.toString()}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_plan': {
+        const input = GetPlanSchema.parse(args);
+        const params = input.includeRelations !== undefined 
+          ? `?includeRelations=${input.includeRelations}` 
+          : '';
+        const response = await planningApi.get(`/${input.planId}${params}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'create_plan': {
+        const input = CreatePlanSchema.parse(args);
+        const response = await planningApi.post('/', input);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'create_task': {
+        const input = CreateTaskSchema.parse(args);
+        const { planId, ...body } = input;
+        const response = await planningApi.post(`/${planId}/tasks`, body);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'update_task_status': {
+        const input = UpdateTaskStatusSchema.parse(args);
+        const { planId, taskId, ...body } = input;
+        const response = await planningApi.post(`/${planId}/tasks/${taskId}/status`, body);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'add_task_output': {
+        const input = AddTaskOutputSchema.parse(args);
+        const { planId, taskId, ...body } = input;
+        const response = await planningApi.post(`/${planId}/tasks/${taskId}/output`, body);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'complete_task': {
+        const input = CompleteTaskSchema.parse(args);
+        const { planId, taskId, ...body } = input;
+        const response = await planningApi.post(`/${planId}/tasks/${taskId}/complete`, body);
         return {
           content: [
             {

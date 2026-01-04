@@ -356,6 +356,22 @@ class _AppDrawer extends ConsumerWidget {
                         },
                       ),
                       _DrawerItem(
+                        icon: LucideIcons.github,
+                        label: 'GitHub',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/github');
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: LucideIcons.clipboardList,
+                        label: 'Planning Mode',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/planning');
+                        },
+                      ),
+                      _DrawerItem(
                         icon: LucideIcons.utensils,
                         label: 'Meal Planner',
                         onTap: () {

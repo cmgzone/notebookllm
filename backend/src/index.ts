@@ -27,11 +27,13 @@ import sportsRoutes from './routes/sports.js';
 import codingAgentRoutes from './routes/codingAgent.js';
 import mcpDownloadRoutes from './routes/mcpDownload.js';
 import githubRoutes from './routes/github.js';
+import planningRoutes from './routes/planning.js';
 
 // Import services
 import bunnyService from './services/bunnyService.js';
 import codeVerificationService from './services/codeVerificationService.js';
 import { agentWebSocketService } from './services/agentWebSocketService.js';
+import { planningWebSocketService } from './services/planningWebSocketService.js';
 
 // Load environment variables
 dotenv.config();
@@ -99,6 +101,7 @@ app.use('/api/sports', sportsRoutes);
 app.use('/api/coding-agent', codingAgentRoutes);
 app.use('/api/mcp', mcpDownloadRoutes);
 app.use('/api/github', githubRoutes);
+app.use('/api/planning', planningRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -121,9 +124,13 @@ const server = createServer(app);
 // Initialize WebSocket service for real-time agent communication
 agentWebSocketService.initialize(server);
 
+// Initialize WebSocket service for real-time planning updates
+planningWebSocketService.initialize(server);
+
 server.listen(PORT, () => {
     console.log(`🚀 Server is running on http://localhost:${PORT}`);
     console.log(`🔌 WebSocket available at ws://localhost:${PORT}/ws/agent`);
+    console.log(`📋 Planning WebSocket available at ws://localhost:${PORT}/ws/planning`);
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`📅 Started at: ${new Date().toISOString()}`);
 });
