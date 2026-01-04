@@ -35,10 +35,14 @@ class StatusChange with _$StatusChange {
 
   factory StatusChange.fromBackendJson(Map<String, dynamic> json) =>
       StatusChange(
-        status: _parseTaskStatus(json['status']),
-        changedAt: DateTime.parse(json['changed_at']),
-        changedBy: json['changed_by'],
-        reason: json['reason'],
+        status: _parseTaskStatus((json['status']) as String?),
+        changedAt: json['changedAt'] != null
+            ? DateTime.parse(json['changedAt'] as String)
+            : json['changed_at'] != null
+                ? DateTime.parse(json['changed_at'] as String)
+                : DateTime.now(),
+        changedBy: (json['changedBy'] ?? json['changed_by']) as String? ?? '',
+        reason: json['reason'] as String?,
       );
 }
 
@@ -60,14 +64,20 @@ class AgentOutput with _$AgentOutput {
       _$AgentOutputFromJson(json);
 
   factory AgentOutput.fromBackendJson(Map<String, dynamic> json) => AgentOutput(
-        id: json['id'],
-        taskId: json['task_id'],
-        agentSessionId: json['agent_session_id'],
-        agentName: json['agent_name'],
-        outputType: json['output_type'],
-        content: json['content'],
+        id: json['id'] as String? ?? '',
+        taskId: (json['taskId'] ?? json['task_id']) as String? ?? '',
+        agentSessionId:
+            (json['agentSessionId'] ?? json['agent_session_id']) as String?,
+        agentName: (json['agentName'] ?? json['agent_name']) as String?,
+        outputType:
+            (json['outputType'] ?? json['output_type']) as String? ?? 'comment',
+        content: json['content'] as String? ?? '',
         metadata: Map<String, dynamic>.from(json['metadata'] ?? {}),
-        createdAt: DateTime.parse(json['created_at']),
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'] as String)
+            : json['created_at'] != null
+                ? DateTime.parse(json['created_at'] as String)
+                : DateTime.now(),
       );
 }
 
@@ -108,33 +118,61 @@ class PlanTask with _$PlanTask {
   factory PlanTask.fromJson(Map<String, dynamic> json) =>
       _$PlanTaskFromJson(json);
 
-  factory PlanTask.fromBackendJson(Map<String, dynamic> json) => PlanTask(
-        id: json['id'],
-        planId: json['plan_id'],
-        parentTaskId: json['parent_task_id'],
-        requirementIds: List<String>.from(json['requirement_ids'] ?? []),
-        title: json['title'],
-        description: json['description'] ?? '',
-        status: _parseTaskStatus(json['status']),
-        priority: _parseTaskPriority(json['priority']),
-        assignedAgentId: json['assigned_agent_id'],
-        agentOutputs: (json['agent_outputs'] as List? ?? [])
-            .map((o) => AgentOutput.fromBackendJson(o as Map<String, dynamic>))
-            .toList(),
-        timeSpentMinutes: json['time_spent_minutes'] ?? 0,
-        statusHistory: (json['status_history'] as List? ?? [])
-            .map((s) => StatusChange.fromBackendJson(s as Map<String, dynamic>))
-            .toList(),
-        blockingReason: json['blocking_reason'],
-        subTasks: (json['sub_tasks'] as List? ?? [])
-            .map((t) => PlanTask.fromBackendJson(t as Map<String, dynamic>))
-            .toList(),
-        createdAt: DateTime.parse(json['created_at']),
-        updatedAt: DateTime.parse(json['updated_at']),
-        completedAt: json['completed_at'] != null
-            ? DateTime.parse(json['completed_at'])
-            : null,
-      );
+  factory PlanTask.fromBackendJson(Map<String, dynamic> json) {
+    final agentOutputsList = json['agentOutputs'] ?? json['agent_outputs'];
+    final statusHistoryList = json['statusHistory'] ?? json['status_history'];
+    final subTasksList = json['subTasks'] ?? json['sub_tasks'];
+
+    return PlanTask(
+      id: json['id'] as String? ?? '',
+      planId: (json['planId'] ?? json['plan_id']) as String? ?? '',
+      parentTaskId: (json['parentTaskId'] ?? json['parent_task_id']) as String?,
+      requirementIds: List<String>.from(
+          json['requirementIds'] ?? json['requirement_ids'] ?? []),
+      title: json['title'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      status: _parseTaskStatus((json['status']) as String?),
+      priority: _parseTaskPriority((json['priority']) as String?),
+      assignedAgentId:
+          (json['assignedAgentId'] ?? json['assigned_agent_id']) as String?,
+      agentOutputs: agentOutputsList != null && agentOutputsList is List
+          ? agentOutputsList
+              .map(
+                  (o) => AgentOutput.fromBackendJson(o as Map<String, dynamic>))
+              .toList()
+          : <AgentOutput>[],
+      timeSpentMinutes:
+          (json['timeSpentMinutes'] ?? json['time_spent_minutes'] ?? 0) as int,
+      statusHistory: statusHistoryList != null && statusHistoryList is List
+          ? statusHistoryList
+              .map((s) =>
+                  StatusChange.fromBackendJson(s as Map<String, dynamic>))
+              .toList()
+          : <StatusChange>[],
+      blockingReason:
+          (json['blockingReason'] ?? json['blocking_reason']) as String?,
+      subTasks: subTasksList != null && subTasksList is List
+          ? subTasksList
+              .map((t) => PlanTask.fromBackendJson(t as Map<String, dynamic>))
+              .toList()
+          : <PlanTask>[],
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String)
+          : json['created_at'] != null
+              ? DateTime.parse(json['created_at'] as String)
+              : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'] as String)
+          : json['updated_at'] != null
+              ? DateTime.parse(json['updated_at'] as String)
+              : DateTime.now(),
+      completedAt: json['completedAt'] != null
+          ? DateTime.parse(json['completedAt'] as String)
+          : json['completed_at'] != null
+              ? DateTime.parse(json['completed_at'] as String)
+              : null,
+    );
+  }
 
   /// Convert to backend JSON format
   Map<String, dynamic> toBackendJson() => {

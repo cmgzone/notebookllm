@@ -9,6 +9,7 @@ import '../../core/api/api_service.dart';
 import '../../core/auth/custom_auth_service.dart';
 import 'models/plan.dart';
 import 'models/plan_task.dart';
+import 'models/requirement.dart';
 import 'services/planning_service.dart';
 
 /// State class for Planning Mode
@@ -624,6 +625,150 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
       );
       state = state.copyWith(error: e.toString());
       return null;
+    }
+  }
+
+  // ==================== REQUIREMENT OPERATIONS ====================
+
+  /// Create a new requirement in the current plan
+  /// Implements Requirement 4.1: Spec-driven structure with requirements
+  Future<Requirement?> createRequirement({
+    required String title,
+    String? description,
+    String? earsPattern,
+    List<String>? acceptanceCriteria,
+  }) async {
+    final planId = state.currentPlan?.id;
+    if (planId == null) {
+      state = state.copyWith(error: 'No plan selected');
+      return null;
+    }
+
+    try {
+      developer.log('[PLANNING_PROVIDER] Creating requirement: $title',
+          name: 'PlanningProvider');
+      final requirement = await _planningService.createRequirement(
+        planId: planId,
+        title: title,
+        description: description,
+        earsPattern: earsPattern,
+        acceptanceCriteria: acceptanceCriteria,
+      );
+
+      // Reload the current plan to get updated requirements list
+      await loadPlan(planId);
+
+      return requirement;
+    } catch (e, stack) {
+      developer.log(
+        '[PLANNING_PROVIDER] Error creating requirement: $e',
+        name: 'PlanningProvider',
+        error: e,
+        stackTrace: stack,
+      );
+      state = state.copyWith(error: e.toString());
+      return null;
+    }
+  }
+
+  /// Delete a requirement from the current plan
+  Future<bool> deleteRequirement(String requirementId) async {
+    final planId = state.currentPlan?.id;
+    if (planId == null) {
+      state = state.copyWith(error: 'No plan selected');
+      return false;
+    }
+
+    try {
+      developer.log('[PLANNING_PROVIDER] Deleting requirement: $requirementId',
+          name: 'PlanningProvider');
+      final success =
+          await _planningService.deleteRequirement(planId, requirementId);
+
+      if (success) {
+        // Reload the current plan to get updated requirements list
+        await loadPlan(planId);
+      }
+
+      return success;
+    } catch (e, stack) {
+      developer.log(
+        '[PLANNING_PROVIDER] Error deleting requirement: $e',
+        name: 'PlanningProvider',
+        error: e,
+        stackTrace: stack,
+      );
+      state = state.copyWith(error: e.toString());
+      return false;
+    }
+  }
+
+  // ==================== DESIGN NOTE OPERATIONS ====================
+
+  /// Create a new design note in the current plan
+  Future<DesignNote?> createDesignNote({
+    required String content,
+    List<String>? requirementIds,
+  }) async {
+    final planId = state.currentPlan?.id;
+    if (planId == null) {
+      state = state.copyWith(error: 'No plan selected');
+      return null;
+    }
+
+    try {
+      developer.log('[PLANNING_PROVIDER] Creating design note',
+          name: 'PlanningProvider');
+      final note = await _planningService.createDesignNote(
+        planId: planId,
+        content: content,
+        requirementIds: requirementIds,
+      );
+
+      // Reload the current plan to get updated design notes list
+      await loadPlan(planId);
+
+      return note;
+    } catch (e, stack) {
+      developer.log(
+        '[PLANNING_PROVIDER] Error creating design note: $e',
+        name: 'PlanningProvider',
+        error: e,
+        stackTrace: stack,
+      );
+      state = state.copyWith(error: e.toString());
+      return null;
+    }
+  }
+
+  /// Delete a design note from the current plan
+  Future<bool> deleteDesignNote(String noteId) async {
+    final planId = state.currentPlan?.id;
+    if (planId == null) {
+      state = state.copyWith(error: 'No plan selected');
+      return false;
+    }
+
+    try {
+      developer.log('[PLANNING_PROVIDER] Deleting design note: $noteId',
+          name: 'PlanningProvider');
+      final success = await _planningService.deleteDesignNote(planId, noteId);
+
+      if (success) {
+        // Reload the current plan to get updated design notes list
+        await loadPlan(planId);
+      }
+
+      return success;
+    } catch (e, stack) {
+      developer.log(
+        '[PLANNING_PROVIDER] Error deleting design note: $e',
+        name: 'PlanningProvider',
+        error: e,
+        stackTrace: stack,
+      );
+      state = state.copyWith(error: e.toString());
+      return false;
     }
   }
 

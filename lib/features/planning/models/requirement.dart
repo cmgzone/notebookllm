@@ -34,15 +34,20 @@ class Requirement with _$Requirement {
       _$RequirementFromJson(json);
 
   factory Requirement.fromBackendJson(Map<String, dynamic> json) => Requirement(
-        id: json['id'],
-        planId: json['plan_id'],
-        title: json['title'],
-        description: json['description'] ?? '',
-        earsPattern: _parseEarsPattern(json['ears_pattern']),
-        acceptanceCriteria:
-            List<String>.from(json['acceptance_criteria'] ?? []),
-        sortOrder: json['sort_order'] ?? 0,
-        createdAt: DateTime.parse(json['created_at']),
+        id: json['id'] as String? ?? '',
+        planId: (json['planId'] ?? json['plan_id']) as String? ?? '',
+        title: json['title'] as String? ?? '',
+        description: json['description'] as String? ?? '',
+        earsPattern: _parseEarsPattern(
+            (json['earsPattern'] ?? json['ears_pattern']) as String?),
+        acceptanceCriteria: List<String>.from(
+            json['acceptanceCriteria'] ?? json['acceptance_criteria'] ?? []),
+        sortOrder: (json['sortOrder'] ?? json['sort_order'] ?? 0) as int,
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'] as String)
+            : json['created_at'] != null
+                ? DateTime.parse(json['created_at'] as String)
+                : DateTime.now(),
       );
 
   /// Convert to backend JSON format

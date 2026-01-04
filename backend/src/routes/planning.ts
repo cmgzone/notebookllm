@@ -850,6 +850,187 @@ router.get('/:id/tasks/:taskId/history', async (req: AuthRequest, res: Response)
     }
 });
 
+// ==================== REQUIREMENT ROUTES ====================
+
+/**
+ * POST /plans/:id/requirements
+ * Create a new requirement for a plan.
+ * Implements Requirement 4.1: Spec-driven structure with requirements.
+ * 
+ * Body:
+ * - title: Requirement title (required)
+ * - description: Requirement description (optional)
+ * - earsPattern: EARS pattern type (optional)
+ * - acceptanceCriteria: Array of acceptance criteria (optional)
+ */
+router.post('/:id/requirements', async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { title, description, earsPattern, acceptanceCriteria } = req.body;
+
+        if (!title || typeof title !== 'string' || title.trim() === '') {
+            return res.status(400).json({ error: 'Title is required' });
+        }
+
+        const validPatterns = ['ubiquitous', 'event', 'state', 'unwanted', 'optional', 'complex'];
+        if (earsPattern && !validPatterns.includes(earsPattern)) {
+            return res.status(400).json({ error: `Invalid EARS pattern. Must be one of: ${validPatterns.join(', ')}` });
+        }
+
+        const requirement = await planService.createRequirement(id, req.userId!, {
+            title: title.trim(),
+            description: description?.trim(),
+            earsPattern,
+            acceptanceCriteria: acceptanceCriteria || [],
+        });
+
+        res.status(201).json({ success: true, requirement });
+    } catch (error: any) {
+        console.error('Create requirement error:', error);
+        
+        if (error.message === 'Plan not found') {
+            return res.status(404).json({ error: error.message });
+        }
+        if (error.message.includes('archived')) {
+            return res.status(400).json({ error: error.message });
+        }
+        
+        res.status(500).json({ error: 'Failed to create requirement', message: error.message });
+    }
+});
+
+/**
+ * POST /plans/:id/requirements/batch
+ * Create multiple requirements at once.
+ * 
+ * Body:
+ * - requirements: Array of requirement objects
+ */
+router.post('/:id/requirements/batch', async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { requirements } = req.body;
+
+        if (!requirements || !Array.isArray(requirements) || requirements.length === 0) {
+            return res.status(400).json({ error: 'Requirements array is required' });
+        }
+
+        // Validate each requirement
+        for (let i = 0; i < requirements.length; i++) {
+            const req_item = requirements[i];
+            if (!req_item.title || typeof req_item.title !== 'string' || req_item.title.trim() === '') {
+                return res.status(400).json({ error: `Requirement ${i + 1}: Title is required` });
+            }
+        }
+
+        const createdRequirements = await planService.createRequirementsBatch(id, req.userId!, requirements);
+
+        res.status(201).json({ success: true, requirements: createdRequirements, count: createdRequirements.length });
+    } catch (error: any) {
+        console.error('Create requirements batch error:', error);
+        
+        if (error.message === 'Plan not found') {
+            return res.status(404).json({ error: error.message });
+        }
+        if (error.message.includes('archived')) {
+            return res.status(400).json({ error: error.message });
+        }
+        
+        res.status(500).json({ error: 'Failed to create requirements', message: error.message });
+    }
+});
+
+/**
+ * DELETE /plans/:id/requirements/:requirementId
+ * Delete a requirement.
+ */
+router.delete('/:id/requirements/:requirementId', async (req: AuthRequest, res: Response) => {
+    try {
+        const { requirementId } = req.params;
+
+        const deleted = await planService.deleteRequirement(requirementId, req.userId!);
+
+        if (!deleted) {
+            return res.status(404).json({ error: 'Requirement not found' });
+        }
+
+        res.json({ success: true, message: 'Requirement deleted' });
+    } catch (error: any) {
+        console.error('Delete requirement error:', error);
+        
+        if (error.message.includes('Access denied')) {
+            return res.status(403).json({ error: error.message });
+        }
+        
+        res.status(500).json({ error: 'Failed to delete requirement', message: error.message });
+    }
+});
+
+// ==================== DESIGN NOTE ROUTES ====================
+
+/**
+ * POST /plans/:id/design-notes
+ * Create a new design note for a plan.
+ * 
+ * Body:
+ * - content: Design note content (required)
+ * - requirementIds: Array of linked requirement IDs (optional)
+ */
+router.post('/:id/design-notes', async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { content, requirementIds } = req.body;
+
+        if (!content || typeof content !== 'string' || content.trim() === '') {
+            return res.status(400).json({ error: 'Content is required' });
+        }
+
+        const designNote = await planService.createDesignNote(id, req.userId!, {
+            content: content.trim(),
+            requirementIds: requirementIds || [],
+        });
+
+        res.status(201).json({ success: true, designNote });
+    } catch (error: any) {
+        console.error('Create design note error:', error);
+        
+        if (error.message === 'Plan not found') {
+            return res.status(404).json({ error: error.message });
+        }
+        if (error.message.includes('archived')) {
+            return res.status(400).json({ error: error.message });
+        }
+        
+        res.status(500).json({ error: 'Failed to create design note', message: error.message });
+    }
+});
+
+/**
+ * DELETE /plans/:id/design-notes/:noteId
+ * Delete a design note.
+ */
+router.delete('/:id/design-notes/:noteId', async (req: AuthRequest, res: Response) => {
+    try {
+        const { noteId } = req.params;
+
+        const deleted = await planService.deleteDesignNote(noteId, req.userId!);
+
+        if (!deleted) {
+            return res.status(404).json({ error: 'Design note not found' });
+        }
+
+        res.json({ success: true, message: 'Design note deleted' });
+    } catch (error: any) {
+        console.error('Delete design note error:', error);
+        
+        if (error.message.includes('Access denied')) {
+            return res.status(403).json({ error: error.message });
+        }
+        
+        res.status(500).json({ error: 'Failed to delete design note', message: error.message });
+    }
+});
+
 
 // ==================== ACCESS CONTROL ROUTES ====================
 

@@ -428,6 +428,177 @@ class PlanService {
 
   // ==================== HELPER METHODS ====================
 
+  // ==================== REQUIREMENT METHODS ====================
+
+  /**
+   * Create a new requirement for a plan.
+   * Implements Requirement 4.1: Spec-driven structure with requirements.
+   */
+  async createRequirement(
+    planId: string,
+    userId: string,
+    input: {
+      title: string;
+      description?: string;
+      earsPattern?: 'ubiquitous' | 'event' | 'state' | 'unwanted' | 'optional' | 'complex';
+      acceptanceCriteria?: string[];
+    }
+  ): Promise<Requirement> {
+    // Verify user owns the plan
+    const plan = await this.getPlan(planId, userId, false);
+    if (!plan) {
+      throw new Error('Plan not found');
+    }
+    if (plan.status === 'archived') {
+      throw new Error('Cannot add requirements to archived plan');
+    }
+
+    // Get next sort order
+    const sortResult = await pool.query(
+      `SELECT COALESCE(MAX(sort_order), 0) + 1 as next_order FROM plan_requirements WHERE plan_id = $1`,
+      [planId]
+    );
+    const sortOrder = sortResult.rows[0].next_order;
+
+    const id = uuidv4();
+    const result = await pool.query(
+      `INSERT INTO plan_requirements (id, plan_id, title, description, ears_pattern, acceptance_criteria, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [id, planId, input.title, input.description || null, input.earsPattern || null, input.acceptanceCriteria || [], sortOrder]
+    );
+
+    return this.mapRowToRequirement(result.rows[0]);
+  }
+
+  /**
+   * Create multiple requirements at once (batch).
+   */
+  async createRequirementsBatch(
+    planId: string,
+    userId: string,
+    requirements: Array<{
+      title: string;
+      description?: string;
+      earsPattern?: 'ubiquitous' | 'event' | 'state' | 'unwanted' | 'optional' | 'complex';
+      acceptanceCriteria?: string[];
+    }>
+  ): Promise<Requirement[]> {
+    // Verify user owns the plan
+    const plan = await this.getPlan(planId, userId, false);
+    if (!plan) {
+      throw new Error('Plan not found');
+    }
+    if (plan.status === 'archived') {
+      throw new Error('Cannot add requirements to archived plan');
+    }
+
+    // Get next sort order
+    const sortResult = await pool.query(
+      `SELECT COALESCE(MAX(sort_order), 0) as max_order FROM plan_requirements WHERE plan_id = $1`,
+      [planId]
+    );
+    let sortOrder = sortResult.rows[0].max_order + 1;
+
+    const createdRequirements: Requirement[] = [];
+
+    for (const req of requirements) {
+      const id = uuidv4();
+      const result = await pool.query(
+        `INSERT INTO plan_requirements (id, plan_id, title, description, ears_pattern, acceptance_criteria, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [id, planId, req.title, req.description || null, req.earsPattern || null, req.acceptanceCriteria || [], sortOrder++]
+      );
+      createdRequirements.push(this.mapRowToRequirement(result.rows[0]));
+    }
+
+    return createdRequirements;
+  }
+
+  /**
+   * Delete a requirement.
+   */
+  async deleteRequirement(requirementId: string, userId: string): Promise<boolean> {
+    // Get the requirement to find the plan
+    const reqResult = await pool.query(
+      `SELECT r.*, p.user_id FROM plan_requirements r 
+       JOIN plans p ON r.plan_id = p.id 
+       WHERE r.id = $1`,
+      [requirementId]
+    );
+
+    if (reqResult.rows.length === 0) {
+      return false;
+    }
+
+    if (reqResult.rows[0].user_id !== userId) {
+      throw new Error('Access denied');
+    }
+
+    await pool.query(`DELETE FROM plan_requirements WHERE id = $1`, [requirementId]);
+    return true;
+  }
+
+  // ==================== DESIGN NOTE METHODS ====================
+
+  /**
+   * Create a new design note for a plan.
+   */
+  async createDesignNote(
+    planId: string,
+    userId: string,
+    input: {
+      content: string;
+      requirementIds?: string[];
+    }
+  ): Promise<DesignNote> {
+    // Verify user owns the plan
+    const plan = await this.getPlan(planId, userId, false);
+    if (!plan) {
+      throw new Error('Plan not found');
+    }
+    if (plan.status === 'archived') {
+      throw new Error('Cannot add design notes to archived plan');
+    }
+
+    const id = uuidv4();
+    const result = await pool.query(
+      `INSERT INTO plan_design_notes (id, plan_id, requirement_ids, content)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [id, planId, input.requirementIds || [], input.content]
+    );
+
+    return this.mapRowToDesignNote(result.rows[0]);
+  }
+
+  /**
+   * Delete a design note.
+   */
+  async deleteDesignNote(noteId: string, userId: string): Promise<boolean> {
+    // Get the note to find the plan
+    const noteResult = await pool.query(
+      `SELECT n.*, p.user_id FROM plan_design_notes n 
+       JOIN plans p ON n.plan_id = p.id 
+       WHERE n.id = $1`,
+      [noteId]
+    );
+
+    if (noteResult.rows.length === 0) {
+      return false;
+    }
+
+    if (noteResult.rows[0].user_id !== userId) {
+      throw new Error('Access denied');
+    }
+
+    await pool.query(`DELETE FROM plan_design_notes WHERE id = $1`, [noteId]);
+    return true;
+  }
+
+  // ==================== PRIVATE HELPER METHODS ====================
+
   /**
    * Get requirements for a plan.
    */

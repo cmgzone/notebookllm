@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_service.dart';
 import '../models/plan.dart';
 import '../models/plan_task.dart';
+import '../models/requirement.dart';
 
 /// Provider for the Planning Service
 /// Requirements: 1.1, 1.2, 1.3, 3.1
@@ -41,7 +42,7 @@ class PlanningService {
       final queryString =
           queryParams.entries.map((e) => '${e.key}=${e.value}').join('&');
 
-      final response = await _api.get('/plans?$queryString');
+      final response = await _api.get('/planning?$queryString');
       final plansList = response['plans'] as List? ?? [];
 
       developer.log('[PLANNING] Got ${plansList.length} plans',
@@ -64,7 +65,7 @@ class PlanningService {
       developer.log('[PLANNING] Getting plan: $planId',
           name: 'PlanningService');
       final query = includeRelations ? '' : '?includeRelations=false';
-      final response = await _api.get('/plans/$planId$query');
+      final response = await _api.get('/planning/$planId$query');
       if (response['plan'] == null) return null;
       return Plan.fromBackendJson(response['plan'] as Map<String, dynamic>);
     } catch (e, stack) {
@@ -84,7 +85,7 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Creating plan: $title',
           name: 'PlanningService');
-      final response = await _api.post('/plans', {
+      final response = await _api.post('/planning', {
         'title': title,
         if (description != null) 'description': description,
         'isPrivate': isPrivate,
@@ -116,7 +117,7 @@ class PlanningService {
       if (status != null) body['status'] = status.name;
       if (isPrivate != null) body['isPrivate'] = isPrivate;
       if (body.isEmpty) throw Exception('No fields to update');
-      final response = await _api.put('/plans/$planId', body);
+      final response = await _api.put('/planning/$planId', body);
       if (response['plan'] == null) return null;
       return Plan.fromBackendJson(response['plan'] as Map<String, dynamic>);
     } catch (e, stack) {
@@ -132,7 +133,7 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Deleting plan: $planId',
           name: 'PlanningService');
-      final response = await _api.delete('/plans/$planId');
+      final response = await _api.delete('/planning/$planId');
       return response['success'] == true;
     } catch (e, stack) {
       developer.log('[PLANNING] Error deleting plan: $e',
@@ -147,7 +148,7 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Archiving plan: $planId',
           name: 'PlanningService');
-      final response = await _api.post('/plans/$planId/archive', {});
+      final response = await _api.post('/planning/$planId/archive', {});
       if (response['plan'] == null) return null;
       return Plan.fromBackendJson(response['plan'] as Map<String, dynamic>);
     } catch (e, stack) {
@@ -162,7 +163,7 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Unarchiving plan: $planId',
           name: 'PlanningService');
-      final response = await _api.post('/plans/$planId/unarchive', {});
+      final response = await _api.post('/planning/$planId/unarchive', {});
       if (response['plan'] == null) return null;
       return Plan.fromBackendJson(response['plan'] as Map<String, dynamic>);
     } catch (e, stack) {
@@ -178,7 +179,7 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Getting analytics for plan: $planId',
           name: 'PlanningService');
-      final response = await _api.get('/plans/$planId/analytics');
+      final response = await _api.get('/planning/$planId/analytics');
       if (response['analytics'] == null) return null;
       return PlanAnalytics.fromBackendJson(
           response['analytics'] as Map<String, dynamic>);
@@ -212,7 +213,7 @@ class PlanningService {
       queryParams['offset'] = offset.toString();
       final queryString =
           queryParams.entries.map((e) => '${e.key}=${e.value}').join('&');
-      final response = await _api.get('/plans/$planId/tasks?$queryString');
+      final response = await _api.get('/planning/$planId/tasks?$queryString');
       final tasksList = response['tasks'] as List? ?? [];
       developer.log('[PLANNING] Got ${tasksList.length} tasks',
           name: 'PlanningService');
@@ -233,7 +234,7 @@ class PlanningService {
       developer.log('[PLANNING] Getting task: $taskId',
           name: 'PlanningService');
       final query = includeRelations ? '' : '?includeRelations=false';
-      final response = await _api.get('/plans/$planId/tasks/$taskId$query');
+      final response = await _api.get('/planning/$planId/tasks/$taskId$query');
       if (response['task'] == null) return null;
       return PlanTask.fromBackendJson(response['task'] as Map<String, dynamic>);
     } catch (e, stack) {
@@ -256,7 +257,7 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Creating task: $title in plan: $planId',
           name: 'PlanningService');
-      final response = await _api.post('/plans/$planId/tasks', {
+      final response = await _api.post('/planning/$planId/tasks', {
         'title': title,
         if (description != null) 'description': description,
         if (parentTaskId != null) 'parentTaskId': parentTaskId,
@@ -295,7 +296,7 @@ class PlanningService {
       if (assignedAgentId != null) body['assignedAgentId'] = assignedAgentId;
       if (timeSpentMinutes != null) body['timeSpentMinutes'] = timeSpentMinutes;
       if (body.isEmpty) throw Exception('No fields to update');
-      final response = await _api.put('/plans/$planId/tasks/$taskId', body);
+      final response = await _api.put('/planning/$planId/tasks/$taskId', body);
       if (response['task'] == null) return null;
       return PlanTask.fromBackendJson(response['task'] as Map<String, dynamic>);
     } catch (e, stack) {
@@ -310,7 +311,7 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Deleting task: $taskId',
           name: 'PlanningService');
-      final response = await _api.delete('/plans/$planId/tasks/$taskId');
+      final response = await _api.delete('/planning/$planId/tasks/$taskId');
       return response['success'] == true;
     } catch (e, stack) {
       developer.log('[PLANNING] Error deleting task: $e',
@@ -329,7 +330,8 @@ class PlanningService {
       developer.log(
           '[PLANNING] Updating task status: $taskId -> ${status.name}',
           name: 'PlanningService');
-      final response = await _api.post('/plans/$planId/tasks/$taskId/status', {
+      final response =
+          await _api.post('/planning/$planId/tasks/$taskId/status', {
         'status': _taskStatusToString(status),
         if (reason != null) 'reason': reason,
       });
@@ -348,7 +350,7 @@ class PlanningService {
       developer.log('[PLANNING] Starting task: $taskId',
           name: 'PlanningService');
       final response =
-          await _api.post('/plans/$planId/tasks/$taskId/start', {});
+          await _api.post('/planning/$planId/tasks/$taskId/start', {});
       if (response['task'] == null) return null;
       return PlanTask.fromBackendJson(response['task'] as Map<String, dynamic>);
     } catch (e, stack) {
@@ -364,7 +366,7 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Pausing task: $taskId',
           name: 'PlanningService');
-      final response = await _api.post('/plans/$planId/tasks/$taskId/pause',
+      final response = await _api.post('/planning/$planId/tasks/$taskId/pause',
           {if (reason != null) 'reason': reason});
       if (response['task'] == null) return null;
       return PlanTask.fromBackendJson(response['task'] as Map<String, dynamic>);
@@ -381,7 +383,7 @@ class PlanningService {
       developer.log('[PLANNING] Resuming task: $taskId',
           name: 'PlanningService');
       final response =
-          await _api.post('/plans/$planId/tasks/$taskId/resume', {});
+          await _api.post('/planning/$planId/tasks/$taskId/resume', {});
       if (response['task'] == null) return null;
       return PlanTask.fromBackendJson(response['task'] as Map<String, dynamic>);
     } catch (e, stack) {
@@ -398,7 +400,7 @@ class PlanningService {
       developer.log('[PLANNING] Blocking task: $taskId',
           name: 'PlanningService');
       final response = await _api
-          .post('/plans/$planId/tasks/$taskId/block', {'reason': reason});
+          .post('/planning/$planId/tasks/$taskId/block', {'reason': reason});
       if (response['task'] == null) return null;
       return PlanTask.fromBackendJson(response['task'] as Map<String, dynamic>);
     } catch (e, stack) {
@@ -414,7 +416,8 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Completing task: $taskId',
           name: 'PlanningService');
-      final response = await _api.post('/plans/$planId/tasks/$taskId/complete',
+      final response = await _api.post(
+          '/planning/$planId/tasks/$taskId/complete',
           {if (summary != null) 'summary': summary});
       final task = response['task'] != null
           ? PlanTask.fromBackendJson(response['task'] as Map<String, dynamic>)
@@ -444,7 +447,8 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Adding output to task: $taskId',
           name: 'PlanningService');
-      final response = await _api.post('/plans/$planId/tasks/$taskId/output', {
+      final response =
+          await _api.post('/planning/$planId/tasks/$taskId/output', {
         'type': type,
         'content': content,
         if (agentSessionId != null) 'agentSessionId': agentSessionId,
@@ -466,7 +470,8 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Getting task history: $taskId',
           name: 'PlanningService');
-      final response = await _api.get('/plans/$planId/tasks/$taskId/history');
+      final response =
+          await _api.get('/planning/$planId/tasks/$taskId/history');
       final historyList = response['history'] as List? ?? [];
       return historyList
           .map((json) =>
@@ -486,7 +491,7 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Getting agents with access to plan: $planId',
           name: 'PlanningService');
-      final response = await _api.get('/plans/$planId/access');
+      final response = await _api.get('/planning/$planId/access');
       final agentsList = response['agents'] as List? ?? [];
       return agentsList
           .map((json) =>
@@ -508,7 +513,7 @@ class PlanningService {
       developer.log(
           '[PLANNING] Granting access to plan: $planId for agent: $agentSessionId',
           name: 'PlanningService');
-      final response = await _api.post('/plans/$planId/access', {
+      final response = await _api.post('/planning/$planId/access', {
         'agentSessionId': agentSessionId,
         if (agentName != null) 'agentName': agentName,
         if (permissions != null) 'permissions': permissions,
@@ -529,7 +534,7 @@ class PlanningService {
           '[PLANNING] Revoking access to plan: $planId for agent: $agentSessionId',
           name: 'PlanningService');
       final response =
-          await _api.delete('/plans/$planId/access/$agentSessionId');
+          await _api.delete('/planning/$planId/access/$agentSessionId');
       return response['success'] == true;
     } catch (e, stack) {
       developer.log('[PLANNING] Error revoking access: $e',
@@ -543,7 +548,7 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Revoking all access to plan: $planId',
           name: 'PlanningService');
-      final response = await _api.delete('/plans/$planId/access');
+      final response = await _api.delete('/planning/$planId/access');
       return response['count'] as int? ?? 0;
     } catch (e, stack) {
       developer.log('[PLANNING] Error revoking all access: $e',
@@ -557,7 +562,7 @@ class PlanningService {
     try {
       developer.log('[PLANNING] Getting access history for plan: $planId',
           name: 'PlanningService');
-      final response = await _api.get('/plans/$planId/access/history');
+      final response = await _api.get('/planning/$planId/access/history');
       final historyList = response['history'] as List? ?? [];
       return historyList
           .map((json) =>
@@ -585,6 +590,120 @@ class PlanningService {
         return 'blocked';
       case TaskStatus.completed:
         return 'completed';
+    }
+  }
+
+  // ==================== REQUIREMENT OPERATIONS ====================
+
+  /// Create a new requirement for a plan.
+  /// Implements Requirement 4.1: Spec-driven structure with requirements.
+  Future<Requirement> createRequirement({
+    required String planId,
+    required String title,
+    String? description,
+    String? earsPattern,
+    List<String>? acceptanceCriteria,
+  }) async {
+    try {
+      developer.log('[PLANNING] Creating requirement: $title in plan: $planId',
+          name: 'PlanningService');
+      final response = await _api.post('/planning/$planId/requirements', {
+        'title': title,
+        if (description != null) 'description': description,
+        if (earsPattern != null) 'earsPattern': earsPattern,
+        if (acceptanceCriteria != null)
+          'acceptanceCriteria': acceptanceCriteria,
+      });
+      developer.log('[PLANNING] Requirement created successfully',
+          name: 'PlanningService');
+      return Requirement.fromBackendJson(
+          response['requirement'] as Map<String, dynamic>);
+    } catch (e, stack) {
+      developer.log('[PLANNING] Error creating requirement: $e',
+          name: 'PlanningService', error: e, stackTrace: stack);
+      rethrow;
+    }
+  }
+
+  /// Create multiple requirements at once (batch).
+  Future<List<Requirement>> createRequirementsBatch({
+    required String planId,
+    required List<Map<String, dynamic>> requirements,
+  }) async {
+    try {
+      developer.log(
+          '[PLANNING] Creating ${requirements.length} requirements in plan: $planId',
+          name: 'PlanningService');
+      final response = await _api.post('/planning/$planId/requirements/batch', {
+        'requirements': requirements,
+      });
+      developer.log('[PLANNING] Requirements batch created successfully',
+          name: 'PlanningService');
+      final reqList = response['requirements'] as List? ?? [];
+      return reqList
+          .map((json) =>
+              Requirement.fromBackendJson(json as Map<String, dynamic>))
+          .toList();
+    } catch (e, stack) {
+      developer.log('[PLANNING] Error creating requirements batch: $e',
+          name: 'PlanningService', error: e, stackTrace: stack);
+      rethrow;
+    }
+  }
+
+  /// Delete a requirement.
+  Future<bool> deleteRequirement(String planId, String requirementId) async {
+    try {
+      developer.log('[PLANNING] Deleting requirement: $requirementId',
+          name: 'PlanningService');
+      final response =
+          await _api.delete('/planning/$planId/requirements/$requirementId');
+      return response['success'] == true;
+    } catch (e, stack) {
+      developer.log('[PLANNING] Error deleting requirement: $e',
+          name: 'PlanningService', error: e, stackTrace: stack);
+      rethrow;
+    }
+  }
+
+  // ==================== DESIGN NOTE OPERATIONS ====================
+
+  /// Create a new design note for a plan.
+  Future<DesignNote> createDesignNote({
+    required String planId,
+    required String content,
+    List<String>? requirementIds,
+  }) async {
+    try {
+      developer.log('[PLANNING] Creating design note in plan: $planId',
+          name: 'PlanningService');
+      final response = await _api.post('/planning/$planId/design-notes', {
+        'content': content,
+        if (requirementIds != null) 'requirementIds': requirementIds,
+      });
+      developer.log('[PLANNING] Design note created successfully',
+          name: 'PlanningService');
+      return DesignNote.fromBackendJson(
+          response['designNote'] as Map<String, dynamic>);
+    } catch (e, stack) {
+      developer.log('[PLANNING] Error creating design note: $e',
+          name: 'PlanningService', error: e, stackTrace: stack);
+      rethrow;
+    }
+  }
+
+  /// Delete a design note.
+  Future<bool> deleteDesignNote(String planId, String noteId) async {
+    try {
+      developer.log('[PLANNING] Deleting design note: $noteId',
+          name: 'PlanningService');
+      final response =
+          await _api.delete('/planning/$planId/design-notes/$noteId');
+      return response['success'] == true;
+    } catch (e, stack) {
+      developer.log('[PLANNING] Error deleting design note: $e',
+          name: 'PlanningService', error: e, stackTrace: stack);
+      rethrow;
     }
   }
 }

@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../theme/app_theme.dart';
 import '../../../core/ai/ai_provider.dart';
 import '../../subscription/services/credit_manager.dart';
+import '../models/plan_task.dart';
 import '../planning_provider.dart';
 
 /// Planning AI chat screen for brainstorming and generating requirements/tasks.
@@ -511,26 +512,250 @@ Generate tasks that will fully implement all requirements.''';
   }
 
   Future<void> _addGeneratedContentToPlan(_ActionType type) async {
-    // For now, show a success message
-    // In a full implementation, we would parse the AI response and create actual requirements/tasks
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          type == _ActionType.requirements
-              ? 'Requirements added to plan'
-              : 'Tasks added to plan',
-        ),
-        action: SnackBarAction(
-          label: 'View Plan',
-          onPressed: () {
-            final planId = ref.read(planningProvider).currentPlan?.id;
-            if (planId != null) {
-              Navigator.of(context).pop();
-            }
-          },
-        ),
+    final planState = ref.read(planningProvider);
+    final currentPlan = planState.currentPlan;
+
+    if (currentPlan == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No plan selected')),
+      );
+      return;
+    }
+
+    // Find the last AI message with generated content
+    final lastGeneratedMessage = _messages.reversed.firstWhere(
+      (m) => !m.isUser && m.hasActions && m.actionType == type,
+      orElse: () => _PlanningMessage(
+        text: '',
+        isUser: false,
+        timestamp: DateTime.now(),
       ),
     );
+
+    if (lastGeneratedMessage.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No generated content found')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      if (type == _ActionType.requirements) {
+        // Parse and add requirements
+        final requirements =
+            _parseRequirementsFromMarkdown(lastGeneratedMessage.text);
+        if (requirements.isEmpty) {
+          throw Exception('Could not parse any requirements from the response');
+        }
+
+        final planningNotifier = ref.read(planningProvider.notifier);
+        for (final req in requirements) {
+          await planningNotifier.createRequirement(
+            title: req['title'] as String,
+            description: req['description'] as String?,
+            earsPattern: req['earsPattern'] as String?,
+            acceptanceCriteria:
+                (req['acceptanceCriteria'] as List<String>?) ?? [],
+          );
+        }
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added ${requirements.length} requirements to plan'),
+            action: SnackBarAction(
+              label: 'View Plan',
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+        );
+      } else {
+        // Parse and add tasks
+        final tasks = _parseTasksFromMarkdown(lastGeneratedMessage.text);
+        if (tasks.isEmpty) {
+          throw Exception('Could not parse any tasks from the response');
+        }
+
+        final planningNotifier = ref.read(planningProvider.notifier);
+        for (final task in tasks) {
+          await planningNotifier.createTask(
+            title: task['title'] as String,
+            description: task['description'] as String?,
+            priority: _parsePriority(task['priority'] as String?),
+          );
+        }
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added ${tasks.length} tasks to plan'),
+            action: SnackBarAction(
+              label: 'View Plan',
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+        );
+      }
+
+      // Reload the plan to show updated content
+      await ref.read(planningProvider.notifier).loadPlan(currentPlan.id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  /// Parse requirements from AI-generated markdown
+  List<Map<String, dynamic>> _parseRequirementsFromMarkdown(String markdown) {
+    final requirements = <Map<String, dynamic>>[];
+
+    // Pattern to match requirement blocks
+    // ### Requirement [N]: [Title]
+    final reqPattern = RegExp(
+      r'###\s*Requirement\s*\[?\d+\]?:?\s*(.+?)(?=\n)',
+      caseSensitive: false,
+    );
+
+    // Find all requirement headers
+    final matches = reqPattern.allMatches(markdown);
+
+    for (final match in matches) {
+      final title = match.group(1)?.trim() ?? '';
+      if (title.isEmpty) continue;
+
+      // Get the content after this header until the next header or end
+      final startIndex = match.end;
+      final nextMatch =
+          reqPattern.allMatches(markdown.substring(startIndex)).firstOrNull;
+      final endIndex =
+          nextMatch != null ? startIndex + nextMatch.start : markdown.length;
+      final content = markdown.substring(startIndex, endIndex);
+
+      // Extract description (User Story or general description)
+      String? description;
+      final userStoryMatch =
+          RegExp(r'\*\*User Story:\*\*\s*(.+?)(?=\n\*\*|\n###|$)', dotAll: true)
+              .firstMatch(content);
+      if (userStoryMatch != null) {
+        description = userStoryMatch.group(1)?.trim();
+      }
+
+      // Extract EARS pattern
+      String? earsPattern;
+      final patternMatch =
+          RegExp(r'\*\*EARS Pattern:\*\*\s*(\w+)', caseSensitive: false)
+              .firstMatch(content);
+      if (patternMatch != null) {
+        final pattern = patternMatch.group(1)?.toLowerCase();
+        if (['ubiquitous', 'event', 'state', 'unwanted', 'optional', 'complex']
+            .contains(pattern)) {
+          earsPattern = pattern;
+        }
+      }
+
+      // Extract acceptance criteria
+      final acceptanceCriteria = <String>[];
+      final criteriaMatch = RegExp(
+              r'\*\*Acceptance Criteria:\*\*(.+?)(?=\n###|\n\*\*[A-Z]|$)',
+              dotAll: true)
+          .firstMatch(content);
+      if (criteriaMatch != null) {
+        final criteriaText = criteriaMatch.group(1) ?? '';
+        final criteriaLines = RegExp(r'^\s*\d+\.\s*(.+)$', multiLine: true)
+            .allMatches(criteriaText);
+        for (final line in criteriaLines) {
+          final criterion = line.group(1)?.trim();
+          if (criterion != null && criterion.isNotEmpty) {
+            acceptanceCriteria.add(criterion);
+          }
+        }
+      }
+
+      requirements.add({
+        'title': title,
+        'description': description,
+        'earsPattern': earsPattern,
+        'acceptanceCriteria': acceptanceCriteria,
+      });
+    }
+
+    return requirements;
+  }
+
+  /// Parse tasks from AI-generated markdown
+  List<Map<String, dynamic>> _parseTasksFromMarkdown(String markdown) {
+    final tasks = <Map<String, dynamic>>[];
+
+    // Pattern to match task blocks
+    // ### Task [N]: [Title]
+    final taskPattern = RegExp(
+      r'###\s*Task\s*\[?\d+\]?:?\s*(.+?)(?=\n)',
+      caseSensitive: false,
+    );
+
+    // Find all task headers
+    final matches = taskPattern.allMatches(markdown);
+
+    for (final match in matches) {
+      final title = match.group(1)?.trim() ?? '';
+      if (title.isEmpty) continue;
+
+      // Get the content after this header until the next header or end
+      final startIndex = match.end;
+      final nextMatch =
+          taskPattern.allMatches(markdown.substring(startIndex)).firstOrNull;
+      final endIndex =
+          nextMatch != null ? startIndex + nextMatch.start : markdown.length;
+      final content = markdown.substring(startIndex, endIndex);
+
+      // Extract description
+      String? description;
+      final descMatch = RegExp(
+              r'\*\*Description:\*\*\s*(.+?)(?=\n\*\*|\n###|$)',
+              dotAll: true)
+          .firstMatch(content);
+      if (descMatch != null) {
+        description = descMatch.group(1)?.trim();
+      }
+
+      // Extract priority
+      String? priority;
+      final priorityMatch =
+          RegExp(r'\*\*Priority:\*\*\s*(\w+)', caseSensitive: false)
+              .firstMatch(content);
+      if (priorityMatch != null) {
+        priority = priorityMatch.group(1)?.toLowerCase();
+      }
+
+      tasks.add({
+        'title': title,
+        'description': description,
+        'priority': priority,
+      });
+    }
+
+    return tasks;
+  }
+
+  TaskPriority _parsePriority(String? priority) {
+    switch (priority?.toLowerCase()) {
+      case 'low':
+        return TaskPriority.low;
+      case 'high':
+        return TaskPriority.high;
+      case 'critical':
+        return TaskPriority.critical;
+      default:
+        return TaskPriority.medium;
+    }
   }
 
   @override

@@ -28,11 +28,16 @@ class DesignNote with _$DesignNote {
       _$DesignNoteFromJson(json);
 
   factory DesignNote.fromBackendJson(Map<String, dynamic> json) => DesignNote(
-        id: json['id'],
-        planId: json['plan_id'],
-        requirementIds: List<String>.from(json['requirement_ids'] ?? []),
-        content: json['content'] ?? '',
-        createdAt: DateTime.parse(json['created_at']),
+        id: json['id'] as String? ?? '',
+        planId: (json['planId'] ?? json['plan_id']) as String? ?? '',
+        requirementIds: List<String>.from(
+            json['requirementIds'] ?? json['requirement_ids'] ?? []),
+        content: json['content'] as String? ?? '',
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'] as String)
+            : json['created_at'] != null
+                ? DateTime.parse(json['created_at'] as String)
+                : DateTime.now(),
       );
 }
 
@@ -53,15 +58,23 @@ class AgentAccess with _$AgentAccess {
       _$AgentAccessFromJson(json);
 
   factory AgentAccess.fromBackendJson(Map<String, dynamic> json) => AgentAccess(
-        id: json['id'],
-        planId: json['plan_id'],
-        agentSessionId: json['agent_session_id'],
-        agentName: json['agent_name'],
+        id: json['id'] as String? ?? '',
+        planId: (json['planId'] ?? json['plan_id']) as String? ?? '',
+        agentSessionId:
+            (json['agentSessionId'] ?? json['agent_session_id']) as String? ??
+                '',
+        agentName: (json['agentName'] ?? json['agent_name']) as String?,
         permissions: List<String>.from(json['permissions'] ?? ['read']),
-        grantedAt: DateTime.parse(json['granted_at']),
-        revokedAt: json['revoked_at'] != null
-            ? DateTime.parse(json['revoked_at'])
-            : null,
+        grantedAt: json['grantedAt'] != null
+            ? DateTime.parse(json['grantedAt'] as String)
+            : json['granted_at'] != null
+                ? DateTime.parse(json['granted_at'] as String)
+                : DateTime.now(),
+        revokedAt: json['revokedAt'] != null
+            ? DateTime.parse(json['revokedAt'] as String)
+            : json['revoked_at'] != null
+                ? DateTime.parse(json['revoked_at'] as String)
+                : null,
       );
 }
 
@@ -95,31 +108,58 @@ class Plan with _$Plan {
 
   factory Plan.fromJson(Map<String, dynamic> json) => _$PlanFromJson(json);
 
-  factory Plan.fromBackendJson(Map<String, dynamic> json) => Plan(
-        id: json['id'],
-        userId: json['user_id'],
-        title: json['title'],
-        description: json['description'] ?? '',
-        status: _parseStatus(json['status']),
-        requirements: (json['requirements'] as List? ?? [])
-            .map((r) => Requirement.fromBackendJson(r as Map<String, dynamic>))
-            .toList(),
-        designNotes: (json['design_notes'] as List? ?? [])
-            .map((d) => DesignNote.fromBackendJson(d as Map<String, dynamic>))
-            .toList(),
-        tasks: (json['tasks'] as List? ?? [])
-            .map((t) => PlanTask.fromBackendJson(t as Map<String, dynamic>))
-            .toList(),
-        isPrivate: json['is_private'] ?? true,
-        sharedAgents: (json['shared_agents'] as List? ?? [])
-            .map((a) => AgentAccess.fromBackendJson(a as Map<String, dynamic>))
-            .toList(),
-        createdAt: DateTime.parse(json['created_at']),
-        updatedAt: DateTime.parse(json['updated_at']),
-        completedAt: json['completed_at'] != null
-            ? DateTime.parse(json['completed_at'])
-            : null,
-      );
+  factory Plan.fromBackendJson(Map<String, dynamic> json) {
+    final requirementsList = json['requirements'] as List?;
+    final designNotesList = json['designNotes'] ?? json['design_notes'];
+    final tasksList = json['tasks'] as List?;
+    final sharedAgentsList = json['sharedAgents'] ?? json['shared_agents'];
+
+    return Plan(
+      id: json['id'] as String? ?? '',
+      userId: (json['userId'] ?? json['user_id']) as String? ?? '',
+      title: json['title'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      status: _parseStatus(json['status'] as String?),
+      requirements: requirementsList != null
+          ? requirementsList
+              .map(
+                  (r) => Requirement.fromBackendJson(r as Map<String, dynamic>))
+              .toList()
+          : <Requirement>[],
+      designNotes: designNotesList != null && designNotesList is List
+          ? designNotesList
+              .map((d) => DesignNote.fromBackendJson(d as Map<String, dynamic>))
+              .toList()
+          : <DesignNote>[],
+      tasks: tasksList != null
+          ? tasksList
+              .map((t) => PlanTask.fromBackendJson(t as Map<String, dynamic>))
+              .toList()
+          : <PlanTask>[],
+      isPrivate: (json['isPrivate'] ?? json['is_private']) as bool? ?? true,
+      sharedAgents: sharedAgentsList != null && sharedAgentsList is List
+          ? sharedAgentsList
+              .map(
+                  (a) => AgentAccess.fromBackendJson(a as Map<String, dynamic>))
+              .toList()
+          : <AgentAccess>[],
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String)
+          : json['created_at'] != null
+              ? DateTime.parse(json['created_at'] as String)
+              : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'] as String)
+          : json['updated_at'] != null
+              ? DateTime.parse(json['updated_at'] as String)
+              : DateTime.now(),
+      completedAt: json['completedAt'] != null
+          ? DateTime.parse(json['completedAt'] as String)
+          : json['completed_at'] != null
+              ? DateTime.parse(json['completed_at'] as String)
+              : null,
+    );
+  }
 
   /// Convert to backend JSON format
   Map<String, dynamic> toBackendJson() => {
