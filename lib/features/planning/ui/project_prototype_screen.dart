@@ -12,6 +12,25 @@ import '../../../core/ai/ai_provider.dart';
 import '../../subscription/services/credit_manager.dart';
 import '../planning_provider.dart';
 
+/// Device frame definitions for mobile preview
+enum DeviceFrame {
+  responsive('Responsive', null, null, LucideIcons.monitor),
+  iphone14('iPhone 14', 390, 844, LucideIcons.smartphone),
+  iphone14Pro('iPhone 14 Pro', 393, 852, LucideIcons.smartphone),
+  iphoneSE('iPhone SE', 375, 667, LucideIcons.smartphone),
+  pixel7('Pixel 7', 412, 915, LucideIcons.smartphone),
+  galaxyS23('Galaxy S23', 360, 780, LucideIcons.smartphone),
+  ipadMini('iPad Mini', 744, 1133, LucideIcons.tablet),
+  ipadPro('iPad Pro 11"', 834, 1194, LucideIcons.tablet);
+
+  final String name;
+  final double? width;
+  final double? height;
+  final IconData icon;
+
+  const DeviceFrame(this.name, this.width, this.height, this.icon);
+}
+
 /// Project Prototype Generator Screen
 /// Auto-generates all screens for a project with navigation, interactive WebView preview
 class ProjectPrototypeScreen extends ConsumerStatefulWidget {
@@ -66,11 +85,14 @@ class _ProjectPrototypeScreenState
   bool _isGenerating = false;
   bool _isCapturing = false;
   bool _isSaving = false;
+  bool _webViewReady = false;
   String _selectedStyle = 'modern';
   String _selectedColorScheme = 'purple';
   String _currentScreen = 'home';
   double _generationProgress = 0;
   String _generationStatus = '';
+  DeviceFrame _selectedDevice = DeviceFrame.iphone14;
+  bool _isLandscape = false;
 
   // Screen definitions
   List<_ScreenDefinition> _screens = [];
@@ -104,9 +126,14 @@ class _ProjectPrototypeScreenState
   void _initWebView() {
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.white)
+      ..setBackgroundColor(const Color(0xFFFFFFFF))
       ..setNavigationDelegate(
         NavigationDelegate(
+          onPageFinished: (url) {
+            if (mounted) {
+              setState(() => _webViewReady = true);
+            }
+          },
           onNavigationRequest: (request) {
             // Handle internal navigation
             if (request.url.startsWith('app://')) {
@@ -645,7 +672,106 @@ class _ProjectPrototypeScreenState
     ).animate().fadeIn();
   }
 
+  Widget _buildDeviceSelector(ColorScheme scheme, TextTheme text) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(LucideIcons.smartphone, color: scheme.primary, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Device Preview',
+                  style: text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                // Orientation toggle
+                if (_selectedDevice != DeviceFrame.responsive)
+                  IconButton(
+                    onPressed: () =>
+                        setState(() => _isLandscape = !_isLandscape),
+                    icon: Icon(
+                      _isLandscape
+                          ? LucideIcons.smartphone
+                          : LucideIcons.tablet,
+                      size: 18,
+                    ),
+                    tooltip: _isLandscape ? 'Portrait' : 'Landscape',
+                    style: IconButton.styleFrom(
+                      backgroundColor:
+                          scheme.primaryContainer.withValues(alpha: 0.5),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 36,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: DeviceFrame.values.length,
+                itemBuilder: (context, index) {
+                  final device = DeviceFrame.values[index];
+                  final isSelected = device == _selectedDevice;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      avatar: Icon(device.icon, size: 14),
+                      label: Text(device.name,
+                          style: const TextStyle(fontSize: 11)),
+                      selected: isSelected,
+                      onSelected: (_) =>
+                          setState(() => _selectedDevice = device),
+                      selectedColor: scheme.primary,
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : scheme.onSurface,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPreviewSection(ColorScheme scheme, TextTheme text) {
+    // Calculate device dimensions
+    double? deviceWidth = _selectedDevice.width;
+    double? deviceHeight = _selectedDevice.height;
+
+    if (_isLandscape && deviceWidth != null && deviceHeight != null) {
+      final temp = deviceWidth;
+      deviceWidth = deviceHeight;
+      deviceHeight = temp;
+    }
+
+    // Scale to fit screen
+    final screenWidth = MediaQuery.of(context).size.width - 32;
+    double scale = 1.0;
+    double previewWidth = screenWidth;
+    double previewHeight = 600;
+
+    if (deviceWidth != null && deviceHeight != null) {
+      // Calculate scale to fit
+      final widthScale =
+          (screenWidth - 40) / deviceWidth; // 40 for device frame padding
+      final heightScale = 600 / deviceHeight;
+      scale = widthScale < heightScale ? widthScale : heightScale;
+      if (scale > 1) scale = 1; // Don't scale up
+
+      previewWidth = deviceWidth * scale + 40;
+      previewHeight =
+          deviceHeight * scale + 80; // Extra for notch/home indicator
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -661,7 +787,9 @@ class _ProjectPrototypeScreenState
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.1),
+                color: _webViewReady
+                    ? Colors.green.withValues(alpha: 0.1)
+                    : Colors.orange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -670,16 +798,18 @@ class _ProjectPrototypeScreenState
                   Container(
                     width: 8,
                     height: 8,
-                    decoration: const BoxDecoration(
-                      color: Colors.green,
+                    decoration: BoxDecoration(
+                      color: _webViewReady ? Colors.green : Colors.orange,
                       shape: BoxShape.circle,
                     ),
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Live',
+                    _webViewReady ? 'Live' : 'Loading...',
                     style: TextStyle(
-                      color: Colors.green.shade700,
+                      color: _webViewReady
+                          ? Colors.green.shade700
+                          : Colors.orange.shade700,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -690,27 +820,135 @@ class _ProjectPrototypeScreenState
           ],
         ),
         const SizedBox(height: 12),
-        Screenshot(
-          controller: _screenshotController,
-          child: Container(
-            height: 600,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: scheme.outline.withValues(alpha: 0.2)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: WebViewWidget(controller: _webViewController!),
+        // Device selector
+        _buildDeviceSelector(scheme, text),
+        const SizedBox(height: 12),
+        // Device frame preview
+        Center(
+          child: Screenshot(
+            controller: _screenshotController,
+            child: _selectedDevice == DeviceFrame.responsive
+                ? Container(
+                    height: 600,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: scheme.outline.withValues(alpha: 0.2)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: _buildWebView(),
+                  )
+                : _buildDeviceFrame(scheme, previewWidth, previewHeight,
+                    deviceWidth, deviceHeight, scale),
           ),
         ),
       ],
     ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1);
+  }
+
+  Widget _buildDeviceFrame(
+      ColorScheme scheme,
+      double frameWidth,
+      double frameHeight,
+      double? deviceWidth,
+      double? deviceHeight,
+      double scale) {
+    final isPhone = _selectedDevice.name.contains('iPhone') ||
+        _selectedDevice.name.contains('Pixel') ||
+        _selectedDevice.name.contains('Galaxy');
+
+    return Container(
+      width: frameWidth,
+      height: frameHeight,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(isPhone ? 40 : 20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 30,
+            offset: const Offset(0, 15),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.all(isPhone ? 12 : 8),
+      child: Column(
+        children: [
+          // Notch/Dynamic Island for phones
+          if (isPhone) ...[
+            Container(
+              width: 120,
+              height: 28,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
+          // Screen
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(isPhone ? 28 : 12),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: _buildWebView(),
+            ),
+          ),
+          // Home indicator for phones
+          if (isPhone) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: 134,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebView() {
+    if (_webViewController == null) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    return Stack(
+      children: [
+        WebViewWidget(controller: _webViewController!),
+        if (!_webViewReady)
+          Container(
+            color: Colors.white,
+            child: const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Loading preview...'),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   Widget _buildScreenNavigation(ColorScheme scheme, TextTheme text) {
@@ -1041,10 +1279,16 @@ List 5-10 screens that would make a complete prototype.''';
         .map((s) => '- ${s.name} (id: ${s.id}): ${s.description}')
         .join('\n');
 
-    return '''Generate a COMPLETE, INTERACTIVE HTML prototype with ALL screens and working navigation.
+    // Get device info for mobile-first design
+    final deviceInfo = _selectedDevice != DeviceFrame.responsive
+        ? 'Target Device: ${_selectedDevice.name} (${_selectedDevice.width?.toInt()}x${_selectedDevice.height?.toInt()}px)'
+        : 'Target: Responsive (mobile-first)';
+
+    return '''Generate a COMPLETE, INTERACTIVE MOBILE APP prototype with ALL screens and working navigation.
 
 **Project:** ${plan?.title ?? 'Project'}
 **Description:** ${plan?.description ?? ''}
+**$deviceInfo**
 
 **Screens to Generate:**
 $screensList
@@ -1054,78 +1298,143 @@ $screensList
 **Secondary Color:** ${colors[1]}
 **Accent Color:** ${colors[2]}
 
-**CRITICAL REQUIREMENTS:**
+**CRITICAL REQUIREMENTS - MOBILE APP DESIGN:**
 
-1. **Single HTML File**: Create ONE self-contained HTML file with ALL screens
-2. **Navigation System**: Implement a JavaScript navigation system:
-   - Each screen should be a <div> with id matching the screen id
-   - Only one screen visible at a time
-   - Include a global `navigateTo(screenId)` function
-   - All navigation links should call `navigateTo('screenId')`
-   - Include a persistent navigation bar/menu
+1. **Mobile-First Design**: 
+   - Design for mobile screens (390px width typical)
+   - Use mobile app patterns (bottom nav, floating buttons, swipe gestures)
+   - Touch-friendly tap targets (min 44px)
+   - No horizontal scrolling
 
-3. **Screen Structure**:
+2. **Single HTML File**: Create ONE self-contained HTML file with ALL screens
+
+3. **Mobile Navigation System**:
+   - Bottom navigation bar (fixed at bottom) for main screens
+   - Back buttons in headers for sub-screens
+   - Implement `navigateTo(screenId)` function
+   - Smooth transitions between screens
+
+4. **Screen Structure**:
 ```html
-<div id="home" class="screen active">...</div>
-<div id="login" class="screen">...</div>
-<div id="dashboard" class="screen">...</div>
+<div id="home" class="screen active">
+  <header class="app-header">...</header>
+  <main class="screen-content">...</main>
+</div>
 ```
 
-4. **Navigation JavaScript**:
+5. **Navigation JavaScript**:
 ```javascript
 function navigateTo(screenId) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(screenId)?.classList.add('active');
-  // Update nav active state
-  document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
-  document.querySelector('nav a[data-screen="' + screenId + '"]')?.classList.add('active');
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active');
+    s.style.display = 'none';
+  });
+  const target = document.getElementById(screenId);
+  if (target) {
+    target.classList.add('active');
+    target.style.display = 'flex';
+  }
+  // Update bottom nav
+  document.querySelectorAll('.bottom-nav a').forEach(a => a.classList.remove('active'));
+  document.querySelector('.bottom-nav a[data-screen="' + screenId + '"]')?.classList.add('active');
 }
+// Initialize
+document.addEventListener('DOMContentLoaded', () => navigateTo('${_screens.isNotEmpty ? _screens.first.id : 'home'}'));
 ```
 
-5. **CSS Requirements**:
-   - .screen { display: none; }
-   - .screen.active { display: block; }
-   - Use the specified color scheme
-   - Apply "$_selectedStyle" design style
-   - Make it responsive
-   - Include hover effects and transitions
+6. **CSS Requirements**:
+```css
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { 
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f5f5f5;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+.screen { 
+  display: none; 
+  flex-direction: column;
+  min-height: 100vh;
+  padding-bottom: 70px; /* Space for bottom nav */
+}
+.screen.active { display: flex; }
+.app-header {
+  position: sticky;
+  top: 0;
+  background: ${colors[0]};
+  color: white;
+  padding: 16px;
+  z-index: 100;
+}
+.screen-content {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+  z-index: 1000;
+}
+.bottom-nav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-decoration: none;
+  color: #666;
+  font-size: 12px;
+  padding: 8px 16px;
+}
+.bottom-nav a.active { color: ${colors[0]}; }
+.bottom-nav a span { font-size: 24px; margin-bottom: 4px; }
+```
 
-6. **Content Requirements**:
-   - Each screen must have realistic placeholder content
-   - Include forms, buttons, cards, lists as appropriate
-   - Use emoji icons (📊 📱 ⚙️ 👤 etc.)
-   - Make buttons and links interactive (navigate between screens)
+7. **Mobile UI Components**:
+   - Cards with rounded corners and shadows
+   - List items with chevron indicators
+   - Floating action buttons (FAB)
+   - Pull-to-refresh indicators (visual only)
+   - Status bar safe area padding
+   - Touch ripple effects on buttons
 
-7. **Navigation Bar**:
-   - Persistent top or side navigation
-   - Links to all main screens
-   - Active state indicator
-   - Mobile-friendly
+8. **Content Requirements**:
+   - Realistic mobile app content
+   - Profile avatars, stats cards, list views
+   - Use emoji icons (📊 📱 ⚙️ 👤 🏠 🔔 etc.)
+   - Form inputs with mobile keyboard hints
 
-**Style Guidelines for "$_selectedStyle":**
+**Style Guidelines for "$_selectedStyle" (Mobile):**
 ${_getStyleGuidelines()}
 
 **Output Format:**
 Return ONLY the complete HTML starting with <!DOCTYPE html> and ending with </html>.
+Include viewport meta tag: <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 NO markdown code blocks. NO explanations. JUST the HTML.''';
   }
 
   String _getStyleGuidelines() {
     switch (_selectedStyle) {
       case 'modern':
-        return 'Clean lines, subtle shadows, rounded corners (12-16px), whitespace, Inter/system fonts, card-based layouts';
+        return 'Clean iOS/Material hybrid, subtle shadows, rounded corners (12-16px), card-based layouts, system fonts';
       case 'minimal':
-        return 'Maximum whitespace, simple typography, monochrome with single accent, no decorations, thin borders';
+        return 'Maximum whitespace, simple typography, monochrome with single accent, thin separators';
       case 'glassmorphism':
-        return 'Frosted glass effect (backdrop-filter: blur), transparency, light borders, gradient backgrounds';
+        return 'Frosted glass cards (backdrop-filter: blur(20px)), transparency, gradient backgrounds';
       case 'dark':
-        return 'Dark backgrounds (#1a1a2e, #16213e), neon accents, high contrast text, glowing effects';
+        return 'Dark backgrounds (#1a1a2e, #0f0f23), neon accents, OLED-friendly blacks, glowing effects';
       case 'gradient':
-        return 'Bold gradients, vibrant colors, dynamic backgrounds, gradient buttons and cards';
+        return 'Bold gradient headers, vibrant accent colors, gradient buttons and cards';
       case 'corporate':
-        return 'Professional, trustworthy blues/grays, structured grid layout, clear hierarchy';
+        return 'Professional blues/grays, structured layouts, clear hierarchy, trustworthy feel';
       default:
-        return 'Modern, clean design with good contrast and usability';
+        return 'Modern mobile app design with good contrast and touch-friendly elements';
     }
   }
 
