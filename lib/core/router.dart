@@ -56,6 +56,7 @@ import '../features/github/github_repos_screen.dart';
 import '../features/planning/ui/plans_list_screen.dart';
 import '../features/planning/ui/plan_detail_screen.dart';
 import '../features/planning/ui/planning_ai_screen.dart';
+import '../features/planning/ui/ui_design_generator_screen.dart';
 
 String getInitialLocation(bool hasSeenOnboarding) {
   return hasSeenOnboarding ? '/home' : '/onboarding';
@@ -397,6 +398,16 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
               final planId = state.pathParameters['id'];
               return buildTransitionPage(
                 child: PlanningAIScreen(planId: planId),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/planning/:id/ui-designer',
+            name: 'ui-designer',
+            pageBuilder: (context, state) {
+              final planId = state.pathParameters['id']!;
+              return buildTransitionPage(
+                child: UIDesignGeneratorScreen(planId: planId),
               );
             },
           ),

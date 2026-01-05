@@ -329,6 +329,15 @@ class _PlanDetailScreenState extends ConsumerState<PlanDetailScreen>
           ? Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // UI Designer FAB
+                FloatingActionButton(
+                  heroTag: 'ui_designer',
+                  onPressed: () => context.push('/planning/${plan.id}/ui-designer'),
+                  backgroundColor: scheme.tertiaryContainer,
+                  foregroundColor: scheme.onTertiaryContainer,
+                  child: const Icon(LucideIcons.palette),
+                ).animate().scale(delay: 100.ms),
+                const SizedBox(height: 12),
                 // AI Assistant FAB
                 FloatingActionButton(
                   heroTag: 'planning_ai',

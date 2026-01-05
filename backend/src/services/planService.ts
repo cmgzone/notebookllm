@@ -621,8 +621,17 @@ class PlanService {
 
   /**
    * Get design notes for a plan.
+   * Public method for API access with user verification.
    */
-  private async getDesignNotes(planId: string): Promise<DesignNote[]> {
+  async getDesignNotes(planId: string, userId?: string): Promise<DesignNote[]> {
+    // If userId provided, verify access
+    if (userId) {
+      const plan = await this.getPlan(planId, userId, false);
+      if (!plan) {
+        throw new Error('Plan not found');
+      }
+    }
+    
     const result = await pool.query(
       `SELECT * FROM plan_design_notes WHERE plan_id = $1 ORDER BY created_at`,
       [planId]

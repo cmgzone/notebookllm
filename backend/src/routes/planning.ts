@@ -969,6 +969,49 @@ router.delete('/:id/requirements/:requirementId', async (req: AuthRequest, res: 
 // ==================== DESIGN NOTE ROUTES ====================
 
 /**
+ * GET /plans/:id/design-notes
+ * Get all design notes for a plan.
+ * 
+ * Query params:
+ * - filterUiDesigns: If 'true', only return UI design notes (containing HTML)
+ */
+router.get('/:id/design-notes', async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const filterUiDesigns = req.query.filterUiDesigns === 'true';
+
+        const designNotes = await planService.getDesignNotes(id, req.userId!);
+
+        let filteredNotes = designNotes;
+        if (filterUiDesigns) {
+            filteredNotes = designNotes.filter((note: any) => 
+                note.content && (
+                    note.content.includes('```html') || 
+                    note.content.includes('## UI Design:') ||
+                    note.content.includes('<!DOCTYPE html') ||
+                    note.content.includes('<html')
+                )
+            );
+        }
+
+        res.json({ 
+            success: true, 
+            designNotes: filteredNotes,
+            count: filteredNotes.length,
+            filteredForUiDesigns: filterUiDesigns,
+        });
+    } catch (error: any) {
+        console.error('Get design notes error:', error);
+        
+        if (error.message === 'Plan not found') {
+            return res.status(404).json({ error: error.message });
+        }
+        
+        res.status(500).json({ error: 'Failed to get design notes', message: error.message });
+    }
+});
+
+/**
  * POST /plans/:id/design-notes
  * Create a new design note for a plan.
  * 
