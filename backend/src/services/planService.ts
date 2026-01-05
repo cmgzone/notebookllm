@@ -461,11 +461,12 @@ class PlanService {
     const sortOrder = sortResult.rows[0].next_order;
 
     const id = uuidv4();
+    const acceptanceCriteriaJson = JSON.stringify(input.acceptanceCriteria || []);
     const result = await pool.query(
       `INSERT INTO plan_requirements (id, plan_id, title, description, ears_pattern, acceptance_criteria, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
        RETURNING *`,
-      [id, planId, input.title, input.description || null, input.earsPattern || null, input.acceptanceCriteria || [], sortOrder]
+      [id, planId, input.title, input.description || null, input.earsPattern || null, acceptanceCriteriaJson, sortOrder]
     );
 
     return this.mapRowToRequirement(result.rows[0]);
@@ -504,11 +505,12 @@ class PlanService {
 
     for (const req of requirements) {
       const id = uuidv4();
+      const acceptanceCriteriaJson = JSON.stringify(req.acceptanceCriteria || []);
       const result = await pool.query(
         `INSERT INTO plan_requirements (id, plan_id, title, description, ears_pattern, acceptance_criteria, sort_order)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
          RETURNING *`,
-        [id, planId, req.title, req.description || null, req.earsPattern || null, req.acceptanceCriteria || [], sortOrder++]
+        [id, planId, req.title, req.description || null, req.earsPattern || null, acceptanceCriteriaJson, sortOrder++]
       );
       createdRequirements.push(this.mapRowToRequirement(result.rows[0]));
     }
@@ -563,11 +565,12 @@ class PlanService {
     }
 
     const id = uuidv4();
+    const requirementIdsJson = JSON.stringify(input.requirementIds || []);
     const result = await pool.query(
       `INSERT INTO plan_design_notes (id, plan_id, requirement_ids, content)
-       VALUES ($1, $2, $3, $4)
+       VALUES ($1, $2, $3::jsonb, $4)
        RETURNING *`,
-      [id, planId, input.requirementIds || [], input.content]
+      [id, planId, requirementIdsJson, input.content]
     );
 
     return this.mapRowToDesignNote(result.rows[0]);
