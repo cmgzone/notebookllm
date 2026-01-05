@@ -923,8 +923,8 @@ ${_selectedRequirements.map((r) => '- ${r.title}').join('\n')}
       }
 
       // Create design note content with HTML and screenshot reference
-      final codeBlockStart = '```html';
-      final codeBlockEnd = '```';
+      const codeBlockStart = '```html';
+      const codeBlockEnd = '```';
       final designContent = '''## 🎨 UI Design: ${_promptController.text}
 
 **Type:** UI Design (HTML/CSS)
