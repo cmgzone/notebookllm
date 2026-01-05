@@ -169,6 +169,9 @@ ${currentPlan.tasks.map((t) => '- ${t.title} [${t.status.name}]').join('\n')}
       case _PlanningMode.requirements:
         systemPrompt = _getRequirementsPrompt(planContext);
         break;
+      case _PlanningMode.design:
+        systemPrompt = _getDesignPrompt(planContext);
+        break;
       case _PlanningMode.tasks:
         systemPrompt = _getTasksPrompt(planContext);
         break;
@@ -284,6 +287,37 @@ When generating tasks, use this format:
 - [ ] Sub-task 2
 
 Ask if the user wants to add these tasks to their plan.''';
+  }
+
+  String _getDesignPrompt(String planContext) {
+    return '''You are a Planning AI assistant helping users create design notes and architectural decisions.
+
+**Your Role:**
+- Help document design decisions and architectural choices
+- Create technical notes that explain HOW requirements will be implemented
+- Document trade-offs, alternatives considered, and rationale
+- Link design decisions to specific requirements
+
+**Context:**
+$planContext
+
+**Guidelines:**
+- Focus on technical implementation details
+- Document architectural patterns and approaches
+- Explain the reasoning behind design choices
+- Consider scalability, maintainability, and performance
+- Reference which requirements each design note addresses
+
+**Response Format:**
+When generating design notes, use this format:
+
+### Design Note [N]: [Title]
+**Content:** [Technical description of the design decision]
+**Rationale:** [Why this approach was chosen]
+**Requirements:** [Which requirements this addresses]
+**Alternatives Considered:** [Other options that were evaluated]
+
+Ask if the user wants to add these design notes to their plan.''';
   }
 
   /// Generate requirements from the conversation (Requirements 2.2)
@@ -438,6 +472,90 @@ Generate tasks that will fully implement all requirements.''';
     }
   }
 
+  /// Generate design notes from requirements
+  Future<void> _generateDesignNotes() async {
+    if (_isLoading) return;
+
+    final hasCredits = await ref.tryUseCredits(
+      context: context,
+      amount: CreditCosts.chatMessage * 2,
+      feature: 'planning_generate_design_notes',
+    );
+    if (!hasCredits) return;
+
+    final planState = ref.read(planningProvider);
+    final currentPlan = planState.currentPlan;
+
+    if (currentPlan == null || currentPlan.requirements.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Please add requirements first before generating design notes'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final requirementsList = currentPlan.requirements
+          .map((r) =>
+              '${r.title}: ${r.description}\nAcceptance Criteria: ${r.acceptanceCriteria.join(", ")}')
+          .join('\n\n');
+
+      final prompt =
+          '''Generate design notes and architectural decisions for these requirements:
+
+**Requirements:**
+$requirementsList
+
+**Instructions:**
+1. Create design notes that explain HOW each requirement will be implemented
+2. Document architectural decisions and patterns
+3. Explain trade-offs and rationale
+4. Consider technical constraints and best practices
+
+Generate design notes that provide clear technical guidance for implementation.''';
+
+      final aiNotifier = ref.read(aiProvider.notifier);
+      await aiNotifier.generateContent(
+        prompt,
+        style: ChatStyle.standard,
+      );
+
+      final aiState = ref.read(aiProvider);
+      if (aiState.error != null) {
+        throw Exception(aiState.error);
+      }
+
+      final response = aiState.lastResponse ?? '';
+
+      setState(() {
+        _messages.add(_PlanningMessage(
+          text: '📐 **Generated Design Notes:**\n\n$response',
+          isUser: false,
+          timestamp: DateTime.now(),
+          hasActions: true,
+          actionType: _ActionType.designNotes,
+        ));
+        _isLoading = false;
+      });
+      _scrollToBottom();
+    } catch (e) {
+      setState(() {
+        _messages.add(_PlanningMessage(
+          text: '❌ Failed to generate design notes: ${e.toString()}',
+          isUser: false,
+          timestamp: DateTime.now(),
+          isError: true,
+        ));
+        _isLoading = false;
+      });
+    }
+  }
+
   /// Show dialog to add generated content to plan (Requirements 2.4)
   void _showAddToplanDialog(_ActionType type) {
     final planState = ref.read(planningProvider);
@@ -448,25 +566,38 @@ Generate tasks that will fully implement all requirements.''';
       return;
     }
 
+    String typeLabel;
+    IconData typeIcon;
+    switch (type) {
+      case _ActionType.requirements:
+        typeLabel = 'requirements';
+        typeIcon = LucideIcons.fileText;
+        break;
+      case _ActionType.tasks:
+        typeLabel = 'tasks';
+        typeIcon = LucideIcons.listChecks;
+        break;
+      case _ActionType.designNotes:
+        typeLabel = 'design notes';
+        typeIcon = LucideIcons.penTool;
+        break;
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Row(
           children: [
             Icon(
-              type == _ActionType.requirements
-                  ? LucideIcons.fileText
-                  : LucideIcons.listChecks,
+              typeIcon,
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(width: 12),
-            Text(type == _ActionType.requirements
-                ? 'Add Requirements'
-                : 'Add Tasks'),
+            Text('Add ${typeLabel[0].toUpperCase()}${typeLabel.substring(1)}'),
           ],
         ),
         content: Text(
-          'Add the generated ${type == _ActionType.requirements ? 'requirements' : 'tasks'} '
+          'Add the generated $typeLabel '
           'to "${currentPlan.title}"?\n\n'
           'You can edit them later from the plan detail screen.',
         ),
@@ -542,6 +673,8 @@ Generate tasks that will fully implement all requirements.''';
     setState(() => _isLoading = true);
 
     try {
+      final planningNotifier = ref.read(planningProvider.notifier);
+
       if (type == _ActionType.requirements) {
         // Parse and add requirements
         final requirements =
@@ -550,14 +683,17 @@ Generate tasks that will fully implement all requirements.''';
           throw Exception('Could not parse any requirements from the response');
         }
 
-        final planningNotifier = ref.read(planningProvider.notifier);
-        for (final req in requirements) {
+        // Add all requirements without reloading after each one
+        for (int i = 0; i < requirements.length; i++) {
+          final req = requirements[i];
+          final isLast = i == requirements.length - 1;
           await planningNotifier.createRequirement(
             title: req['title'] as String,
             description: req['description'] as String?,
             earsPattern: req['earsPattern'] as String?,
             acceptanceCriteria:
                 (req['acceptanceCriteria'] as List<String>?) ?? [],
+            reloadPlan: isLast, // Only reload on the last one
           );
         }
 
@@ -571,14 +707,13 @@ Generate tasks that will fully implement all requirements.''';
             ),
           ),
         );
-      } else {
+      } else if (type == _ActionType.tasks) {
         // Parse and add tasks
         final tasks = _parseTasksFromMarkdown(lastGeneratedMessage.text);
         if (tasks.isEmpty) {
           throw Exception('Could not parse any tasks from the response');
         }
 
-        final planningNotifier = ref.read(planningProvider.notifier);
         for (final task in tasks) {
           await planningNotifier.createTask(
             title: task['title'] as String,
@@ -597,10 +732,31 @@ Generate tasks that will fully implement all requirements.''';
             ),
           ),
         );
-      }
+      } else if (type == _ActionType.designNotes) {
+        // Parse and add design notes
+        final notes = _parseDesignNotesFromMarkdown(lastGeneratedMessage.text);
+        if (notes.isEmpty) {
+          throw Exception('Could not parse any design notes from the response');
+        }
 
-      // Reload the plan to show updated content
-      await ref.read(planningProvider.notifier).loadPlan(currentPlan.id);
+        for (final note in notes) {
+          await planningNotifier.createDesignNote(
+            content: note['content'] as String,
+            requirementIds: (note['requirementIds'] as List<String>?) ?? [],
+          );
+        }
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added ${notes.length} design notes to plan'),
+            action: SnackBarAction(
+              label: 'View Plan',
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -613,46 +769,81 @@ Generate tasks that will fully implement all requirements.''';
     }
   }
 
-  /// Parse requirements from AI-generated markdown
+  /// Parse requirements from AI-generated markdown - flexible parser
   List<Map<String, dynamic>> _parseRequirementsFromMarkdown(String markdown) {
     final requirements = <Map<String, dynamic>>[];
 
-    // Pattern to match requirement blocks
-    // ### Requirement [N]: [Title]
-    final reqPattern = RegExp(
-      r'###\s*Requirement\s*\[?\d+\]?:?\s*(.+?)(?=\n)',
+    // Try multiple patterns to match requirement blocks
+    // Pattern 1: ### Requirement [N]: [Title] or ### Requirement N: [Title]
+    var reqPattern = RegExp(
+      r'#{1,3}\s*Requirement\s*[\[\(]?\d+[\]\)]?[:\.\s]+([^\n]+)',
       caseSensitive: false,
     );
+    var matches = reqPattern.allMatches(markdown).toList();
 
-    // Find all requirement headers
-    final matches = reqPattern.allMatches(markdown);
+    // Pattern 2: **Requirement N:** or **N.** format
+    if (matches.isEmpty) {
+      reqPattern = RegExp(
+        r'\*\*(?:Requirement\s*)?(\d+)[:\.\)]*\*\*\s*([^\n]+)',
+        caseSensitive: false,
+      );
+      matches = reqPattern.allMatches(markdown).toList();
+    }
+
+    // Pattern 3: Numbered list (1. Title)
+    if (matches.isEmpty) {
+      reqPattern = RegExp(
+        r'^\s*(\d+)[\.\)]\s+([^\n]+)',
+        multiLine: true,
+      );
+      matches = reqPattern.allMatches(markdown).toList();
+    }
 
     for (final match in matches) {
-      final title = match.group(1)?.trim() ?? '';
+      // Get title from appropriate group
+      String title;
+      if (match.groupCount >= 2) {
+        title = match.group(2)?.trim() ?? match.group(1)?.trim() ?? '';
+      } else {
+        title = match.group(1)?.trim() ?? '';
+      }
       if (title.isEmpty) continue;
 
-      // Get the content after this header until the next header or end
+      // Skip if it looks like a sub-item
+      final lowerTitle = title.toLowerCase();
+      if (lowerTitle.startsWith('acceptance') ||
+          lowerTitle.startsWith('criterion') ||
+          lowerTitle.startsWith('sub-task') ||
+          lowerTitle.startsWith('description:')) {
+        continue;
+      }
+
+      // Get content section for this requirement
       final startIndex = match.end;
-      final nextMatch =
-          reqPattern.allMatches(markdown.substring(startIndex)).firstOrNull;
-      final endIndex =
-          nextMatch != null ? startIndex + nextMatch.start : markdown.length;
+      final nextMatchIndex = matches
+          .where((m) => m.start > match.start)
+          .map((m) => m.start)
+          .cast<int?>()
+          .firstOrNull;
+      final endIndex = nextMatchIndex ?? markdown.length;
       final content = markdown.substring(startIndex, endIndex);
 
-      // Extract description (User Story or general description)
+      // Extract description
       String? description;
-      final userStoryMatch =
-          RegExp(r'\*\*User Story:\*\*\s*(.+?)(?=\n\*\*|\n###|$)', dotAll: true)
-              .firstMatch(content);
+      final userStoryMatch = RegExp(
+        r'\*\*User Story[:\s]*\*\*\s*([^\n]+(?:\n(?!\*\*)[^\n]+)*)',
+        caseSensitive: false,
+      ).firstMatch(content);
       if (userStoryMatch != null) {
         description = userStoryMatch.group(1)?.trim();
       }
 
       // Extract EARS pattern
       String? earsPattern;
-      final patternMatch =
-          RegExp(r'\*\*EARS Pattern:\*\*\s*(\w+)', caseSensitive: false)
-              .firstMatch(content);
+      final patternMatch = RegExp(
+        r'\*\*(?:EARS\s*)?Pattern[:\s]*\*\*\s*(\w+)',
+        caseSensitive: false,
+      ).firstMatch(content);
       if (patternMatch != null) {
         final pattern = patternMatch.group(1)?.toLowerCase();
         if (['ubiquitous', 'event', 'state', 'unwanted', 'optional', 'complex']
@@ -664,13 +855,15 @@ Generate tasks that will fully implement all requirements.''';
       // Extract acceptance criteria
       final acceptanceCriteria = <String>[];
       final criteriaMatch = RegExp(
-              r'\*\*Acceptance Criteria:\*\*(.+?)(?=\n###|\n\*\*[A-Z]|$)',
-              dotAll: true)
-          .firstMatch(content);
+        r'\*\*Acceptance Criteria[:\s]*\*\*([^*]+?)(?=\n\*\*|\n#{1,3}|$)',
+        caseSensitive: false,
+        dotAll: true,
+      ).firstMatch(content);
       if (criteriaMatch != null) {
         final criteriaText = criteriaMatch.group(1) ?? '';
-        final criteriaLines = RegExp(r'^\s*\d+\.\s*(.+)$', multiLine: true)
-            .allMatches(criteriaText);
+        final criteriaLines =
+            RegExp(r'^\s*(?:\d+[\.\)]|-|\*)\s*(.+)', multiLine: true)
+                .allMatches(criteriaText);
         for (final line in criteriaLines) {
           final criterion = line.group(1)?.trim();
           if (criterion != null && criterion.isNotEmpty) {
@@ -687,50 +880,103 @@ Generate tasks that will fully implement all requirements.''';
       });
     }
 
+    // Fallback: extract from plain text lines
+    if (requirements.isEmpty) {
+      final lines = markdown.split('\n');
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty || trimmed.length < 10 || trimmed.length > 300) {
+          continue;
+        }
+        if (trimmed.startsWith('#') && !trimmed.contains('Requirement')) {
+          continue;
+        }
+        if (trimmed.startsWith('**Generated') || trimmed.startsWith('📋')) {
+          continue;
+        }
+        if (trimmed.toLowerCase().contains('acceptance criteria')) continue;
+
+        // Clean up the title
+        var title = trimmed
+            .replaceFirst(RegExp(r'^#{1,3}\s*'), '')
+            .replaceFirst(RegExp(r'^[\d\.\)\-\*\[\]]+\s*'), '')
+            .replaceAll(RegExp(r'\*\*'), '')
+            .trim();
+
+        if (title.isNotEmpty && title.length > 5) {
+          requirements.add({
+            'title': title,
+            'description': null,
+            'earsPattern': null,
+            'acceptanceCriteria': <String>[],
+          });
+        }
+      }
+    }
+
     return requirements;
   }
 
-  /// Parse tasks from AI-generated markdown
+  /// Parse tasks from AI-generated markdown - flexible parser
   List<Map<String, dynamic>> _parseTasksFromMarkdown(String markdown) {
     final tasks = <Map<String, dynamic>>[];
 
-    // Pattern to match task blocks
-    // ### Task [N]: [Title]
-    final taskPattern = RegExp(
-      r'###\s*Task\s*\[?\d+\]?:?\s*(.+?)(?=\n)',
+    // Try multiple patterns
+    var taskPattern = RegExp(
+      r'#{1,3}\s*Task\s*[\[\(]?\d+[\]\)]?[:\.\s]+([^\n]+)',
       caseSensitive: false,
     );
+    var matches = taskPattern.allMatches(markdown).toList();
 
-    // Find all task headers
-    final matches = taskPattern.allMatches(markdown);
+    if (matches.isEmpty) {
+      taskPattern = RegExp(
+        r'\*\*(?:Task\s*)?(\d+)[:\.\)]*\*\*\s*([^\n]+)',
+        caseSensitive: false,
+      );
+      matches = taskPattern.allMatches(markdown).toList();
+    }
+
+    if (matches.isEmpty) {
+      taskPattern = RegExp(
+        r'^\s*(\d+)[\.\)]\s+([^\n]+)',
+        multiLine: true,
+      );
+      matches = taskPattern.allMatches(markdown).toList();
+    }
 
     for (final match in matches) {
-      final title = match.group(1)?.trim() ?? '';
+      String title;
+      if (match.groupCount >= 2) {
+        title = match.group(2)?.trim() ?? match.group(1)?.trim() ?? '';
+      } else {
+        title = match.group(1)?.trim() ?? '';
+      }
       if (title.isEmpty) continue;
+      if (title.toLowerCase().startsWith('sub-task')) continue;
 
-      // Get the content after this header until the next header or end
       final startIndex = match.end;
-      final nextMatch =
-          taskPattern.allMatches(markdown.substring(startIndex)).firstOrNull;
-      final endIndex =
-          nextMatch != null ? startIndex + nextMatch.start : markdown.length;
+      final nextMatchIndex = matches
+          .where((m) => m.start > match.start)
+          .map((m) => m.start)
+          .cast<int?>()
+          .firstOrNull;
+      final endIndex = nextMatchIndex ?? markdown.length;
       final content = markdown.substring(startIndex, endIndex);
 
-      // Extract description
       String? description;
       final descMatch = RegExp(
-              r'\*\*Description:\*\*\s*(.+?)(?=\n\*\*|\n###|$)',
-              dotAll: true)
-          .firstMatch(content);
+        r'\*\*Description[:\s]*\*\*\s*([^\n]+(?:\n(?!\*\*)[^\n]+)*)',
+        caseSensitive: false,
+      ).firstMatch(content);
       if (descMatch != null) {
         description = descMatch.group(1)?.trim();
       }
 
-      // Extract priority
       String? priority;
-      final priorityMatch =
-          RegExp(r'\*\*Priority:\*\*\s*(\w+)', caseSensitive: false)
-              .firstMatch(content);
+      final priorityMatch = RegExp(
+        r'\*\*Priority[:\s]*\*\*\s*(\w+)',
+        caseSensitive: false,
+      ).firstMatch(content);
       if (priorityMatch != null) {
         priority = priorityMatch.group(1)?.toLowerCase();
       }
@@ -742,7 +988,122 @@ Generate tasks that will fully implement all requirements.''';
       });
     }
 
+    // Fallback
+    if (tasks.isEmpty) {
+      final lines = markdown.split('\n');
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty || trimmed.length < 5 || trimmed.length > 300)
+          continue;
+        if (trimmed.startsWith('#') && !trimmed.contains('Task')) continue;
+        if (trimmed.startsWith('**Generated') || trimmed.startsWith('✅'))
+          continue;
+
+        var title = trimmed
+            .replaceFirst(RegExp(r'^#{1,3}\s*'), '')
+            .replaceFirst(RegExp(r'^[\d\.\)\-\*\[\]]+\s*'), '')
+            .replaceAll(RegExp(r'\*\*'), '')
+            .trim();
+
+        if (title.isNotEmpty && title.length > 3) {
+          tasks.add({
+            'title': title,
+            'description': null,
+            'priority': null,
+          });
+        }
+      }
+    }
+
     return tasks;
+  }
+
+  /// Parse design notes from AI-generated markdown
+  List<Map<String, dynamic>> _parseDesignNotesFromMarkdown(String markdown) {
+    final notes = <Map<String, dynamic>>[];
+
+    // Pattern to match design note blocks
+    // ### Design Note [N]: [Title]
+    final notePattern = RegExp(
+      r'###\s*Design\s*Note\s*\[?\d+\]?:?\s*(.+?)(?=\n)',
+      caseSensitive: false,
+    );
+
+    // Find all design note headers
+    final matches = notePattern.allMatches(markdown);
+
+    for (final match in matches) {
+      final title = match.group(1)?.trim() ?? '';
+      if (title.isEmpty) continue;
+
+      // Get the content after this header until the next header or end
+      final startIndex = match.end;
+      final nextMatch =
+          notePattern.allMatches(markdown.substring(startIndex)).firstOrNull;
+      final endIndex =
+          nextMatch != null ? startIndex + nextMatch.start : markdown.length;
+      final content = markdown.substring(startIndex, endIndex);
+
+      // Extract content/description
+      String noteContent = title; // Default to title if no content found
+      final contentMatch =
+          RegExp(r'\*\*Content:\*\*\s*(.+?)(?=\n\*\*|\n###|$)', dotAll: true)
+              .firstMatch(content);
+      if (contentMatch != null) {
+        noteContent = contentMatch.group(1)?.trim() ?? title;
+      }
+
+      // Also try to extract rationale and append it
+      final rationaleMatch =
+          RegExp(r'\*\*Rationale:\*\*\s*(.+?)(?=\n\*\*|\n###|$)', dotAll: true)
+              .firstMatch(content);
+      if (rationaleMatch != null) {
+        final rationale = rationaleMatch.group(1)?.trim();
+        if (rationale != null && rationale.isNotEmpty) {
+          noteContent = '$noteContent\n\nRationale: $rationale';
+        }
+      }
+
+      // Extract requirement IDs if mentioned
+      final requirementIds = <String>[];
+      // For now, we don't parse requirement IDs from markdown
+      // They would need to be matched against existing requirements
+
+      notes.add({
+        'content': noteContent,
+        'requirementIds': requirementIds,
+      });
+    }
+
+    // If no structured notes found, try to parse as plain text sections
+    if (notes.isEmpty) {
+      // Split by numbered items or bullet points
+      final lines = markdown.split('\n');
+      final buffer = StringBuffer();
+
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+
+        // Skip header lines
+        if (trimmed.startsWith('#')) continue;
+        if (trimmed.startsWith('**Generated') || trimmed.startsWith('📐')) {
+          continue;
+        }
+
+        buffer.writeln(trimmed);
+      }
+
+      final fullContent = buffer.toString().trim();
+      if (fullContent.isNotEmpty) {
+        notes.add({
+          'content': fullContent,
+          'requirementIds': <String>[],
+        });
+      }
+    }
+
+    return notes;
   }
 
   TaskPriority _parsePriority(String? priority) {
@@ -866,6 +1227,12 @@ Generate tasks that will fully implement all requirements.''';
                     'Generate EARS requirements',
                   ),
                   _buildModeMenuItem(
+                    _PlanningMode.design,
+                    LucideIcons.penTool,
+                    'Design',
+                    'Create design notes',
+                  ),
+                  _buildModeMenuItem(
                     _PlanningMode.tasks,
                     LucideIcons.listChecks,
                     'Tasks',
@@ -924,6 +1291,7 @@ Generate tasks that will fully implement all requirements.''';
                 _QuickActionsBar(
                   onGenerateRequirements: _generateRequirements,
                   onGenerateTasks: _generateTasks,
+                  onGenerateDesignNotes: _generateDesignNotes,
                   isLoading: _isLoading,
                   currentMode: _currentMode,
                 ),
@@ -996,12 +1364,14 @@ Generate tasks that will fully implement all requirements.''';
 enum _PlanningMode {
   brainstorm,
   requirements,
+  design,
   tasks,
 }
 
 enum _ActionType {
   requirements,
   tasks,
+  designNotes,
 }
 
 // ==================== DATA CLASSES ====================
@@ -1050,29 +1420,39 @@ class _ModeIndicator extends StatelessWidget {
           ),
         ),
       ),
-      child: Row(
-        children: [
-          _ModeChip(
-            icon: LucideIcons.lightbulb,
-            label: 'Brainstorm',
-            isSelected: currentMode == _PlanningMode.brainstorm,
-            onTap: () => onModeChanged(_PlanningMode.brainstorm),
-          ),
-          const SizedBox(width: 8),
-          _ModeChip(
-            icon: LucideIcons.fileText,
-            label: 'Requirements',
-            isSelected: currentMode == _PlanningMode.requirements,
-            onTap: () => onModeChanged(_PlanningMode.requirements),
-          ),
-          const SizedBox(width: 8),
-          _ModeChip(
-            icon: LucideIcons.listChecks,
-            label: 'Tasks',
-            isSelected: currentMode == _PlanningMode.tasks,
-            onTap: () => onModeChanged(_PlanningMode.tasks),
-          ),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _ModeChip(
+              icon: LucideIcons.lightbulb,
+              label: 'Brainstorm',
+              isSelected: currentMode == _PlanningMode.brainstorm,
+              onTap: () => onModeChanged(_PlanningMode.brainstorm),
+            ),
+            const SizedBox(width: 8),
+            _ModeChip(
+              icon: LucideIcons.fileText,
+              label: 'Requirements',
+              isSelected: currentMode == _PlanningMode.requirements,
+              onTap: () => onModeChanged(_PlanningMode.requirements),
+            ),
+            const SizedBox(width: 8),
+            _ModeChip(
+              icon: LucideIcons.penTool,
+              label: 'Design',
+              isSelected: currentMode == _PlanningMode.design,
+              onTap: () => onModeChanged(_PlanningMode.design),
+            ),
+            const SizedBox(width: 8),
+            _ModeChip(
+              icon: LucideIcons.listChecks,
+              label: 'Tasks',
+              isSelected: currentMode == _PlanningMode.tasks,
+              onTap: () => onModeChanged(_PlanningMode.tasks),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1231,8 +1611,10 @@ class _MessageBubble extends StatelessWidget {
                     icon: const Icon(LucideIcons.plus, size: 16),
                     label: Text(
                       message.actionType == _ActionType.requirements
-                          ? 'Add to Plan'
-                          : 'Add Tasks',
+                          ? 'Add Requirements'
+                          : message.actionType == _ActionType.designNotes
+                              ? 'Add Design Notes'
+                              : 'Add Tasks',
                     ),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
@@ -1342,12 +1724,14 @@ class _TypingDot extends StatelessWidget {
 class _QuickActionsBar extends StatelessWidget {
   final VoidCallback onGenerateRequirements;
   final VoidCallback onGenerateTasks;
+  final VoidCallback onGenerateDesignNotes;
   final bool isLoading;
   final _PlanningMode currentMode;
 
   const _QuickActionsBar({
     required this.onGenerateRequirements,
     required this.onGenerateTasks,
+    required this.onGenerateDesignNotes,
     required this.isLoading,
     required this.currentMode,
   });
@@ -1375,6 +1759,13 @@ class _QuickActionsBar extends StatelessWidget {
               label: 'Generate Requirements',
               onTap: isLoading ? null : onGenerateRequirements,
               isHighlighted: currentMode == _PlanningMode.requirements,
+            ),
+            const SizedBox(width: 8),
+            _QuickActionButton(
+              icon: LucideIcons.penTool,
+              label: 'Generate Design Notes',
+              onTap: isLoading ? null : onGenerateDesignNotes,
+              isHighlighted: currentMode == _PlanningMode.design,
             ),
             const SizedBox(width: 8),
             _QuickActionButton(
@@ -1476,6 +1867,8 @@ class _ChatInputArea extends StatelessWidget {
         return 'Describe your project idea...';
       case _PlanningMode.requirements:
         return 'What features do you need?';
+      case _PlanningMode.design:
+        return 'What design decisions need to be made?';
       case _PlanningMode.tasks:
         return 'What tasks should be created?';
     }

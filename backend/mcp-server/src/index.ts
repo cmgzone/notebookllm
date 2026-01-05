@@ -47,6 +47,8 @@
  * - update_task_status: Update task status
  * - add_task_output: Add output to a task
  * - complete_task: Complete a task with summary
+ * - create_requirement: Create a requirement with EARS pattern
+ * - create_design_note: Create a design note for architectural decisions
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -1290,6 +1292,83 @@ Use this when you finish working on a task.`,
       required: ['planId', 'taskId'],
     },
   },
+  {
+    name: 'create_requirement',
+    description: `Create a new requirement in a plan following EARS patterns.
+    
+EARS (Easy Approach to Requirements Syntax) patterns:
+- ubiquitous: THE <system> SHALL <response>
+- event: WHEN <trigger>, THE <system> SHALL <response>
+- state: WHILE <condition>, THE <system> SHALL <response>
+- unwanted: IF <condition>, THEN THE <system> SHALL <response>
+- optional: WHERE <option>, THE <system> SHALL <response>
+- complex: Combination of above patterns
+
+Returns the created requirement with ID.
+
+Use this to add structured requirements to a plan.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        planId: {
+          type: 'string',
+          description: 'The plan ID to add the requirement to (required)',
+        },
+        title: {
+          type: 'string',
+          description: 'Requirement title (required)',
+        },
+        description: {
+          type: 'string',
+          description: 'Detailed description or user story',
+        },
+        earsPattern: {
+          type: 'string',
+          description: 'EARS pattern type',
+          enum: ['ubiquitous', 'event', 'state', 'unwanted', 'optional', 'complex'],
+        },
+        acceptanceCriteria: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of acceptance criteria for this requirement',
+        },
+      },
+      required: ['planId', 'title'],
+    },
+  },
+  {
+    name: 'create_design_note',
+    description: `Create a design note in a plan to document architectural decisions.
+    
+Design notes capture:
+- Technical implementation details
+- Architectural decisions and rationale
+- Trade-offs and alternatives considered
+- Links to related requirements
+
+Returns the created design note with ID.
+
+Use this to document HOW requirements will be implemented.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        planId: {
+          type: 'string',
+          description: 'The plan ID to add the design note to (required)',
+        },
+        content: {
+          type: 'string',
+          description: 'Design note content (required)',
+        },
+        requirementIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of requirement IDs this design note relates to',
+        },
+      },
+      required: ['planId', 'content'],
+    },
+  },
 ];
 
 // Input validation schemas
@@ -1534,6 +1613,20 @@ const CompleteTaskSchema = z.object({
   planId: z.string().min(1),
   taskId: z.string().min(1),
   summary: z.string().optional(),
+});
+
+const CreateRequirementSchema = z.object({
+  planId: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().optional(),
+  earsPattern: z.enum(['ubiquitous', 'event', 'state', 'unwanted', 'optional', 'complex']).optional(),
+  acceptanceCriteria: z.array(z.string()).optional(),
+});
+
+const CreateDesignNoteSchema = z.object({
+  planId: z.string().min(1),
+  content: z.string().min(1),
+  requirementIds: z.array(z.string()).optional(),
 });
 
 // GitHub API instance (uses different base URL)
@@ -2095,6 +2188,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
         const input = CompleteTaskSchema.parse(args);
         const { planId, taskId, ...body } = input;
         const response = await planningApi.post(`/${planId}/tasks/${taskId}/complete`, body);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'create_requirement': {
+        const input = CreateRequirementSchema.parse(args);
+        const { planId, ...body } = input;
+        const response = await planningApi.post(`/${planId}/requirements`, body);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'create_design_note': {
+        const input = CreateDesignNoteSchema.parse(args);
+        const { planId, ...body } = input;
+        const response = await planningApi.post(`/${planId}/design-notes`, body);
         return {
           content: [
             {

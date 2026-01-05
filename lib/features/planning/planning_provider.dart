@@ -637,6 +637,7 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
     String? description,
     String? earsPattern,
     List<String>? acceptanceCriteria,
+    bool reloadPlan = true,
   }) async {
     final planId = state.currentPlan?.id;
     if (planId == null) {
@@ -655,8 +656,10 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
         acceptanceCriteria: acceptanceCriteria,
       );
 
-      // Reload the current plan to get updated requirements list
-      await loadPlan(planId);
+      // Optionally reload the current plan to get updated requirements list
+      if (reloadPlan) {
+        await loadPlan(planId);
+      }
 
       return requirement;
     } catch (e, stack) {
