@@ -569,12 +569,13 @@ class PlanService {
     }
 
     const id = uuidv4();
-    const requirementIdsJson = JSON.stringify(input.requirementIds || []);
+    // Format as PostgreSQL UUID array
+    const requirementIds = input.requirementIds || [];
     const result = await pool.query(
       `INSERT INTO plan_design_notes (id, plan_id, requirement_ids, content)
-       VALUES ($1, $2, $3::jsonb, $4)
+       VALUES ($1, $2, $3::uuid[], $4)
        RETURNING *`,
-      [id, planId, requirementIdsJson, input.content]
+      [id, planId, requirementIds, input.content]
     );
 
     return this.mapRowToDesignNote(result.rows[0]);
