@@ -50,6 +50,10 @@
  * - create_requirement: Create a requirement with EARS pattern
  * - create_design_note: Create a design note for architectural decisions
  * - get_design_notes: Get design notes including UI designs from a plan
+ * 
+ * Time & Context Tools (Reduce AI Hallucinations):
+ * - get_current_time: Get current date/time with timezone info
+ * - web_search: Search the web for latest information
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -1405,6 +1409,70 @@ Use this to:
       required: ['planId'],
     },
   },
+  // ==================== TIME & CONTEXT TOOLS ====================
+  {
+    name: 'get_current_time',
+    description: `Get current date and time information to reduce AI hallucinations.
+    
+Returns comprehensive time context including:
+- Current date and time (local and UTC)
+- Timezone information
+- Week number, quarter
+- Days until end of month/year
+
+Use this to:
+- Provide accurate timeline estimates
+- Avoid hallucinating dates or versions
+- Give context-aware recommendations
+- Plan sprints and deadlines accurately`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        format: {
+          type: 'string',
+          description: 'Output format: "full" for comprehensive info, "short" for brief',
+          enum: ['full', 'short'],
+          default: 'full',
+        },
+      },
+    },
+  },
+  {
+    name: 'web_search',
+    description: `Search the web for latest information to reduce hallucinations.
+    
+Use this to find:
+- Latest package versions and dependencies
+- Current best practices and documentation
+- Technology comparisons and recommendations
+- Up-to-date tutorials and guides
+
+Returns search results with:
+- title, link, snippet
+- date (if available)
+- source information
+
+IMPORTANT: Always use this tool when:
+- User asks about "latest" or "current" versions
+- Recommending dependencies or packages
+- Discussing best practices that may have changed
+- Any information that could be outdated`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query (required)',
+        },
+        num: {
+          type: 'number',
+          description: 'Number of results to return (default: 5, max: 10)',
+          default: 5,
+        },
+      },
+      required: ['query'],
+    },
+  },
 ];
 
 // Input validation schemas
@@ -1668,6 +1736,15 @@ const CreateDesignNoteSchema = z.object({
 const GetDesignNotesSchema = z.object({
   planId: z.string().min(1),
   filterUiDesigns: z.boolean().optional().default(false),
+});
+
+const GetCurrentTimeSchema = z.object({
+  format: z.enum(['full', 'short']).optional().default('full'),
+});
+
+const WebSearchSchema = z.object({
+  query: z.string().min(1),
+  num: z.number().min(1).max(10).optional().default(5),
 });
 
 // GitHub API instance (uses different base URL)
@@ -2284,6 +2361,130 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
             },
           ],
         };
+      }
+
+      // ==================== TIME & CONTEXT TOOL HANDLERS ====================
+      case 'get_current_time': {
+        const input = GetCurrentTimeSchema.parse(args);
+        const { format } = input;
+        
+        const now = new Date();
+        const utcNow = now.toISOString();
+        
+        // Calculate week number
+        const startOfYear = new Date(now.getFullYear(), 0, 1);
+        const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
+        const weekNumber = Math.ceil((dayOfYear + startOfYear.getDay() + 1) / 7);
+        
+        // Calculate quarter
+        const quarter = Math.ceil((now.getMonth() + 1) / 3);
+        
+        // Days until end of month
+        const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const daysUntilEndOfMonth = lastDayOfMonth.getDate() - now.getDate();
+        
+        // Days until end of year
+        const lastDayOfYear = new Date(now.getFullYear(), 11, 31);
+        const daysUntilEndOfYear = Math.floor((lastDayOfYear.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+        
+        // Timezone info
+        const timezoneOffset = now.getTimezoneOffset();
+        const timezoneHours = Math.floor(Math.abs(timezoneOffset) / 60);
+        const timezoneMinutes = Math.abs(timezoneOffset) % 60;
+        const timezoneSign = timezoneOffset <= 0 ? '+' : '-';
+        const timezone = `UTC${timezoneSign}${timezoneHours.toString().padStart(2, '0')}:${timezoneMinutes.toString().padStart(2, '0')}`;
+        
+        if (format === 'short') {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  date: now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+                  time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                  utc: utcNow,
+                }, null, 2),
+              },
+            ],
+          };
+        }
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                localDate: now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+                localTime: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                utcTime: utcNow,
+                timezone: timezone,
+                weekNumber: weekNumber,
+                quarter: `Q${quarter} ${now.getFullYear()}`,
+                daysUntilEndOfMonth: daysUntilEndOfMonth,
+                daysUntilEndOfYear: daysUntilEndOfYear,
+                timestamp: now.getTime(),
+                note: 'Use web_search tool to verify latest package versions and best practices',
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'web_search': {
+        const input = WebSearchSchema.parse(args);
+        const { query, num } = input;
+        
+        try {
+          // Use the backend search proxy endpoint
+          const response = await axios.post(`${BACKEND_URL}/api/search/proxy`, {
+            query,
+            type: 'search',
+            num: num || 5,
+          }, {
+            headers: {
+              'Content-Type': 'application/json',
+              ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
+            },
+            timeout: 15000,
+          });
+          
+          const results = response.data?.organic || [];
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  query: query,
+                  resultsCount: results.length,
+                  results: results.slice(0, num || 5).map((r: any) => ({
+                    title: r.title,
+                    link: r.link,
+                    snippet: r.snippet,
+                    date: r.date || null,
+                  })),
+                  searchedAt: new Date().toISOString(),
+                  note: 'Results are from web search. Verify information from official sources when possible.',
+                }, null, 2),
+              },
+            ],
+          };
+        } catch (error: any) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: false,
+                  query: query,
+                  error: error.message || 'Web search failed',
+                  suggestion: 'Try a different query or check if the search service is available',
+                }, null, 2),
+              },
+            ],
+          };
+        }
       }
 
       default:
