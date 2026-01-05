@@ -1381,167 +1381,135 @@ List 5-10 screens that would make a complete prototype.''';
   }
 
   String _buildFullPrototypePrompt(dynamic plan, List<String> colors) {
-    final screensList = _screens
-        .map((s) => '- ${s.name} (id: ${s.id}): ${s.description}')
-        .join('\n');
+    // Build screen divs template
+    final screenDivs = _screens.map((s) => '''
+    <!-- ${s.name} Screen -->
+    <div id="${s.id}" class="screen${s.id == _screens.first.id ? ' active' : ''}">
+      <header class="app-header">
+        <h1>${s.name}</h1>
+      </header>
+      <main class="screen-content">
+        <!-- ADD CONTENT FOR: ${s.description} -->
+      </main>
+    </div>''').join('\n');
 
-    // Get device info for mobile-first design
-    final deviceInfo = _selectedDevice != DeviceFrame.responsive
-        ? 'Target Device: ${_selectedDevice.name} (${_selectedDevice.width?.toInt()}x${_selectedDevice.height?.toInt()}px)'
-        : 'Target: Responsive (mobile-first)';
+    // Build bottom nav items
+    final navItems = _screens.take(5).map((s) {
+      final icons = {
+        'home': '🏠',
+        'dashboard': '📊',
+        'profile': '👤',
+        'settings': '⚙️',
+        'search': '🔍',
+        'notifications': '🔔',
+        'messages': '💬',
+        'menu': '☰',
+        'login': '🔐',
+        'register': '📝',
+        'cart': '🛒',
+        'favorites': '❤️',
+      };
+      final icon = icons[s.id.toLowerCase()] ?? '📱';
+      return '<a href="#" data-screen="${s.id}" onclick="navigateTo(\'${s.id}\'); return false;"${s.id == _screens.first.id ? ' class="active"' : ''}><span>$icon</span>${s.name}</a>';
+    }).join('\n        ');
 
-    return '''Generate a COMPLETE, INTERACTIVE MOBILE APP prototype with ALL screens and working navigation.
+    return '''Generate a mobile app prototype. Fill in the screen content in this HTML template.
 
 **Project:** ${plan?.title ?? 'Project'}
 **Description:** ${plan?.description ?? ''}
-**$deviceInfo**
+**Style:** $_selectedStyle | Colors: ${colors[0]}, ${colors[1]}, ${colors[2]}
 
-**Screens to Generate:**
-$screensList
+**SCREENS TO CREATE:**
+${_screens.map((s) => '- ${s.id}: ${s.name} - ${s.description}').join('\n')}
 
-**Style:** $_selectedStyle
-**Primary Color:** ${colors[0]}
-**Secondary Color:** ${colors[1]}
-**Accent Color:** ${colors[2]}
+**IMPORTANT:** 
+- Generate ALL ${_screens.length} screens with real content
+- Each screen MUST have the exact id shown above
+- Add realistic UI content (cards, lists, forms, buttons)
+- Use emoji icons for visual elements
+- Make navigation links call navigateTo('screenId')
 
-**CRITICAL REQUIREMENTS - MOBILE APP DESIGN:**
+**COMPLETE THIS HTML (fill in screen content):**
 
-1. **Mobile-First Design**: 
-   - Design for mobile screens (390px width typical)
-   - Use mobile app patterns (bottom nav, floating buttons, swipe gestures)
-   - Touch-friendly tap targets (min 44px)
-   - No horizontal scrolling
-
-2. **Single HTML File**: Create ONE self-contained HTML file with ALL screens
-
-3. **Mobile Navigation System**:
-   - Bottom navigation bar (fixed at bottom) for main screens
-   - Back buttons in headers for sub-screens
-   - Implement `navigateTo(screenId)` function
-   - Smooth transitions between screens
-
-4. **Screen Structure**:
-```html
-<div id="home" class="screen active">
-  <header class="app-header">...</header>
-  <main class="screen-content">...</main>
-</div>
-```
-
-5. **Navigation JavaScript**:
-```javascript
-function navigateTo(screenId) {
-  document.querySelectorAll('.screen').forEach(s => {
-    s.classList.remove('active');
-    s.style.display = 'none';
-  });
-  const target = document.getElementById(screenId);
-  if (target) {
-    target.classList.add('active');
-    target.style.display = 'flex';
-  }
-  // Update bottom nav
-  document.querySelectorAll('.bottom-nav a').forEach(a => a.classList.remove('active'));
-  document.querySelector('.bottom-nav a[data-screen="' + screenId + '"]')?.classList.add('active');
-}
-// Initialize
-document.addEventListener('DOMContentLoaded', () => navigateTo('${_screens.isNotEmpty ? _screens.first.id : 'home'}'));
-```
-
-6. **CSS Requirements**:
-```css
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { 
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #f5f5f5;
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-.screen { 
-  display: none; 
-  flex-direction: column;
-  min-height: 100vh;
-  padding-bottom: 70px; /* Space for bottom nav */
-}
-.screen.active { display: flex; }
-.app-header {
-  position: sticky;
-  top: 0;
-  background: ${colors[0]};
-  color: white;
-  padding: 16px;
-  z-index: 100;
-}
-.screen-content {
-  flex: 1;
-  padding: 16px;
-  overflow-y: auto;
-}
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: white;
-  display: flex;
-  justify-content: space-around;
-  padding: 8px 0 max(8px, env(safe-area-inset-bottom));
-  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-  z-index: 1000;
-}
-.bottom-nav a {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-decoration: none;
-  color: #666;
-  font-size: 12px;
-  padding: 8px 16px;
-}
-.bottom-nav a.active { color: ${colors[0]}; }
-.bottom-nav a span { font-size: 24px; margin-bottom: 4px; }
-```
-
-7. **Mobile UI Components**:
-   - Cards with rounded corners and shadows
-   - List items with chevron indicators
-   - Floating action buttons (FAB)
-   - Pull-to-refresh indicators (visual only)
-   - Status bar safe area padding
-   - Touch ripple effects on buttons
-
-8. **Content Requirements**:
-   - Realistic mobile app content
-   - Profile avatars, stats cards, list views
-   - Use emoji icons (📊 📱 ⚙️ 👤 🏠 🔔 etc.)
-   - Form inputs with mobile keyboard hints
-
-**Style Guidelines for "$_selectedStyle" (Mobile):**
-${_getStyleGuidelines()}
-
-**Output Format:**
-Return ONLY the complete HTML starting with <!DOCTYPE html> and ending with </html>.
-Include viewport meta tag: <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-NO markdown code blocks. NO explanations. JUST the HTML.''';
-  }
-
-  String _getStyleGuidelines() {
-    switch (_selectedStyle) {
-      case 'modern':
-        return 'Clean iOS/Material hybrid, subtle shadows, rounded corners (12-16px), card-based layouts, system fonts';
-      case 'minimal':
-        return 'Maximum whitespace, simple typography, monochrome with single accent, thin separators';
-      case 'glassmorphism':
-        return 'Frosted glass cards (backdrop-filter: blur(20px)), transparency, gradient backgrounds';
-      case 'dark':
-        return 'Dark backgrounds (#1a1a2e, #0f0f23), neon accents, OLED-friendly blacks, glowing effects';
-      case 'gradient':
-        return 'Bold gradient headers, vibrant accent colors, gradient buttons and cards';
-      case 'corporate':
-        return 'Professional blues/grays, structured layouts, clear hierarchy, trustworthy feel';
-      default:
-        return 'Modern mobile app design with good contrast and touch-friendly elements';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>${plan?.title ?? 'App'}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5; min-height: 100vh; overflow-x: hidden;
     }
+    .screen { display: none; flex-direction: column; min-height: 100vh; padding-bottom: 80px; }
+    .screen.active { display: flex; }
+    .app-header { 
+      background: ${colors[0]}; color: white; padding: 20px 16px; 
+      position: sticky; top: 0; z-index: 100;
+    }
+    .app-header h1 { font-size: 20px; font-weight: 600; }
+    .screen-content { flex: 1; padding: 16px; overflow-y: auto; }
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0; background: white;
+      display: flex; justify-content: space-around; padding: 8px 0 12px;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.1); z-index: 1000;
+    }
+    .bottom-nav a {
+      display: flex; flex-direction: column; align-items: center;
+      text-decoration: none; color: #666; font-size: 11px; padding: 4px 12px;
+    }
+    .bottom-nav a.active { color: ${colors[0]}; }
+    .bottom-nav a span { font-size: 22px; margin-bottom: 2px; }
+    .card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .btn { background: ${colors[0]}; color: white; border: none; padding: 14px 24px; border-radius: 10px; font-size: 16px; width: 100%; cursor: pointer; }
+    .btn-outline { background: transparent; border: 2px solid ${colors[0]}; color: ${colors[0]}; }
+    .list-item { display: flex; align-items: center; padding: 14px 0; border-bottom: 1px solid #eee; }
+    .list-item:last-child { border-bottom: none; }
+    .avatar { width: 48px; height: 48px; border-radius: 50%; background: ${colors[1]}; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-right: 12px; }
+    .input { width: 100%; padding: 14px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; margin-bottom: 12px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .stat-card { background: white; border-radius: 12px; padding: 16px; text-align: center; }
+    .stat-value { font-size: 28px; font-weight: bold; color: ${colors[0]}; }
+    .stat-label { font-size: 12px; color: #666; margin-top: 4px; }
+    h2 { font-size: 18px; margin-bottom: 12px; color: #333; }
+    p { color: #666; line-height: 1.5; }
+  </style>
+</head>
+<body>
+$screenDivs
+
+  <!-- Bottom Navigation -->
+  <nav class="bottom-nav">
+    $navItems
+  </nav>
+
+  <script>
+    function navigateTo(screenId) {
+      document.querySelectorAll('.screen').forEach(s => {
+        s.classList.remove('active');
+        s.style.display = 'none';
+      });
+      const target = document.getElementById(screenId);
+      if (target) {
+        target.classList.add('active');
+        target.style.display = 'flex';
+      }
+      document.querySelectorAll('.bottom-nav a').forEach(a => {
+        a.classList.remove('active');
+        if (a.getAttribute('data-screen') === screenId) a.classList.add('active');
+      });
+    }
+    document.addEventListener('DOMContentLoaded', () => navigateTo('${_screens.first.id}'));
+  </script>
+</body>
+</html>
+
+**YOUR TASK:** 
+Replace the "<!-- ADD CONTENT FOR: ... -->" comments with actual UI content for each screen.
+Include cards, lists, buttons, forms, stats as appropriate for each screen's purpose.
+Return the COMPLETE HTML with all content filled in. No explanations, just HTML.''';
   }
 
   String _extractHtmlFromResponse(String response) {
