@@ -12,9 +12,10 @@ import '../../../theme/app_theme.dart';
 import '../../../core/ai/ai_provider.dart';
 import '../../subscription/services/credit_manager.dart';
 import '../planning_provider.dart';
+import '../models/requirement.dart';
 
 /// AI UI Design Generator Screen
-/// Generates premium HTML/CSS designs, previews in WebView, captures screenshots
+/// Generates premium HTML/CSS designs based on plan context, previews in WebView, captures screenshots
 class UIDesignGeneratorScreen extends ConsumerStatefulWidget {
   final String planId;
 
@@ -35,8 +36,14 @@ class _UIDesignGeneratorScreenState
   Uint8List? _screenshot;
   bool _isGenerating = false;
   bool _isCapturing = false;
+  bool _isSaving = false;
   String _selectedStyle = 'modern';
   String _selectedColorScheme = 'purple';
+
+  // Plan context
+  List<Requirement> _selectedRequirements = [];
+  bool _useExistingDesignNotes = true;
+  bool _showContextPanel = true;
 
   final List<String> _styles = [
     'modern',
@@ -144,6 +151,10 @@ class _UIDesignGeneratorScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Plan Context Panel
+                  _buildPlanContextPanel(scheme, text),
+                  const SizedBox(height: 20),
+
                   // Design Prompt Input
                   _buildPromptSection(scheme, text),
                   const SizedBox(height: 20),
@@ -175,6 +186,187 @@ class _UIDesignGeneratorScreenState
         ],
       ),
     );
+  }
+
+  Widget _buildPlanContextPanel(ColorScheme scheme, TextTheme text) {
+    final planState = ref.watch(planningProvider);
+    final plan = planState.currentPlan;
+
+    if (plan == null) {
+      return const SizedBox.shrink();
+    }
+
+    final requirements = plan.requirements;
+    final designNotes = plan.designNotes;
+
+    return Card(
+      color: scheme.primaryContainer.withValues(alpha: 0.3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          InkWell(
+            onTap: () => setState(() => _showContextPanel = !_showContextPanel),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.fileText, color: scheme.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Plan Context: ${plan.title}',
+                          style: text.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '${requirements.length} requirements • ${designNotes.length} design notes',
+                          style: text.bodySmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    _showContextPanel
+                        ? LucideIcons.chevronUp
+                        : LucideIcons.chevronDown,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Expandable content
+          if (_showContextPanel) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Use existing design notes toggle
+                  if (designNotes.isNotEmpty) ...[
+                    SwitchListTile(
+                      title: const Text('Use existing design notes as context'),
+                      subtitle:
+                          Text('${designNotes.length} design notes available'),
+                      value: _useExistingDesignNotes,
+                      onChanged: (v) =>
+                          setState(() => _useExistingDesignNotes = v),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Requirements selection
+                  if (requirements.isNotEmpty) ...[
+                    Text(
+                      'Select requirements to design for:',
+                      style: text.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: requirements.length,
+                        itemBuilder: (context, index) {
+                          final req = requirements[index];
+                          final isSelected =
+                              _selectedRequirements.contains(req);
+                          return CheckboxListTile(
+                            title: Text(
+                              req.title,
+                              style: const TextStyle(fontSize: 14),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              req.earsPattern.name,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: scheme.primary,
+                              ),
+                            ),
+                            value: isSelected,
+                            onChanged: (v) {
+                              setState(() {
+                                if (v == true) {
+                                  _selectedRequirements.add(req);
+                                } else {
+                                  _selectedRequirements.remove(req);
+                                }
+                              });
+                            },
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            controlAffinity: ListTileControlAffinity.leading,
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Quick select buttons
+                    Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => setState(() =>
+                              _selectedRequirements = List.from(requirements)),
+                          icon: const Icon(LucideIcons.checkSquare, size: 16),
+                          label: const Text('Select All'),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () =>
+                              setState(() => _selectedRequirements.clear()),
+                          icon: const Icon(LucideIcons.square, size: 16),
+                          label: const Text('Clear'),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: scheme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(LucideIcons.info,
+                              size: 16, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'No requirements yet. Add requirements in the plan to use them as design context.',
+                              style: text.bodySmall
+                                  ?.copyWith(color: scheme.onSurfaceVariant),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    ).animate().fadeIn().slideY(begin: 0.1);
   }
 
   Widget _buildPromptSection(ColorScheme scheme, TextTheme text) {
@@ -452,9 +644,18 @@ class _UIDesignGeneratorScreenState
         const SizedBox(width: 12),
         Expanded(
           child: FilledButton.icon(
-            onPressed: _screenshot != null ? _saveAsDesignNote : null,
-            icon: const Icon(LucideIcons.save),
-            label: const Text('Save Design'),
+            onPressed: (_isSaving || _generatedHtml == null)
+                ? null
+                : _saveAsDesignNote,
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(LucideIcons.save),
+            label: Text(_isSaving ? 'Saving...' : 'Save Design'),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
@@ -523,10 +724,54 @@ class _UIDesignGeneratorScreenState
   }
 
   String _buildDesignPrompt(List<String> colors) {
+    final planState = ref.read(planningProvider);
+    final plan = planState.currentPlan;
+
+    // Build context from selected requirements
+    String requirementsContext = '';
+    if (_selectedRequirements.isNotEmpty) {
+      requirementsContext = '''
+
+**Selected Requirements to Design For:**
+${_selectedRequirements.map((r) => '''
+- **${r.title}**
+  ${r.description.isNotEmpty ? 'Description: ${r.description}' : ''}
+  ${r.acceptanceCriteria.isNotEmpty ? 'Acceptance Criteria: ${r.acceptanceCriteria.join(", ")}' : ''}
+''').join('\n')}
+''';
+    }
+
+    // Build context from existing design notes
+    String designNotesContext = '';
+    if (_useExistingDesignNotes &&
+        plan != null &&
+        plan.designNotes.isNotEmpty) {
+      final relevantNotes =
+          plan.designNotes.take(3).toList(); // Limit to 3 most recent
+      designNotesContext = '''
+
+**Existing Design Decisions (for consistency):**
+${relevantNotes.map((n) => '- ${n.content.length > 200 ? '${n.content.substring(0, 200)}...' : n.content}').join('\n')}
+''';
+    }
+
+    // Build plan context
+    String planContext = '';
+    if (plan != null) {
+      planContext = '''
+
+**Project Context:**
+- Project: ${plan.title}
+- Description: ${plan.description.isNotEmpty ? plan.description : 'N/A'}
+''';
+    }
+
     return '''Generate a complete, self-contained HTML page with embedded CSS for the following design:
 
 **Design Request:** ${_promptController.text}
-
+$planContext
+$requirementsContext
+$designNotesContext
 **Style:** $_selectedStyle
 **Primary Color:** ${colors[0]}
 **Secondary Color:** ${colors[1]}
@@ -538,9 +783,10 @@ class _UIDesignGeneratorScreenState
 3. Include smooth transitions and hover effects
 4. Make it responsive and mobile-friendly
 5. Use the specified color scheme throughout
-6. Add realistic placeholder content
+6. Add realistic placeholder content based on the project context
 7. Include icons using emoji or Unicode symbols
 8. The design should look polished and production-ready
+9. If requirements are provided, ensure the UI addresses those specific features
 
 **Style Guidelines for "$_selectedStyle":**
 ${_getStyleGuidelines()}
@@ -646,49 +892,84 @@ The HTML must be self-contained with all CSS in a <style> tag.''';
   }
 
   Future<void> _saveAsDesignNote() async {
-    if (_generatedHtml == null || _screenshot == null) {
+    if (_generatedHtml == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please generate and capture a design first')),
+        const SnackBar(content: Text('Please generate a design first')),
       );
       return;
     }
 
+    setState(() => _isSaving = true);
+
     try {
-      // Save screenshot to file
-      final directory = await getApplicationDocumentsDirectory();
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final screenshotPath = '${directory.path}/design_$timestamp.png';
-      final file = File(screenshotPath);
-      await file.writeAsBytes(_screenshot!);
+      String screenshotPath = '';
+
+      // Save screenshot to file if captured
+      if (_screenshot != null) {
+        final directory = await getApplicationDocumentsDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        screenshotPath = '${directory.path}/design_$timestamp.png';
+        final file = File(screenshotPath);
+        await file.writeAsBytes(_screenshot!);
+      }
+
+      // Build requirements context for the note
+      String requirementsSection = '';
+      if (_selectedRequirements.isNotEmpty) {
+        requirementsSection = '''
+### Designed For Requirements:
+${_selectedRequirements.map((r) => '- ${r.title}').join('\n')}
+''';
+      }
 
       // Create design note content with HTML and screenshot reference
-      final designContent = '''## UI Design: ${_promptController.text}
+      final codeBlockStart = '```html';
+      final codeBlockEnd = '```';
+      final designContent = '''## 🎨 UI Design: ${_promptController.text}
 
+**Type:** UI Design (HTML/CSS)
 **Style:** $_selectedStyle
 **Color Scheme:** $_selectedColorScheme
 **Generated:** ${DateTime.now().toIso8601String()}
-
+$requirementsSection
+${screenshotPath.isNotEmpty ? '''
 ### Screenshot
 ![Design Preview](file://$screenshotPath)
-
+''' : ''}
 ### HTML Code
-```html
+$codeBlockStart
 $_generatedHtml
-```
+$codeBlockEnd
+
+---
+*This UI design was generated by AI UI Designer and can be used as a reference for implementation.*
 ''';
+
+      // Get requirement IDs for linking
+      final requirementIds = _selectedRequirements.map((r) => r.id).toList();
 
       // Save as design note
       await ref.read(planningProvider.notifier).createDesignNote(
-        content: designContent,
-        requirementIds: [],
-      );
+            content: designContent,
+            requirementIds: requirementIds,
+          );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Design saved successfully!'),
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(LucideIcons.check, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Design saved! ${requirementIds.isNotEmpty ? "Linked to ${requirementIds.length} requirement(s)" : ""}',
+                  ),
+                ),
+              ],
+            ),
             backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
           ),
         );
         Navigator.pop(context);
@@ -698,6 +979,10 @@ $_generatedHtml
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to save: ${e.toString()}')),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
       }
     }
   }
