@@ -43,6 +43,58 @@ class ProjectPrototypeScreen extends ConsumerStatefulWidget {
       _ProjectPrototypeScreenState();
 }
 
+/// AI-decided design system based on project context
+class _AIDesignSystem {
+  final String style;
+  final String primaryColor;
+  final String secondaryColor;
+  final String accentColor;
+  final String backgroundColor;
+  final String textColor;
+  final String cardColor;
+  final String fontFamily;
+  final String borderRadius;
+  final String shadowStyle;
+  final String reasoning;
+
+  _AIDesignSystem({
+    required this.style,
+    required this.primaryColor,
+    required this.secondaryColor,
+    required this.accentColor,
+    required this.backgroundColor,
+    required this.textColor,
+    required this.cardColor,
+    required this.fontFamily,
+    required this.borderRadius,
+    required this.shadowStyle,
+    required this.reasoning,
+  });
+
+  factory _AIDesignSystem.fromResponse(String response) {
+    String extract(String key, String fallback) {
+      final regex = RegExp('$key:\\s*([^\\n]+)', caseSensitive: false);
+      final match = regex.firstMatch(response);
+      return match?.group(1)?.trim() ?? fallback;
+    }
+
+    return _AIDesignSystem(
+      style: extract('STYLE', 'modern'),
+      primaryColor: extract('PRIMARY', '#6366F1'),
+      secondaryColor: extract('SECONDARY', '#8B5CF6'),
+      accentColor: extract('ACCENT', '#F59E0B'),
+      backgroundColor: extract('BACKGROUND', '#F8FAFC'),
+      textColor: extract('TEXT', '#1E293B'),
+      cardColor: extract('CARD', '#FFFFFF'),
+      fontFamily: extract('FONT', 'Inter'),
+      borderRadius: extract('RADIUS', '16px'),
+      shadowStyle: extract('SHADOW', 'soft'),
+      reasoning:
+          extract('REASONING', 'Professional design based on project context'),
+    );
+  }
+}
+
 class _ScreenDefinition {
   final String id;
   final String name;
@@ -86,8 +138,6 @@ class _ProjectPrototypeScreenState
   bool _isCapturing = false;
   bool _isSaving = false;
   bool _webViewReady = false;
-  String _selectedStyle = 'modern';
-  String _selectedColorScheme = 'purple';
   String _currentScreen = 'home';
   double _generationProgress = 0;
   String _generationStatus = '';
@@ -99,23 +149,8 @@ class _ProjectPrototypeScreenState
   bool _screensAnalyzed = false;
   bool _isAnalyzing = false;
 
-  final List<String> _styles = [
-    'modern',
-    'minimal',
-    'glassmorphism',
-    'dark',
-    'gradient',
-    'corporate',
-  ];
-
-  final Map<String, List<String>> _colorSchemes = {
-    'purple': ['#8B5CF6', '#A78BFA', '#C4B5FD'],
-    'blue': ['#3B82F6', '#60A5FA', '#93C5FD'],
-    'green': ['#10B981', '#34D399', '#6EE7B7'],
-    'orange': ['#F97316', '#FB923C', '#FDBA74'],
-    'pink': ['#EC4899', '#F472B6', '#F9A8D4'],
-    'teal': ['#14B8A6', '#2DD4BF', '#5EEAD4'],
-  };
+  // AI-decided design system
+  _AIDesignSystem? _aiDesignSystem;
 
   @override
   void initState() {
@@ -453,92 +488,212 @@ class _ProjectPrototypeScreenState
           children: [
             Row(
               children: [
-                Icon(LucideIcons.paintbrush, color: scheme.primary, size: 20),
+                Icon(LucideIcons.sparkles, color: scheme.primary, size: 20),
                 const SizedBox(width: 8),
                 Text(
-                  'Design Style',
+                  'AI Design System',
                   style:
                       text.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                 ),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(LucideIcons.wand2,
+                          size: 12, color: Colors.amber.shade700),
+                      const SizedBox(width: 4),
+                      Text(
+                        'AI Decides',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.amber.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 16),
-            // Style chips
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _styles.map((style) {
-                final isSelected = style == _selectedStyle;
-                return ChoiceChip(
-                  label: Text(
-                    style[0].toUpperCase() + style.substring(1),
+            const SizedBox(height: 12),
+            if (_aiDesignSystem == null) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: scheme.outline.withValues(alpha: 0.2),
+                    style: BorderStyle.solid,
                   ),
-                  selected: isSelected,
-                  onSelected: (selected) {
-                    if (selected) setState(() => _selectedStyle = style);
-                  },
-                  selectedColor: scheme.primary,
-                  labelStyle: TextStyle(
-                    color: isSelected ? Colors.white : scheme.onSurface,
-                    fontWeight:
-                        isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Color Scheme',
-              style: text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: _colorSchemes.entries.map((entry) {
-                final isSelected = entry.key == _selectedColorScheme;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: GestureDetector(
-                    onTap: () =>
-                        setState(() => _selectedColorScheme = entry.key),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: entry.value
-                              .map((c) =>
-                                  Color(int.parse(c.replaceFirst('#', '0xFF'))))
-                              .toList(),
-                        ),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: isSelected ? Colors.white : Colors.transparent,
-                          width: 3,
-                        ),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: Color(int.parse(entry.value[0]
-                                          .replaceFirst('#', '0xFF')))
-                                      .withValues(alpha: 0.5),
-                                  blurRadius: 8,
-                                ),
-                              ]
-                            : null,
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.palette,
+                        color: scheme.onSurfaceVariant, size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Smart Design Selection',
+                            style: text.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'AI will analyze your project and choose the perfect colors, style, and typography based on your app\'s purpose.',
+                            style: text.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ),
-                      child: isSelected
-                          ? const Icon(Icons.check,
-                              color: Colors.white, size: 18)
-                          : null,
                     ),
-                  ),
-                );
-              }).toList(),
-            ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              // Show AI-decided design
+              _buildAIDesignPreview(scheme, text),
+            ],
           ],
         ),
       ),
     ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.1);
+  }
+
+  Widget _buildAIDesignPreview(ColorScheme scheme, TextTheme text) {
+    final design = _aiDesignSystem!;
+
+    Color parseColor(String hex) {
+      try {
+        return Color(int.parse(hex.replaceFirst('#', '0xFF')));
+      } catch (_) {
+        return scheme.primary;
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Color palette preview
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                parseColor(design.primaryColor),
+                parseColor(design.secondaryColor),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Icon(LucideIcons.palette, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  design.style.toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              // Color dots
+              ...[
+                design.primaryColor,
+                design.secondaryColor,
+                design.accentColor
+              ].map(
+                (c) => Container(
+                  width: 24,
+                  height: 24,
+                  margin: const EdgeInsets.only(left: 6),
+                  decoration: BoxDecoration(
+                    color: parseColor(c),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Design reasoning
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.lightbulb,
+                  size: 16, color: Colors.amber.shade600),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  design.reasoning,
+                  style: text.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Design specs
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildDesignChip(
+                'Font: ${design.fontFamily}', LucideIcons.type, scheme),
+            _buildDesignChip(
+                'Radius: ${design.borderRadius}', LucideIcons.square, scheme),
+            _buildDesignChip(
+                'Shadow: ${design.shadowStyle}', LucideIcons.layers, scheme),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesignChip(String label, IconData icon, ColorScheme scheme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: scheme.primary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: scheme.onSurface),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildAnalyzeButton(ColorScheme scheme) {
@@ -1173,7 +1328,7 @@ class _ProjectPrototypeScreenState
     // Check credits
     final hasCredits = await ref.tryUseCredits(
       context: context,
-      amount: CreditCosts.chatMessage * 2,
+      amount: CreditCosts.chatMessage * 3,
       feature: 'project_prototype_analyze',
     );
     if (!hasCredits) return;
@@ -1181,10 +1336,64 @@ class _ProjectPrototypeScreenState
     setState(() {
       _isAnalyzing = true;
       _screens = [];
+      _aiDesignSystem = null;
     });
 
     try {
-      final prompt =
+      // First, get AI to decide the design system
+      final designPrompt =
+          '''You are a professional UI/UX designer. Analyze this project and decide the PERFECT design system.
+
+**Project:** ${plan.title}
+**Description:** ${plan.description}
+
+**Requirements:**
+${plan.requirements.map((r) => '- ${r.title}: ${r.description}').join('\n')}
+
+Based on the project's PURPOSE and TARGET AUDIENCE, decide:
+
+1. **Style** - Choose ONE: modern, minimal, glassmorphism, dark, gradient, corporate, playful, elegant, bold, tech
+2. **Colors** - Pick colors that match the project's mood and industry
+3. **Typography** - Choose appropriate font style
+4. **Visual elements** - Border radius, shadows, etc.
+
+RESPOND IN THIS EXACT FORMAT (one per line):
+STYLE: [style name]
+PRIMARY: [hex color like #6366F1]
+SECONDARY: [hex color]
+ACCENT: [hex color for CTAs/highlights]
+BACKGROUND: [hex color]
+TEXT: [hex color]
+CARD: [hex color]
+FONT: [font name like Inter, Poppins, Roboto]
+RADIUS: [like 8px, 12px, 16px, 24px]
+SHADOW: [soft, medium, strong, none]
+REASONING: [1 sentence explaining why these choices fit the project]
+
+Examples:
+- Healthcare app → calming blues/greens, soft shadows, rounded corners
+- Finance app → professional blues/grays, sharp corners, minimal
+- Social app → vibrant gradients, playful, bold colors
+- E-commerce → clean whites, accent colors for CTAs
+- Gaming → dark theme, neon accents, bold typography''';
+
+      final aiNotifier = ref.read(aiProvider.notifier);
+      await aiNotifier.generateContent(designPrompt, style: ChatStyle.standard);
+
+      final aiState = ref.read(aiProvider);
+      if (aiState.error != null) {
+        throw Exception(aiState.error);
+      }
+
+      final designResponse = aiState.lastResponse ?? '';
+      final designSystem = _AIDesignSystem.fromResponse(designResponse);
+
+      setState(() {
+        _aiDesignSystem = designSystem;
+      });
+
+      // Now analyze screens
+      final screenPrompt =
           '''Analyze this project and identify all the screens/pages needed for a complete application prototype.
 
 **Project:** ${plan.title}
@@ -1214,15 +1423,14 @@ SCREEN|dashboard|Dashboard|Main user dashboard with stats and recent activity
 
 List 5-10 screens that would make a complete prototype.''';
 
-      final aiNotifier = ref.read(aiProvider.notifier);
-      await aiNotifier.generateContent(prompt, style: ChatStyle.standard);
+      await aiNotifier.generateContent(screenPrompt, style: ChatStyle.standard);
 
-      final aiState = ref.read(aiProvider);
-      if (aiState.error != null) {
-        throw Exception(aiState.error);
+      final screenState = ref.read(aiProvider);
+      if (screenState.error != null) {
+        throw Exception(screenState.error);
       }
 
-      final response = aiState.lastResponse ?? '';
+      final response = screenState.lastResponse ?? '';
       final parsedScreens = _parseScreensFromResponse(response);
 
       if (parsedScreens.isEmpty) {
@@ -1314,10 +1522,9 @@ List 5-10 screens that would make a complete prototype.''';
     try {
       final planState = ref.read(planningProvider);
       final plan = planState.currentPlan;
-      final colors = _colorSchemes[_selectedColorScheme]!;
 
-      // Build the full prototype prompt
-      final prompt = _buildFullPrototypePrompt(plan, colors);
+      // Build the full prototype prompt using AI design system
+      final prompt = _buildFullPrototypePrompt(plan);
 
       setState(() {
         _generationProgress = 0.1;
@@ -1380,21 +1587,45 @@ List 5-10 screens that would make a complete prototype.''';
     }
   }
 
-  String _buildFullPrototypePrompt(dynamic plan, List<String> colors) {
-    // Build screen divs template
-    final screenDivs = _screens.map((s) => '''
+  String _buildFullPrototypePrompt(dynamic plan) {
+    // Use AI design system
+    final design = _aiDesignSystem ??
+        _AIDesignSystem(
+          style: 'modern',
+          primaryColor: '#6366F1',
+          secondaryColor: '#8B5CF6',
+          accentColor: '#F59E0B',
+          backgroundColor: '#F8FAFC',
+          textColor: '#1E293B',
+          cardColor: '#FFFFFF',
+          fontFamily: 'Inter',
+          borderRadius: '16px',
+          shadowStyle: 'soft',
+          reasoning: 'Default professional design',
+        );
+
+    // Build screen divs template with placeholder content
+    final screenDivs = _screens.toList().asMap().entries.map((entry) {
+      final index = entry.key;
+      final s = entry.value;
+      return '''
     <!-- ${s.name} Screen -->
-    <div id="${s.id}" class="screen${s.id == _screens.first.id ? ' active' : ''}">
+    <div id="${s.id}" class="screen${index == 0 ? ' active' : ''}">
       <header class="app-header">
-        <h1>${s.name}</h1>
+        <div class="header-content">
+          <h1>${s.name}</h1>
+        </div>
       </header>
       <main class="screen-content">
-        <!-- ADD CONTENT FOR: ${s.description} -->
+        <!-- GENERATE_CONTENT_FOR: ${s.description} -->
       </main>
-    </div>''').join('\n');
+    </div>''';
+    }).join('\n');
 
     // Build bottom nav items
-    final navItems = _screens.take(5).map((s) {
+    final navItems = _screens.take(5).toList().asMap().entries.map((entry) {
+      final index = entry.key;
+      final s = entry.value;
       final icons = {
         'home': '🏠',
         'dashboard': '📊',
@@ -1408,79 +1639,181 @@ List 5-10 screens that would make a complete prototype.''';
         'register': '📝',
         'cart': '🛒',
         'favorites': '❤️',
+        'analytics': '📈',
+        'calendar': '📅',
+        'tasks': '✅',
+        'feed': '📰',
       };
       final icon = icons[s.id.toLowerCase()] ?? '📱';
-      return '<a href="#" data-screen="${s.id}" onclick="navigateTo(\'${s.id}\'); return false;"${s.id == _screens.first.id ? ' class="active"' : ''}><span>$icon</span>${s.name}</a>';
+      return '''<a href="#" data-screen="${s.id}" onclick="navigateTo('${s.id}'); return false;"${index == 0 ? ' class="active"' : ''}>
+          <span class="nav-icon">$icon</span>
+          <span class="nav-label">${s.name}</span>
+        </a>''';
     }).join('\n        ');
 
-    return '''Generate a mobile app prototype. Fill in the screen content in this HTML template.
+    // Determine shadow style
+    String shadowCSS;
+    switch (design.shadowStyle) {
+      case 'strong':
+        shadowCSS = '0 10px 40px rgba(0,0,0,0.15)';
+        break;
+      case 'medium':
+        shadowCSS = '0 4px 20px rgba(0,0,0,0.1)';
+        break;
+      case 'none':
+        shadowCSS = 'none';
+        break;
+      default:
+        shadowCSS = '0 2px 12px rgba(0,0,0,0.06)';
+    }
+
+    return '''Generate a PROFESSIONAL mobile app prototype with polished UI.
 
 **Project:** ${plan?.title ?? 'Project'}
 **Description:** ${plan?.description ?? ''}
-**Style:** $_selectedStyle | Colors: ${colors[0]}, ${colors[1]}, ${colors[2]}
 
-**SCREENS TO CREATE:**
-${_screens.map((s) => '- ${s.id}: ${s.name} - ${s.description}').join('\n')}
+**AI-SELECTED DESIGN:**
+- Style: ${design.style}
+- Primary: ${design.primaryColor}
+- Secondary: ${design.secondaryColor}
+- Accent: ${design.accentColor}
+- Font: ${design.fontFamily}
 
-**IMPORTANT:** 
-- Generate ALL ${_screens.length} screens with real content
-- Each screen MUST have the exact id shown above
-- Add realistic UI content (cards, lists, forms, buttons)
-- Use emoji icons for visual elements
-- Make navigation links call navigateTo('screenId')
+**SCREENS (${_screens.length}):**
+${_screens.toList().asMap().entries.map((e) => '${e.key + 1}. ${e.value.id}: ${e.value.name} - ${e.value.description}').join('\n')}
 
-**COMPLETE THIS HTML (fill in screen content):**
+**REQUIREMENTS:**
+1. Generate ALL ${_screens.length} screens with REAL content
+2. Replace each <!-- GENERATE_CONTENT_FOR: ... --> with rich UI
+3. Use realistic data (names, numbers, text)
+4. Use the CSS classes provided
+5. Navigation: navigateTo('screenId')
+
+**COMPLETE HTML:**
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
   <title>${plan?.title ?? 'App'}</title>
   <style>
+    :root {
+      --primary: ${design.primaryColor};
+      --secondary: ${design.secondaryColor};
+      --accent: ${design.accentColor};
+      --bg: ${design.backgroundColor};
+      --text: ${design.textColor};
+      --card: ${design.cardColor};
+      --radius: ${design.borderRadius};
+      --shadow: $shadowCSS;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { 
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #f5f5f5; min-height: 100vh; overflow-x: hidden;
+      font-family: '${design.fontFamily}', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg); color: var(--text);
+      min-height: 100vh; overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
     }
-    .screen { display: none; flex-direction: column; min-height: 100vh; padding-bottom: 80px; }
+    .screen { display: none; flex-direction: column; min-height: 100vh; padding-bottom: 90px; animation: fadeIn 0.3s ease; }
     .screen.active { display: flex; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     .app-header { 
-      background: ${colors[0]}; color: white; padding: 20px 16px; 
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white; padding: 20px; padding-top: max(20px, env(safe-area-inset-top));
       position: sticky; top: 0; z-index: 100;
     }
-    .app-header h1 { font-size: 20px; font-weight: 600; }
-    .screen-content { flex: 1; padding: 16px; overflow-y: auto; }
+    .app-header h1 { font-size: 24px; font-weight: 700; }
+    .header-content { display: flex; align-items: center; justify-content: space-between; }
+    .screen-content { flex: 1; padding: 20px; overflow-y: auto; }
     .bottom-nav {
-      position: fixed; bottom: 0; left: 0; right: 0; background: white;
-      display: flex; justify-content: space-around; padding: 8px 0 12px;
-      box-shadow: 0 -2px 10px rgba(0,0,0,0.1); z-index: 1000;
+      position: fixed; bottom: 0; left: 0; right: 0; background: var(--card);
+      display: flex; justify-content: space-around; padding: 10px 0;
+      padding-bottom: max(14px, env(safe-area-inset-bottom));
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.08); z-index: 1000;
     }
     .bottom-nav a {
       display: flex; flex-direction: column; align-items: center;
-      text-decoration: none; color: #666; font-size: 11px; padding: 4px 12px;
+      text-decoration: none; color: #94A3B8; font-size: 10px; font-weight: 500;
+      padding: 8px 16px; border-radius: 12px; transition: all 0.2s ease;
     }
-    .bottom-nav a.active { color: ${colors[0]}; }
-    .bottom-nav a span { font-size: 22px; margin-bottom: 2px; }
-    .card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-    .btn { background: ${colors[0]}; color: white; border: none; padding: 14px 24px; border-radius: 10px; font-size: 16px; width: 100%; cursor: pointer; }
-    .btn-outline { background: transparent; border: 2px solid ${colors[0]}; color: ${colors[0]}; }
-    .list-item { display: flex; align-items: center; padding: 14px 0; border-bottom: 1px solid #eee; }
+    .bottom-nav a.active { color: var(--primary); background: rgba(99,102,241,0.1); }
+    .nav-icon { font-size: 24px; margin-bottom: 4px; }
+    .nav-label { font-size: 11px; font-weight: 600; }
+    .card { 
+      background: var(--card); border-radius: var(--radius); padding: 20px;
+      margin-bottom: 16px; box-shadow: var(--shadow);
+    }
+    .card-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .card-subtitle { font-size: 13px; color: #64748B; }
+    .btn { 
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white; border: none; padding: 16px 28px; border-radius: var(--radius);
+      font-size: 15px; font-weight: 600; width: 100%; cursor: pointer;
+    }
+    .btn-outline { background: transparent; border: 2px solid var(--primary); color: var(--primary); }
+    .btn-accent { background: var(--accent); }
+    .input-group { margin-bottom: 16px; }
+    .input-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+    .input { 
+      width: 100%; padding: 16px; border: 2px solid #E2E8F0; border-radius: var(--radius);
+      font-size: 15px; background: var(--card);
+    }
+    .input:focus { outline: none; border-color: var(--primary); }
+    .list-item { display: flex; align-items: center; padding: 16px 0; border-bottom: 1px solid #F1F5F9; }
     .list-item:last-child { border-bottom: none; }
-    .avatar { width: 48px; height: 48px; border-radius: 50%; background: ${colors[1]}; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-right: 12px; }
-    .input { width: 100%; padding: 14px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; margin-bottom: 12px; }
+    .avatar { 
+      width: 48px; height: 48px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; color: white; font-weight: 600; margin-right: 14px;
+    }
+    .avatar-sm { width: 36px; height: 36px; font-size: 14px; }
+    .avatar-lg { width: 64px; height: 64px; font-size: 24px; }
     .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    .stat-card { background: white; border-radius: 12px; padding: 16px; text-align: center; }
-    .stat-value { font-size: 28px; font-weight: bold; color: ${colors[0]}; }
-    .stat-label { font-size: 12px; color: #666; margin-top: 4px; }
-    h2 { font-size: 18px; margin-bottom: 12px; color: #333; }
-    p { color: #666; line-height: 1.5; }
+    .stat-card { background: var(--card); border-radius: var(--radius); padding: 20px; text-align: center; box-shadow: var(--shadow); }
+    .stat-value { 
+      font-size: 28px; font-weight: 700;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .stat-label { font-size: 12px; color: #64748B; margin-top: 4px; }
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .section-title { font-size: 18px; font-weight: 700; }
+    .section-link { font-size: 13px; color: var(--primary); font-weight: 600; text-decoration: none; }
+    .chip { display: inline-flex; padding: 6px 12px; background: rgba(99,102,241,0.1); color: var(--primary); border-radius: 20px; font-size: 12px; font-weight: 600; margin-right: 8px; margin-bottom: 8px; }
+    .chip-success { background: rgba(16,185,129,0.1); color: #10B981; }
+    .chip-warning { background: rgba(245,158,11,0.1); color: #F59E0B; }
+    .progress-bar { height: 8px; background: #E2E8F0; border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--secondary)); border-radius: 4px; }
+    .empty-state { text-align: center; padding: 40px 20px; }
+    .empty-icon { font-size: 48px; margin-bottom: 16px; }
+    h2 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+    h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+    p { color: #64748B; line-height: 1.6; font-size: 14px; }
+    .text-primary { color: var(--primary); }
+    .text-muted { color: #94A3B8; }
+    .mb-8 { margin-bottom: 8px; }
+    .mb-16 { margin-bottom: 16px; }
+    .mb-24 { margin-bottom: 24px; }
+    .mt-16 { margin-top: 16px; }
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-8 { gap: 8px; }
+    .gap-12 { gap: 12px; }
+    .flex-1 { flex: 1; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .text-center { text-align: center; }
+    .font-bold { font-weight: 700; }
+    .hero { padding: 30px 20px; text-align: center; background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border-radius: var(--radius); margin-bottom: 20px; }
+    .hero h2 { color: white; margin-bottom: 8px; }
+    .hero p { color: rgba(255,255,255,0.9); }
   </style>
 </head>
 <body>
 $screenDivs
 
-  <!-- Bottom Navigation -->
   <nav class="bottom-nav">
     $navItems
   </nav>
@@ -1500,16 +1833,14 @@ $screenDivs
         a.classList.remove('active');
         if (a.getAttribute('data-screen') === screenId) a.classList.add('active');
       });
+      window.scrollTo(0, 0);
     }
     document.addEventListener('DOMContentLoaded', () => navigateTo('${_screens.first.id}'));
   </script>
 </body>
 </html>
 
-**YOUR TASK:** 
-Replace the "<!-- ADD CONTENT FOR: ... -->" comments with actual UI content for each screen.
-Include cards, lists, buttons, forms, stats as appropriate for each screen's purpose.
-Return the COMPLETE HTML with all content filled in. No explanations, just HTML.''';
+**TASK:** Replace <!-- GENERATE_CONTENT_FOR: ... --> with REAL UI content using the CSS classes. Return ONLY complete HTML.''';
   }
 
   String _extractHtmlFromResponse(String response) {
@@ -1645,11 +1976,15 @@ Return the COMPLETE HTML with all content filled in. No explanations, just HTML.
 
       const codeBlockStart = '```html';
       const codeBlockEnd = '```';
+      final designStyle = _aiDesignSystem?.style ?? 'modern';
+      final designColors = _aiDesignSystem != null
+          ? '${_aiDesignSystem!.primaryColor}, ${_aiDesignSystem!.secondaryColor}, ${_aiDesignSystem!.accentColor}'
+          : 'AI-selected';
       final designContent = '''## 🎨 Full Project Prototype
 
 **Type:** Interactive Multi-Screen Prototype
-**Style:** $_selectedStyle
-**Color Scheme:** $_selectedColorScheme
+**Style:** $designStyle
+**Colors:** $designColors
 **Generated:** ${DateTime.now().toIso8601String()}
 **Screens:** ${_screens.length}
 
