@@ -146,11 +146,86 @@ class _ProjectPrototypeScreenState
           },
         ),
       );
+
+    // Load a placeholder to prevent black screen
+    _loadPlaceholder();
+  }
+
+  void _loadPlaceholder() {
+    const placeholderHtml = '''
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+    .container {
+      max-width: 300px;
+    }
+    .icon { font-size: 64px; margin-bottom: 20px; }
+    h1 { font-size: 24px; margin-bottom: 12px; }
+    p { font-size: 14px; opacity: 0.9; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">📱</div>
+    <h1>Project Prototype</h1>
+    <p>Analyze your project and generate screens to see an interactive mobile app prototype here.</p>
+  </div>
+</body>
+</html>
+''';
+    _webViewController?.loadHtmlString(placeholderHtml);
   }
 
   void _navigateToScreen(String screenId) {
-    if (_fullPrototypeHtml != null) {
-      _webViewController?.runJavaScript('navigateTo("$screenId")');
+    if (_fullPrototypeHtml != null && _webViewController != null) {
+      // Use a more robust navigation approach
+      _webViewController!.runJavaScript('''
+        (function() {
+          // Try the navigateTo function first
+          if (typeof navigateTo === 'function') {
+            navigateTo('$screenId');
+            return;
+          }
+          
+          // Fallback: manually handle navigation
+          var screens = document.querySelectorAll('.screen');
+          screens.forEach(function(s) {
+            s.classList.remove('active');
+            s.style.display = 'none';
+          });
+          
+          var target = document.getElementById('$screenId');
+          if (target) {
+            target.classList.add('active');
+            target.style.display = 'flex';
+          }
+          
+          // Update bottom nav if exists
+          var navLinks = document.querySelectorAll('.bottom-nav a, nav a');
+          navLinks.forEach(function(a) {
+            a.classList.remove('active');
+            if (a.getAttribute('data-screen') === '$screenId' || 
+                a.getAttribute('href') === '#$screenId' ||
+                a.getAttribute('onclick')?.includes('$screenId')) {
+              a.classList.add('active');
+            }
+          });
+        })();
+      ''');
     }
   }
 
@@ -958,9 +1033,35 @@ class _ProjectPrototypeScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Navigate Screens',
-              style: text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+            Row(
+              children: [
+                Text(
+                  'Navigate Screens',
+                  style: text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                // Refresh button to reload current screen
+                IconButton(
+                  onPressed: () {
+                    if (_fullPrototypeHtml != null) {
+                      setState(() => _webViewReady = false);
+                      _webViewController
+                          ?.loadHtmlString(_fullPrototypeHtml!)
+                          .then((_) {
+                        Future.delayed(const Duration(milliseconds: 500), () {
+                          _navigateToScreen(_currentScreen);
+                        });
+                      });
+                    }
+                  },
+                  icon: const Icon(LucideIcons.refreshCw, size: 16),
+                  tooltip: 'Reload prototype',
+                  style: IconButton.styleFrom(
+                    backgroundColor: scheme.surfaceContainerHighest,
+                    padding: const EdgeInsets.all(8),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             SizedBox(
@@ -1248,16 +1349,21 @@ List 5-10 screens that would make a complete prototype.''';
           _screens =
               _screens.map((s) => s.copyWith(isGenerated: true)).toList();
           _currentScreen = _screens.first.id;
+          _webViewReady = false;
         });
 
         await _webViewController?.loadHtmlString(html);
+
+        // Wait for page to load then navigate to first screen
+        await Future.delayed(const Duration(milliseconds: 800));
+        _navigateToScreen(_screens.first.id);
 
         setState(() {
           _generationProgress = 1.0;
           _generationStatus = 'Complete!';
         });
 
-        await Future.delayed(const Duration(milliseconds: 500));
+        await Future.delayed(const Duration(milliseconds: 300));
       } else {
         throw Exception('Could not generate valid HTML');
       }
