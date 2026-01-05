@@ -109,9 +109,9 @@ class Plan with _$Plan {
   factory Plan.fromJson(Map<String, dynamic> json) => _$PlanFromJson(json);
 
   factory Plan.fromBackendJson(Map<String, dynamic> json) {
-    final requirementsList = json['requirements'] as List?;
+    final requirementsList = json['requirements'];
     final designNotesList = json['designNotes'] ?? json['design_notes'];
-    final tasksList = json['tasks'] as List?;
+    final tasksList = json['tasks'];
     final sharedAgentsList = json['sharedAgents'] ?? json['shared_agents'];
 
     return Plan(
@@ -120,7 +120,7 @@ class Plan with _$Plan {
       title: json['title'] as String? ?? '',
       description: json['description'] as String? ?? '',
       status: _parseStatus(json['status'] as String?),
-      requirements: requirementsList != null
+      requirements: requirementsList != null && requirementsList is List
           ? requirementsList
               .map(
                   (r) => Requirement.fromBackendJson(r as Map<String, dynamic>))
@@ -131,7 +131,7 @@ class Plan with _$Plan {
               .map((d) => DesignNote.fromBackendJson(d as Map<String, dynamic>))
               .toList()
           : <DesignNote>[],
-      tasks: tasksList != null
+      tasks: tasksList != null && tasksList is List
           ? tasksList
               .map((t) => PlanTask.fromBackendJson(t as Map<String, dynamic>))
               .toList()

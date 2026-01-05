@@ -8,6 +8,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database.js';
+import planTaskService, { type Task } from './planTaskService.js';
 
 // ==================== INTERFACES ====================
 
@@ -85,6 +86,7 @@ export interface Plan {
   requirements?: Requirement[];
   designNotes?: DesignNote[];
   taskSummary?: TaskSummary;
+  tasks?: Task[];
 }
 
 export interface ListPlansOptions {
@@ -132,7 +134,7 @@ class PlanService {
   async getPlan(
     planId: string, 
     userId: string, 
-    includeRelations: boolean = false
+    includeRelations: boolean = true
   ): Promise<Plan | null> {
     const result = await pool.query(
       `SELECT * FROM plans WHERE id = $1 AND user_id = $2`,
@@ -149,6 +151,8 @@ class PlanService {
       plan.requirements = await this.getRequirements(planId);
       plan.designNotes = await this.getDesignNotes(planId);
       plan.taskSummary = await this.getTaskSummary(planId);
+      // Also include the actual tasks array for the Flutter app
+      plan.tasks = await this.getTasks(planId);
     }
 
     return plan;
@@ -659,6 +663,14 @@ class PlanService {
       completed,
       completionPercentage,
     };
+  }
+
+  /**
+   * Get all tasks for a plan.
+   * Returns the actual task objects for the Flutter app.
+   */
+  private async getTasks(planId: string): Promise<Task[]> {
+    return planTaskService.listTasks(planId, { includeSubTasks: true });
   }
 
   /**
