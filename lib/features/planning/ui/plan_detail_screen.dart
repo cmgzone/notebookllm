@@ -737,31 +737,234 @@ class _TasksSection extends StatelessWidget {
 
 /// Requirements section widget
 /// Implements Requirement 4.1: Show requirements section
-class _RequirementsSection extends StatelessWidget {
+class _RequirementsSection extends ConsumerWidget {
   final List<Requirement> requirements;
 
   const _RequirementsSection({required this.requirements});
 
   @override
-  Widget build(BuildContext context) {
-    if (requirements.isEmpty) {
-      return const _EmptyState(
-        icon: LucideIcons.fileText,
-        title: 'No Requirements Yet',
-        subtitle: 'Requirements will appear here when added',
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: requirements.length,
-      itemBuilder: (context, index) {
-        final requirement = requirements[index];
-        return _RequirementCard(requirement: requirement)
-            .animate()
-            .fadeIn(delay: Duration(milliseconds: index * 50));
-      },
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Stack(
+      children: [
+        if (requirements.isEmpty)
+          const _EmptyState(
+            icon: LucideIcons.fileText,
+            title: 'No Requirements Yet',
+            subtitle: 'Tap + to add requirements or use AI to generate them',
+          )
+        else
+          ListView.builder(
+            padding: const EdgeInsets.all(16).copyWith(bottom: 80),
+            itemCount: requirements.length,
+            itemBuilder: (context, index) {
+              final requirement = requirements[index];
+              return _RequirementCard(requirement: requirement)
+                  .animate()
+                  .fadeIn(delay: Duration(milliseconds: index * 50));
+            },
+          ),
+        // Add Requirement FAB
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: FloatingActionButton(
+            heroTag: 'add_requirement',
+            onPressed: () => _showAddRequirementDialog(context, ref),
+            child: const Icon(LucideIcons.plus),
+          ).animate().scale(delay: 200.ms),
+        ),
+      ],
     );
+  }
+
+  void _showAddRequirementDialog(BuildContext context, WidgetRef ref) {
+    final titleController = TextEditingController();
+    final descController = TextEditingController();
+    EarsPattern selectedPattern = EarsPattern.ubiquitous;
+    final acceptanceCriteria = <String>[];
+    final criteriaController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(LucideIcons.fileText),
+              SizedBox(width: 12),
+              Text('Add Requirement'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Requirement Title',
+                    prefixIcon: Icon(LucideIcons.type),
+                    hintText: 'e.g., User Authentication',
+                  ),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: descController,
+                  decoration: const InputDecoration(
+                    labelText: 'Description (optional)',
+                    prefixIcon: Icon(LucideIcons.alignLeft),
+                    hintText: 'Detailed description or user story',
+                  ),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'EARS Pattern',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<EarsPattern>(
+                  initialValue: selectedPattern,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  items: EarsPattern.values.map((pattern) {
+                    return DropdownMenuItem(
+                      value: pattern,
+                      child: Text(_getPatternLabel(pattern)),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() {
+                        selectedPattern = value;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Acceptance Criteria',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+                const SizedBox(height: 8),
+                ...acceptanceCriteria.asMap().entries.map((entry) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${entry.key + 1}. ${entry.value}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(LucideIcons.x, size: 16),
+                          onPressed: () {
+                            setDialogState(() {
+                              acceptanceCriteria.removeAt(entry.key);
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: criteriaController,
+                        decoration: const InputDecoration(
+                          hintText: 'Add acceptance criterion',
+                          border: OutlineInputBorder(),
+                          contentPadding:
+                              EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        onSubmitted: (value) {
+                          if (value.trim().isNotEmpty) {
+                            setDialogState(() {
+                              acceptanceCriteria.add(value.trim());
+                              criteriaController.clear();
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(LucideIcons.plus),
+                      onPressed: () {
+                        if (criteriaController.text.trim().isNotEmpty) {
+                          setDialogState(() {
+                            acceptanceCriteria
+                                .add(criteriaController.text.trim());
+                            criteriaController.clear();
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (titleController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Title is required')),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                await ref.read(planningProvider.notifier).createRequirement(
+                      title: titleController.text.trim(),
+                      description: descController.text.trim().isEmpty
+                          ? null
+                          : descController.text.trim(),
+                      earsPattern: selectedPattern.name,
+                      acceptanceCriteria: acceptanceCriteria,
+                    );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Requirement added successfully')),
+                  );
+                }
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getPatternLabel(EarsPattern pattern) {
+    switch (pattern) {
+      case EarsPattern.ubiquitous:
+        return 'Ubiquitous - THE <system> SHALL <response>';
+      case EarsPattern.event:
+        return 'Event - WHEN <trigger>, THE <system> SHALL...';
+      case EarsPattern.state:
+        return 'State - WHILE <condition>, THE <system> SHALL...';
+      case EarsPattern.unwanted:
+        return 'Unwanted - IF <condition>, THEN THE <system> SHALL...';
+      case EarsPattern.optional:
+        return 'Optional - WHERE <option>, THE <system> SHALL...';
+      case EarsPattern.complex:
+        return 'Complex - Combination of patterns';
+    }
   }
 }
 
@@ -911,130 +1114,393 @@ class _EarsPatternChip extends StatelessWidget {
 
 /// Design notes section widget
 /// Implements Requirement 4.1: Show design notes section
-class _DesignNotesSection extends StatelessWidget {
+class _DesignNotesSection extends ConsumerWidget {
   final List<DesignNote> designNotes;
 
   const _DesignNotesSection({required this.designNotes});
 
   @override
-  Widget build(BuildContext context) {
-    if (designNotes.isEmpty) {
-      return const _EmptyState(
-        icon: LucideIcons.lightbulb,
-        title: 'No Design Notes Yet',
-        subtitle: 'Design notes will appear here when added',
-      );
-    }
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Stack(
+      children: [
+        if (designNotes.isEmpty)
+          const _EmptyState(
+            icon: LucideIcons.lightbulb,
+            title: 'No Design Notes Yet',
+            subtitle: 'Tap + to add design notes or use AI to generate them',
+          )
+        else
+          ListView.builder(
+            padding: const EdgeInsets.all(16).copyWith(bottom: 80),
+            itemCount: designNotes.length,
+            itemBuilder: (context, index) {
+              final note = designNotes[index];
+              return _DesignNoteCard(note: note)
+                  .animate()
+                  .fadeIn(delay: Duration(milliseconds: index * 50));
+            },
+          ),
+        // Add Design Note FAB
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: FloatingActionButton(
+            heroTag: 'add_design_note',
+            onPressed: () => _showAddDesignNoteDialog(context, ref),
+            child: const Icon(LucideIcons.plus),
+          ).animate().scale(delay: 200.ms),
+        ),
+      ],
+    );
+  }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: designNotes.length,
-      itemBuilder: (context, index) {
-        final note = designNotes[index];
-        return _DesignNoteCard(note: note)
-            .animate()
-            .fadeIn(delay: Duration(milliseconds: index * 50));
-      },
+  void _showAddDesignNoteDialog(BuildContext context, WidgetRef ref) {
+    final contentController = TextEditingController();
+    final plan = ref.read(planningProvider).currentPlan;
+    final selectedRequirements = <String>{};
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(LucideIcons.lightbulb),
+              SizedBox(width: 12),
+              Text('Add Design Note'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: contentController,
+                  decoration: const InputDecoration(
+                    labelText: 'Design Note Content',
+                    prefixIcon: Icon(LucideIcons.fileEdit),
+                    hintText: 'Document architectural decisions and rationale',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 5,
+                  autofocus: true,
+                ),
+                if (plan != null && plan.requirements.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Link to Requirements (optional)',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  ...plan.requirements.map((req) {
+                    final isSelected = selectedRequirements.contains(req.id);
+                    return CheckboxListTile(
+                      title: Text(
+                        req.title,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      value: isSelected,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          if (value == true) {
+                            selectedRequirements.add(req.id);
+                          } else {
+                            selectedRequirements.remove(req.id);
+                          }
+                        });
+                      },
+                    );
+                  }),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (contentController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Content is required')),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                await ref.read(planningProvider.notifier).createDesignNote(
+                      content: contentController.text.trim(),
+                      requirementIds: selectedRequirements.toList(),
+                    );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Design note added successfully')),
+                  );
+                }
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
 /// Design note card widget
-class _DesignNoteCard extends StatelessWidget {
+class _DesignNoteCard extends ConsumerWidget {
   final DesignNote note;
 
   const _DesignNoteCard({required this.note});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    final plan = ref.watch(planningProvider).currentPlan;
+
+    // Get linked requirement titles
+    final linkedRequirements = plan?.requirements
+            .where((r) => note.requirementIds.contains(r.id))
+            .toList() ??
+        [];
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: Colors.amber.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with gradient
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.amber.withValues(alpha: 0.15),
+                  Colors.orange.withValues(alpha: 0.08),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
+            child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.amber.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.amber.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: const Icon(
                     LucideIcons.lightbulb,
                     color: Colors.amber,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Design Note',
+                        style: text.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _formatDate(note.createdAt),
+                        style: text.labelSmall?.copyWith(
+                          color: scheme.onSurface.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  icon: Icon(
+                    LucideIcons.moreVertical,
+                    color: scheme.onSurface.withValues(alpha: 0.5),
                     size: 20,
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Design Note',
-                    style: text.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
+                  onSelected: (value) {
+                    if (value == 'delete') {
+                      _confirmDelete(context, ref);
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(LucideIcons.trash2, size: 16, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Delete', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-                Text(
-                  _formatDate(note.createdAt),
-                  style: text.labelSmall?.copyWith(
-                    color: scheme.onSurface.withValues(alpha: 0.5),
-                  ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              note.content,
-              style: text.bodyMedium?.copyWith(
-                color: scheme.onSurface.withValues(alpha: 0.8),
-              ),
-            ),
-            if (note.requirementIds.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: note.requirementIds.map((id) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+          ),
+          // Content
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Note content with better typography
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: scheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: scheme.outline.withValues(alpha: 0.1),
                     ),
-                    decoration: BoxDecoration(
-                      color: scheme.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(
+                    note.content,
+                    style: text.bodyMedium?.copyWith(
+                      color: scheme.onSurface.withValues(alpha: 0.85),
+                      height: 1.6,
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          LucideIcons.link,
-                          size: 12,
-                          color: scheme.primary,
+                  ),
+                ),
+                // Linked requirements
+                if (linkedRequirements.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Icon(
+                        LucideIcons.link2,
+                        size: 14,
+                        color: scheme.primary.withValues(alpha: 0.7),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Linked Requirements',
+                        style: text.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: scheme.primary.withValues(alpha: 0.7),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Req ${id.substring(0, 8)}...',
-                          style: TextStyle(
-                            color: scheme.primary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: linkedRequirements.map((req) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              scheme.primary.withValues(alpha: 0.1),
+                              scheme.primary.withValues(alpha: 0.05),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: scheme.primary.withValues(alpha: 0.2),
                           ),
                         ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ],
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              LucideIcons.fileCheck,
+                              size: 12,
+                              color: scheme.primary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              req.title.length > 25
+                                  ? '${req.title.substring(0, 25)}...'
+                                  : req.title,
+                              style: TextStyle(
+                                color: scheme.primary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Design Note?'),
+        content: const Text(
+          'Are you sure you want to delete this design note? This action cannot be undone.',
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await ref
+                  .read(planningProvider.notifier)
+                  .deleteDesignNote(note.id);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Design note deleted')),
+                );
+              }
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
   }
@@ -1045,6 +1511,9 @@ class _DesignNoteCard extends StatelessWidget {
 
     if (diff.inDays == 0) {
       if (diff.inHours == 0) {
+        if (diff.inMinutes == 0) {
+          return 'Just now';
+        }
         return '${diff.inMinutes}m ago';
       }
       return '${diff.inHours}h ago';
