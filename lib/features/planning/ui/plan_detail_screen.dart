@@ -329,10 +329,21 @@ class _PlanDetailScreenState extends ConsumerState<PlanDetailScreen>
           ? Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Project Prototype FAB
+                FloatingActionButton(
+                  heroTag: 'prototype',
+                  onPressed: () =>
+                      context.push('/planning/${plan.id}/prototype'),
+                  backgroundColor: scheme.primaryContainer,
+                  foregroundColor: scheme.onPrimaryContainer,
+                  child: const Icon(LucideIcons.layoutDashboard),
+                ).animate().scale(delay: 50.ms),
+                const SizedBox(height: 12),
                 // UI Designer FAB
                 FloatingActionButton(
                   heroTag: 'ui_designer',
-                  onPressed: () => context.push('/planning/${plan.id}/ui-designer'),
+                  onPressed: () =>
+                      context.push('/planning/${plan.id}/ui-designer'),
                   backgroundColor: scheme.tertiaryContainer,
                   foregroundColor: scheme.onTertiaryContainer,
                   child: const Icon(LucideIcons.palette),
