@@ -122,13 +122,16 @@ class PlanTask with _$PlanTask {
     final agentOutputsList = json['agentOutputs'] ?? json['agent_outputs'];
     final statusHistoryList = json['statusHistory'] ?? json['status_history'];
     final subTasksList = json['subTasks'] ?? json['sub_tasks'];
+    final requirementIdsList =
+        json['requirementIds'] ?? json['requirement_ids'];
 
     return PlanTask(
       id: json['id'] as String? ?? '',
       planId: (json['planId'] ?? json['plan_id']) as String? ?? '',
       parentTaskId: (json['parentTaskId'] ?? json['parent_task_id']) as String?,
-      requirementIds: List<String>.from(
-          json['requirementIds'] ?? json['requirement_ids'] ?? []),
+      requirementIds: requirementIdsList != null && requirementIdsList is List
+          ? List<String>.from(requirementIdsList)
+          : <String>[],
       title: json['title'] as String? ?? '',
       description: json['description'] as String? ?? '',
       status: _parseTaskStatus((json['status']) as String?),

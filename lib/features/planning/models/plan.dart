@@ -27,18 +27,24 @@ class DesignNote with _$DesignNote {
   factory DesignNote.fromJson(Map<String, dynamic> json) =>
       _$DesignNoteFromJson(json);
 
-  factory DesignNote.fromBackendJson(Map<String, dynamic> json) => DesignNote(
-        id: json['id'] as String? ?? '',
-        planId: (json['planId'] ?? json['plan_id']) as String? ?? '',
-        requirementIds: List<String>.from(
-            json['requirementIds'] ?? json['requirement_ids'] ?? []),
-        content: json['content'] as String? ?? '',
-        createdAt: json['createdAt'] != null
-            ? DateTime.parse(json['createdAt'] as String)
-            : json['created_at'] != null
-                ? DateTime.parse(json['created_at'] as String)
-                : DateTime.now(),
-      );
+  factory DesignNote.fromBackendJson(Map<String, dynamic> json) {
+    final requirementIdsList =
+        json['requirementIds'] ?? json['requirement_ids'];
+
+    return DesignNote(
+      id: json['id'] as String? ?? '',
+      planId: (json['planId'] ?? json['plan_id']) as String? ?? '',
+      requirementIds: requirementIdsList != null && requirementIdsList is List
+          ? List<String>.from(requirementIdsList)
+          : <String>[],
+      content: json['content'] as String? ?? '',
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String)
+          : json['created_at'] != null
+              ? DateTime.parse(json['created_at'] as String)
+              : DateTime.now(),
+    );
+  }
 }
 
 /// Represents agent access to a plan
@@ -57,25 +63,30 @@ class AgentAccess with _$AgentAccess {
   factory AgentAccess.fromJson(Map<String, dynamic> json) =>
       _$AgentAccessFromJson(json);
 
-  factory AgentAccess.fromBackendJson(Map<String, dynamic> json) => AgentAccess(
-        id: json['id'] as String? ?? '',
-        planId: (json['planId'] ?? json['plan_id']) as String? ?? '',
-        agentSessionId:
-            (json['agentSessionId'] ?? json['agent_session_id']) as String? ??
-                '',
-        agentName: (json['agentName'] ?? json['agent_name']) as String?,
-        permissions: List<String>.from(json['permissions'] ?? ['read']),
-        grantedAt: json['grantedAt'] != null
-            ? DateTime.parse(json['grantedAt'] as String)
-            : json['granted_at'] != null
-                ? DateTime.parse(json['granted_at'] as String)
-                : DateTime.now(),
-        revokedAt: json['revokedAt'] != null
-            ? DateTime.parse(json['revokedAt'] as String)
-            : json['revoked_at'] != null
-                ? DateTime.parse(json['revoked_at'] as String)
-                : null,
-      );
+  factory AgentAccess.fromBackendJson(Map<String, dynamic> json) {
+    final permissionsList = json['permissions'];
+
+    return AgentAccess(
+      id: json['id'] as String? ?? '',
+      planId: (json['planId'] ?? json['plan_id']) as String? ?? '',
+      agentSessionId:
+          (json['agentSessionId'] ?? json['agent_session_id']) as String? ?? '',
+      agentName: (json['agentName'] ?? json['agent_name']) as String?,
+      permissions: permissionsList != null && permissionsList is List
+          ? List<String>.from(permissionsList)
+          : <String>['read'],
+      grantedAt: json['grantedAt'] != null
+          ? DateTime.parse(json['grantedAt'] as String)
+          : json['granted_at'] != null
+              ? DateTime.parse(json['granted_at'] as String)
+              : DateTime.now(),
+      revokedAt: json['revokedAt'] != null
+          ? DateTime.parse(json['revokedAt'] as String)
+          : json['revoked_at'] != null
+              ? DateTime.parse(json['revoked_at'] as String)
+              : null,
+    );
+  }
 }
 
 /// Represents a structured plan with requirements, design, and tasks
