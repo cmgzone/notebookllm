@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database.js';
 import { githubService } from './githubService.js';
 import crypto from 'crypto';
+import { codeAnalysisService, CodeAnalysisResult } from './codeAnalysisService.js';
 
 // ==================== INTERFACES ====================
 
@@ -354,6 +355,9 @@ class GitHubSourceService {
       [notebookId]
     );
     
+    // Perform code analysis asynchronously (don't block source creation)
+    this.analyzeSourceAsync(sourceId, content, language, path, { owner, repo, branch: actualBranch });
+    
     return this.mapSource(result.rows[0]);
   }
 
@@ -540,6 +544,141 @@ class GitHubSourceService {
     }
     
     // Cache entry will be deleted by CASCADE
+  }
+
+  /**
+   * Analyze source code asynchronously and store results
+   * This runs in the background to not block source creation
+   */
+  private async analyzeSourceAsync(
+    sourceId: string,
+    content: string,
+    language: string,
+    filePath: string,
+    repoContext: { owner: string; repo: string; branch: string }
+  ): Promise<void> {
+    try {
+      // Skip analysis for non-code files or very large files
+      const codeLanguages = [
+        'javascript', 'typescript', 'python', 'dart', 'java', 'kotlin',
+        'swift', 'go', 'rust', 'c', 'cpp', 'csharp', 'ruby', 'php',
+        'scala', 'groovy', 'lua', 'r', 'bash', 'powershell'
+      ];
+      
+      if (!codeLanguages.includes(language.toLowerCase())) {
+        console.log(`⏭️ Skipping analysis for non-code file: ${filePath} (${language})`);
+        return;
+      }
+      
+      if (content.length > 100000) {
+        console.log(`⏭️ Skipping analysis for large file: ${filePath} (${content.length} chars)`);
+        return;
+      }
+      
+      console.log(`🔍 Analyzing code: ${filePath}`);
+      
+      // Perform analysis
+      const analysis = await codeAnalysisService.analyzeCode({
+        code: content,
+        language,
+        filePath,
+        repoContext,
+      });
+      
+      // Generate fact-check friendly summary
+      const analysisSummary = await codeAnalysisService.generateFactCheckContext(analysis);
+      
+      // Store analysis results
+      await pool.query(
+        `UPDATE sources 
+         SET code_analysis = $1, 
+             analysis_summary = $2, 
+             analysis_rating = $3, 
+             analyzed_at = NOW(),
+             updated_at = NOW()
+         WHERE id = $4`,
+        [
+          JSON.stringify(analysis),
+          analysisSummary,
+          analysis.rating,
+          sourceId
+        ]
+      );
+      
+      console.log(`✅ Analysis complete for ${filePath}: Rating ${analysis.rating}/10`);
+    } catch (error) {
+      console.error(`❌ Analysis failed for source ${sourceId}:`, error);
+      // Don't throw - analysis failure shouldn't affect source creation
+    }
+  }
+
+  /**
+   * Get analysis for a source
+   */
+  async getSourceAnalysis(sourceId: string, userId: string): Promise<CodeAnalysisResult | null> {
+    const result = await pool.query(
+      `SELECT s.code_analysis FROM sources s
+       INNER JOIN notebooks n ON s.notebook_id = n.id
+       WHERE s.id = $1 AND n.user_id = $2`,
+      [sourceId, userId]
+    );
+    
+    if (result.rows.length === 0 || !result.rows[0].code_analysis) {
+      return null;
+    }
+    
+    return result.rows[0].code_analysis as CodeAnalysisResult;
+  }
+
+  /**
+   * Re-analyze a source (useful after code updates)
+   */
+  async reanalyzeSource(sourceId: string, userId: string): Promise<CodeAnalysisResult | null> {
+    const sourceResult = await pool.query(
+      `SELECT s.* FROM sources s
+       INNER JOIN notebooks n ON s.notebook_id = n.id
+       WHERE s.id = $1 AND n.user_id = $2 AND s.type = 'github'`,
+      [sourceId, userId]
+    );
+    
+    if (sourceResult.rows.length === 0) {
+      throw new Error('GitHub source not found or access denied');
+    }
+    
+    const source = sourceResult.rows[0];
+    const metadata = source.metadata as GitHubSourceMetadata;
+    
+    // Run analysis synchronously for re-analysis requests
+    const analysis = await codeAnalysisService.analyzeCode({
+      code: source.content,
+      language: metadata.language,
+      filePath: metadata.path,
+      repoContext: {
+        owner: metadata.owner,
+        repo: metadata.repo,
+        branch: metadata.branch,
+      },
+    });
+    
+    const analysisSummary = await codeAnalysisService.generateFactCheckContext(analysis);
+    
+    await pool.query(
+      `UPDATE sources 
+       SET code_analysis = $1, 
+           analysis_summary = $2, 
+           analysis_rating = $3, 
+           analyzed_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $4`,
+      [
+        JSON.stringify(analysis),
+        analysisSummary,
+        analysis.rating,
+        sourceId
+      ]
+    );
+    
+    return analysis;
   }
 
   /**

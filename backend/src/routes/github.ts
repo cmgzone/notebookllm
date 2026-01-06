@@ -1370,8 +1370,10 @@ Please provide:
 5. Recommendations - Improvements or best practices
 ${focus ? `6. Specific ${focus} Analysis` : ''}`;
 
-    // Try Gemini first, fallback to OpenRouter if Gemini fails
+    // Try Gemini first, fallback to OpenRouter, then manual analysis
     let analysis: string;
+    let aiAnalysisAvailable = true;
+    
     try {
       analysis = await generateWithGemini([{ role: 'user', content: prompt }]);
     } catch (geminiError: any) {
@@ -1379,8 +1381,35 @@ ${focus ? `6. Specific ${focus} Analysis` : ''}`;
       try {
         analysis = await generateWithOpenRouter([{ role: 'user', content: prompt }]);
       } catch (openRouterError: any) {
-        console.error('Both AI services failed:', { gemini: geminiError.message, openRouter: openRouterError.message });
-        throw new Error('AI analysis unavailable. Please check that GEMINI_API_KEY or OPENROUTER_API_KEY is configured in the backend.');
+        console.error('Both AI services failed:', { 
+          gemini: geminiError.message, 
+          openRouter: openRouterError.message 
+        });
+        
+        // Provide manual analysis instead of failing
+        aiAnalysisAvailable = false;
+        analysis = `# Repository Analysis (Manual)
+
+## Overview
+**${analysisContext.repository.fullName}** is a ${analysisContext.repository.language || 'multi-language'} project with ${analysisContext.repository.stars} stars and ${analysisContext.repository.forks} forks.
+
+${analysisContext.repository.description ? `**Description:** ${analysisContext.repository.description}` : ''}
+
+## Structure
+- **Total Files:** ${analysisContext.structure.totalFiles}
+- **Total Directories:** ${analysisContext.structure.totalDirectories}
+- **Top-level Items:** ${analysisContext.structure.topLevelItems.map(i => i.name).join(', ')}
+
+## Technology Stack
+- **Primary Language:** ${analysisContext.repository.language || 'Unknown'}
+- **Repository Type:** ${analysisContext.repository.isPrivate ? 'Private' : 'Public'}
+
+${analysisContext.readme ? `## README Preview\n${analysisContext.readme.substring(0, 1000)}${analysisContext.readme.length > 1000 ? '...' : ''}` : ''}
+
+${fileContents.length > 0 ? `## Key Files\n${fileContents.map(f => `- **${f.path}** (${f.content.length} bytes)`).join('\n')}` : ''}
+
+---
+*Note: AI-powered analysis is currently unavailable. Please configure GEMINI_API_KEY or OPENROUTER_API_KEY in the backend for detailed insights.*`;
       }
     }
 
@@ -1397,6 +1426,7 @@ ${focus ? `6. Specific ${focus} Analysis` : ''}`;
         includeFilesCount: includeFiles?.length || 0,
         totalFiles: analysisContext.structure.totalFiles,
         language: analysisContext.repository.language,
+        aiAnalysisAvailable,
       },
     });
 
@@ -1405,6 +1435,7 @@ ${focus ? `6. Specific ${focus} Analysis` : ''}`;
       repository: analysisContext.repository,
       structure: analysisContext.structure,
       analysis,
+      aiAnalysisAvailable,
       analyzedAt: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -1625,6 +1656,115 @@ router.get('/sources/:sourceId/check-updates', authenticateToken, async (req: Re
     res.status(500).json({ 
       success: false,
       error: 'GITHUB_ERROR',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/github/sources/:sourceId/analysis
+ * Get the code analysis for a GitHub source
+ * Returns the AI-generated analysis including rating, explanation, and quality metrics
+ */
+router.get('/sources/:sourceId/analysis', authenticateToken, async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  const { sourceId } = req.params;
+  
+  try {
+    const analysis = await githubSourceService.getSourceAnalysis(sourceId, userId);
+    
+    if (!analysis) {
+      return res.status(404).json({
+        success: false,
+        error: 'ANALYSIS_NOT_FOUND',
+        message: 'Code analysis not available for this source. It may still be processing or the source is not a code file.',
+      });
+    }
+    
+    res.json({
+      success: true,
+      analysis,
+    });
+  } catch (error: any) {
+    console.error('Get source analysis error:', error);
+    
+    if (error.message?.includes('not found') || error.message?.includes('access denied')) {
+      return res.status(404).json({
+        success: false,
+        error: GITHUB_ERROR_CODES.NOT_FOUND,
+        message: 'GitHub source not found or access denied',
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      error: 'ANALYSIS_ERROR',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/github/sources/:sourceId/reanalyze
+ * Re-analyze a GitHub source (useful after code updates or to get fresh analysis)
+ */
+router.post('/sources/:sourceId/reanalyze', authenticateToken, async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  const { sourceId } = req.params;
+  const agentSessionId = getAgentSessionId(req);
+  
+  try {
+    const analysis = await githubSourceService.reanalyzeSource(sourceId, userId);
+    
+    if (!analysis) {
+      return res.status(400).json({
+        success: false,
+        error: 'ANALYSIS_FAILED',
+        message: 'Code analysis failed. The source may not be a code file.',
+      });
+    }
+    
+    // Log successful operation
+    await auditLoggerService.log({
+      userId,
+      action: 'reanalyze_source',
+      agentSessionId,
+      success: true,
+      requestMetadata: { 
+        sourceId, 
+        rating: analysis.rating,
+        language: analysis.language,
+      },
+    });
+    
+    res.json({
+      success: true,
+      analysis,
+    });
+  } catch (error: any) {
+    console.error('Reanalyze source error:', error);
+    
+    // Log failed operation
+    await auditLoggerService.log({
+      userId,
+      action: 'reanalyze_source',
+      agentSessionId,
+      success: false,
+      errorMessage: error.message,
+      requestMetadata: { sourceId },
+    });
+    
+    if (error.message?.includes('not found') || error.message?.includes('access denied')) {
+      return res.status(404).json({
+        success: false,
+        error: GITHUB_ERROR_CODES.NOT_FOUND,
+        message: 'GitHub source not found or access denied',
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      error: 'ANALYSIS_ERROR',
       message: error.message,
     });
   }

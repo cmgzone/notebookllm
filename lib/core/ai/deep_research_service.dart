@@ -557,56 +557,70 @@ Write the complete report:''';
           images: images,
           videos: videos);
 
-      final prompt =
-          _buildReportPrompt(query, sources, template, images: images);
-      var report = await _generateAI(prompt);
+      try {
+        final prompt =
+            _buildReportPrompt(query, sources, template, images: images);
+        var report = await _generateAI(prompt);
 
-      // Enhance report with images if AI didn't include them
-      report = _enhanceReportWithImages(report, images);
+        // Enhance report with images if AI didn't include them
+        report = _enhanceReportWithImages(report, images);
 
-      if (report.isEmpty) {
+        if (report.isEmpty || report.trim().isEmpty) {
+          yield ResearchUpdate(
+            status: 'Failed to generate report',
+            progress: 1.0,
+            sources: sources,
+            images: images,
+            videos: videos,
+            isComplete: true,
+            error:
+                'AI returned empty response. Please try again or check your API keys.',
+          );
+          return;
+        }
+
+        debugPrint('[Research] Report generated: ${report.length} chars');
+
+        // Step 4: Save to backend
+        try {
+          final api = ref.read(apiServiceProvider);
+          await api.saveResearchSession(
+            notebookId: notebookId,
+            query: query,
+            report: report,
+            sources: sources.map((s) => s.toJson()).toList(),
+          );
+        } catch (e) {
+          debugPrint('[Research] Failed to save: $e');
+        }
+
+        // Track gamification
+        try {
+          ref.read(gamificationProvider.notifier).trackDeepResearch();
+        } catch (_) {}
+
+        // Done!
         yield ResearchUpdate(
-          status: 'Failed to generate report',
+          status: 'Research complete!',
+          progress: 1.0,
+          result: report,
+          sources: sources,
+          images: images,
+          videos: videos,
+          isComplete: true,
+        );
+      } catch (e) {
+        debugPrint('[Research] Report generation error: $e');
+        yield ResearchUpdate(
+          status: 'Error generating report',
           progress: 1.0,
           sources: sources,
           images: images,
           videos: videos,
           isComplete: true,
-          error: 'AI returned empty response',
+          error: 'Failed to generate report: ${e.toString()}',
         );
-        return;
       }
-
-      debugPrint('[Research] Report generated: ${report.length} chars');
-
-      // Step 4: Save to backend
-      try {
-        final api = ref.read(apiServiceProvider);
-        await api.saveResearchSession(
-          notebookId: notebookId,
-          query: query,
-          report: report,
-          sources: sources.map((s) => s.toJson()).toList(),
-        );
-      } catch (e) {
-        debugPrint('[Research] Failed to save: $e');
-      }
-
-      // Track gamification
-      try {
-        ref.read(gamificationProvider.notifier).trackDeepResearch();
-      } catch (_) {}
-
-      // Done!
-      yield ResearchUpdate(
-        status: 'Research complete!',
-        progress: 1.0,
-        result: report,
-        sources: sources,
-        images: images,
-        videos: videos,
-        isComplete: true,
-      );
     } catch (e) {
       debugPrint('[Research] Fatal error: $e');
       yield ResearchUpdate(

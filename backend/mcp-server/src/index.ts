@@ -1023,6 +1023,54 @@ Use this to get intelligent insights about a codebase.`,
       required: ['owner', 'repo'],
     },
   },
+  {
+    name: 'get_source_analysis',
+    description: `Get the AI-generated code analysis for a GitHub source.
+    
+When a GitHub file is added as a source, it is automatically analyzed to provide:
+- Overall quality rating (1-10)
+- Code explanation and purpose
+- Key components (functions, classes, etc.)
+- Quality metrics (readability, maintainability, testability, documentation, error handling)
+- Architecture patterns detected
+- Strengths and areas for improvement
+- Security notes
+
+This analysis improves fact-checking results by providing deep knowledge about the code.
+
+Returns null if analysis is not yet available (still processing) or if the source is not a code file.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sourceId: {
+          type: 'string',
+          description: 'The ID of the source to get analysis for',
+        },
+      },
+      required: ['sourceId'],
+    },
+  },
+  {
+    name: 'reanalyze_source',
+    description: `Re-analyze a GitHub source to get fresh code analysis.
+    
+Use this when:
+- The source code has been updated
+- You want a fresh analysis with potentially improved AI insights
+- The initial analysis failed or is incomplete
+
+Returns the new analysis result with updated ratings and insights.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sourceId: {
+          type: 'string',
+          description: 'The ID of the source to re-analyze',
+        },
+      },
+      required: ['sourceId'],
+    },
+  },
   // ==================== PLANNING MODE TOOLS ====================
   {
     name: 'list_plans',
@@ -2200,6 +2248,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
       case 'github_analyze_repo': {
         const input = GitHubAnalyzeRepoSchema.parse(args);
         const response = await githubApi.post('/analyze', input);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_source_analysis': {
+        const input = z.object({ sourceId: z.string() }).parse(args);
+        const response = await githubApi.get(`/sources/${input.sourceId}/analysis`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(response.data, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'reanalyze_source': {
+        const input = z.object({ sourceId: z.string() }).parse(args);
+        const response = await githubApi.post(`/sources/${input.sourceId}/reanalyze`);
         return {
           content: [
             {

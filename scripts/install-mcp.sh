@@ -39,6 +39,43 @@ echo "📥 Installing dependencies..."
 cd "$MCP_DIR"
 npm install --production --silent 2>/dev/null || npm install --production
 
+# Copy AGENTS.md to coding agent directories if they exist
+if [ -f "$MCP_DIR/AGENTS.md" ]; then
+    # Kiro
+    if [ -d "$HOME/.kiro/steering" ]; then
+        echo "📋 Installing agent guide to Kiro..."
+        cp "$MCP_DIR/AGENTS.md" "$HOME/.kiro/steering/notebookllm-mcp.md"
+        echo "✅ Kiro: Agent guide installed"
+    fi
+    
+    # Cursor
+    if [ -d "$HOME/.cursor/prompts" ]; then
+        echo "📋 Installing agent guide to Cursor..."
+        cp "$MCP_DIR/AGENTS.md" "$HOME/.cursor/prompts/notebookllm-mcp.md"
+        echo "✅ Cursor: Agent guide installed"
+    fi
+    
+    # Windsurf (Codeium)
+    if [ -d "$HOME/.codeium/windsurf/prompts" ]; then
+        echo "📋 Installing agent guide to Windsurf..."
+        cp "$MCP_DIR/AGENTS.md" "$HOME/.codeium/windsurf/prompts/notebookllm-mcp.md"
+        echo "✅ Windsurf: Agent guide installed"
+    fi
+    
+    # Cline (VSCode extension)
+    if [ -d "$HOME/.vscode/extensions" ]; then
+        CLINE_DIR=$(find "$HOME/.vscode/extensions" -maxdepth 1 -name "saoudrizwan.claude-dev-*" -type d 2>/dev/null | head -1)
+        if [ -n "$CLINE_DIR" ] && [ -d "$CLINE_DIR/prompts" ]; then
+            echo "📋 Installing agent guide to Cline..."
+            cp "$MCP_DIR/AGENTS.md" "$CLINE_DIR/prompts/notebookllm-mcp.md"
+            echo "✅ Cline: Agent guide installed"
+        fi
+    fi
+    
+    # Generic location for other agents
+    echo "📋 Agent guide available at: $MCP_DIR/AGENTS.md"
+fi
+
 echo ""
 echo "✅ NotebookLLM MCP Server v$VERSION installed to $MCP_DIR"
 echo ""

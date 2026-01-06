@@ -32,6 +32,7 @@ import planningRoutes from './routes/planning.js';
 // Import services
 import bunnyService from './services/bunnyService.js';
 import codeVerificationService from './services/codeVerificationService.js';
+import codeAnalysisService from './services/codeAnalysisService.js';
 import { agentWebSocketService } from './services/agentWebSocketService.js';
 import { planningWebSocketService } from './services/planningWebSocketService.js';
 
@@ -41,6 +42,7 @@ dotenv.config();
 // Initialize services
 bunnyService.initialize();
 codeVerificationService.initialize();
+codeAnalysisService.initialize();
 
 const app = express();
 const PORT = process.env.PORT || 3000;

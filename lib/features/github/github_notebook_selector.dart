@@ -309,6 +309,19 @@ class _GitHubNotebookSelectorState
     });
 
     try {
+      // Validate file exists first
+      final fileExists = await ref
+          .read(githubProvider.notifier)
+          .validateFileExists(owner, repo, widget.filePath);
+
+      if (!fileExists) {
+        setState(() {
+          _isAdding = false;
+          _error = 'File not found in repository. Please check the file path.';
+        });
+        return;
+      }
+
       // Use the GitHubSourceProvider for better state management
       final source =
           await ref.read(githubSourceProvider.notifier).addGitHubSource(

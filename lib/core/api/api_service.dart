@@ -141,9 +141,17 @@ class ApiService {
           '[API] GET $endpoint - has auth: ${headers.containsKey('Authorization')}',
           name: 'ApiService');
 
-      final response = await http.get(
+      final response = await http
+          .get(
         Uri.parse('$_baseUrl$endpoint'),
         headers: headers,
+      )
+          .timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception(
+              'Request timed out. Please check your connection and try again.');
+        },
       );
 
       developer.log('[API] GET $endpoint - status: ${response.statusCode}',

@@ -957,77 +957,214 @@ $content''',
             ],
             const SizedBox(height: 16),
           ],
-          if (_finalResult != null) ...[
+          if (_finalResult != null &&
+              _finalResult!.result != null &&
+              _finalResult!.result!.isNotEmpty) ...[
             Card(
               color: scheme.surfaceContainer,
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: MarkdownBody(
-                  data: _finalResult!.result!,
-                  styleSheet: MarkdownStyleSheet(
-                    h1: text.headlineSmall?.copyWith(
-                      color: scheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    h2: text.titleLarge?.copyWith(
-                      color: scheme.onSurface,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    h3: text.titleMedium?.copyWith(
-                      color: scheme.onSurface,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    p: text.bodyMedium?.copyWith(
-                      color: scheme.onSurface,
-                    ),
-                    listBullet: text.bodyMedium?.copyWith(
-                      color: scheme.onSurface,
-                    ),
-                    strong: text.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: scheme.onSurface,
-                    ),
-                    em: text.bodyMedium?.copyWith(
-                      fontStyle: FontStyle.italic,
-                      color: scheme.onSurface,
-                    ),
-                    blockquote: text.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      fontStyle: FontStyle.italic,
-                    ),
-                    code: text.bodySmall?.copyWith(
-                      color: scheme.onSurface,
-                      backgroundColor: scheme.surfaceContainerHighest,
-                    ),
-                  ),
-                  sizedImageBuilder: (config) {
-                    if (config.alt == 'VIDEO') {
-                      return _buildVideoCard(config.uri.toString());
+                child: Builder(
+                  builder: (context) {
+                    try {
+                      return MarkdownBody(
+                        data: _finalResult!.result!,
+                        styleSheet: MarkdownStyleSheet(
+                          h1: text.headlineSmall?.copyWith(
+                            color: scheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          h2: text.titleLarge?.copyWith(
+                            color: scheme.onSurface,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          h3: text.titleMedium?.copyWith(
+                            color: scheme.onSurface,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          p: text.bodyMedium?.copyWith(
+                            color: scheme.onSurface,
+                          ),
+                          listBullet: text.bodyMedium?.copyWith(
+                            color: scheme.onSurface,
+                          ),
+                          strong: text.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: scheme.onSurface,
+                          ),
+                          em: text.bodyMedium?.copyWith(
+                            fontStyle: FontStyle.italic,
+                            color: scheme.onSurface,
+                          ),
+                          blockquote: text.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          code: text.bodySmall?.copyWith(
+                            color: scheme.onSurface,
+                            backgroundColor: scheme.surfaceContainerHighest,
+                          ),
+                        ),
+                        sizedImageBuilder: (config) {
+                          try {
+                            if (config.alt == 'VIDEO') {
+                              return _buildVideoCard(config.uri.toString());
+                            }
+                            return ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                config.uri.toString(),
+                                width: config.width,
+                                height: config.height,
+                                errorBuilder: (c, e, s) =>
+                                    const SizedBox.shrink(),
+                              ),
+                            );
+                          } catch (e) {
+                            return const SizedBox.shrink();
+                          }
+                        },
+                      );
+                    } catch (e) {
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: scheme.errorContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.error_outline, color: scheme.error),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Error rendering report',
+                                  style: text.titleMedium?.copyWith(
+                                    color: scheme.onErrorContainer,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'The research completed but there was an error displaying the report. You can still view the raw content below.',
+                              style: text.bodyMedium?.copyWith(
+                                color: scheme.onErrorContainer,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: scheme.surface,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: SelectableText(
+                                _finalResult!.result ?? 'No content available',
+                                style: text.bodySmall?.copyWith(
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
                     }
-                    return ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        config.uri.toString(),
-                        width: config.width,
-                        height: config.height,
-                        errorBuilder: (c, e, s) => const SizedBox.shrink(),
-                      ),
-                    );
                   },
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () => _addReportAsSource(_finalResult!),
-              icon: const Icon(Icons.add),
-              label: const Text('Add Report to Notebook'),
-            ),
+            if (_finalResult!.result != null &&
+                _finalResult!.result!.isNotEmpty)
+              ElevatedButton.icon(
+                onPressed: () => _addReportAsSource(_finalResult!),
+                icon: const Icon(Icons.add),
+                label: const Text('Add Report to Notebook'),
+              ),
             const SizedBox(height: 24),
             const Divider(),
             const SizedBox(height: 8),
             Text('Research Log', style: text.titleSmall),
             const SizedBox(height: 8),
+          ],
+          // Show error if research failed
+          if (_finalResult != null &&
+              _finalResult!.error != null &&
+              _finalResult!.result == null) ...[
+            Card(
+              color: scheme.errorContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.error_outline,
+                            color: scheme.error, size: 32),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Research Failed',
+                            style: text.titleLarge?.copyWith(
+                              color: scheme.onErrorContainer,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _finalResult!.error!,
+                      style: text.bodyMedium?.copyWith(
+                        color: scheme.onErrorContainer,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _researchUpdates.clear();
+                              _finalResult = null;
+                              _searchedSites.clear();
+                              _currentSearchQuery = null;
+                            });
+                            _performSearch();
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Try Again'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: scheme.error,
+                            foregroundColor: scheme.onError,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _researchUpdates.clear();
+                              _finalResult = null;
+                              _searchedSites.clear();
+                              _currentSearchQuery = null;
+                              _isResearching = false;
+                            });
+                          },
+                          child: const Text('Clear'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
           ],
           ..._researchUpdates.map((update) {
             final isLast = update == _researchUpdates.last;
