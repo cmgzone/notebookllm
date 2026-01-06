@@ -22,7 +22,8 @@ export type GitHubAuditAction =
   | 'get_tree'
   | 'github_disconnect'
   | 'refresh_source'
-  | 'check_updates';
+  | 'check_updates'
+  | 'reanalyze_source';
 
 /**
  * GitHub audit log entry
