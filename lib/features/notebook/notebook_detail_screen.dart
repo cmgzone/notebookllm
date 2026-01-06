@@ -10,9 +10,6 @@ import '../sources/add_source_sheet.dart';
 import '../../ui/widgets/source_card.dart';
 import '../sources/source_detail_screen.dart';
 import '../sources/edit_text_note_sheet.dart';
-import '../sources/source_chat_sheet.dart';
-import '../github/github_source_card.dart';
-import '../github/github_source_provider.dart';
 import 'notebook_provider.dart';
 import 'notebook_cover_sheet.dart';
 import '../mindmap/mind_map_provider.dart';
@@ -382,44 +379,12 @@ class NotebookDetailScreen extends ConsumerWidget {
         );
   }
 
-  /// Build a GitHub source card with chat functionality for agent-created sources
-  /// Requirements: 4.1 - Enable chat functionality for agent-created sources
+  /// Build a GitHub source card - uses regular SourceCard for consistency
+  /// Requirements: 4.1 - Display GitHub sources alongside other source types
   Widget _buildGitHubSourceCard(
       BuildContext context, WidgetRef ref, source, int index) {
-    // Try to get the GitHub source from the provider
-    final githubSourceState = ref.watch(githubSourceStateProvider(source.id));
-    final githubSource = githubSourceState?.source;
-
-    // Check if this is an agent-created source (has agentSessionId in metadata)
-    final hasAgentSession = source.hasAgentSession;
-    final agentName = source.agentName;
-
-    if (githubSource != null) {
-      return GitHubSourceCard(
-        source: githubSource,
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => SourceDetailScreen(sourceId: source.id),
-            ),
-          );
-        },
-        onDelete: () => _confirmDelete(context, ref, source),
-        onChat: hasAgentSession
-            ? () => _showSourceChat(context, source, agentName)
-            : null,
-      ).animate().fadeIn(
-            delay: Duration(milliseconds: index * 50),
-          );
-    }
-
-    // If GitHub source not loaded yet, load it and show regular card
-    // This triggers loading the GitHub source data
-    Future.microtask(() {
-      ref.read(githubSourceProvider.notifier).loadSource(source.id);
-    });
-
-    // Show regular source card while loading
+    // For GitHub sources, just use the regular SourceCard which handles all source types
+    // This avoids the complexity of loading GitHubSource separately
     return SourceCard(
       source: source,
       onTap: () {
@@ -429,20 +394,11 @@ class NotebookDetailScreen extends ConsumerWidget {
           ),
         );
       },
+      onEdit: null, // GitHub sources are not editable inline
       onDelete: () => _confirmDelete(context, ref, source),
     ).animate().fadeIn(
           delay: Duration(milliseconds: index * 50),
         );
-  }
-
-  /// Show the source chat sheet for agent-created sources
-  /// Requirements: 4.1 - Enable chat functionality for agent-created sources
-  void _showSourceChat(BuildContext context, source, String? agentName) {
-    showSourceChatSheet(
-      context,
-      source: source,
-      agentName: agentName,
-    );
   }
 
   String _formatDate(DateTime date) {
