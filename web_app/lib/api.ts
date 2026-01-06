@@ -143,6 +143,21 @@ export interface McpQuota {
     isMcpEnabled: boolean;
 }
 
+export interface McpUserSettings {
+    codeAnalysisModelId: string | null;
+    codeAnalysisEnabled: boolean;
+    updatedAt: string;
+}
+
+export interface AIModelOption {
+    id: string;
+    name: string;
+    modelId: string;
+    provider: string;
+    description: string;
+    isPremium: boolean;
+}
+
 class ApiService {
     private token: string | null = null;
 
@@ -320,6 +335,25 @@ class ApiService {
     async getMcpQuota(): Promise<McpQuota> {
         const data = await this.fetch<{ quota: McpQuota }>('/coding-agent/quota');
         return data.quota;
+    }
+
+    // MCP User Settings
+    async getMcpSettings(): Promise<McpUserSettings> {
+        const data = await this.fetch<{ settings: McpUserSettings }>('/coding-agent/settings');
+        return data.settings;
+    }
+
+    async updateMcpSettings(settings: { codeAnalysisModelId?: string | null; codeAnalysisEnabled?: boolean }): Promise<McpUserSettings> {
+        const data = await this.fetch<{ settings: McpUserSettings }>('/coding-agent/settings', {
+            method: 'PUT',
+            body: JSON.stringify(settings),
+        });
+        return data.settings;
+    }
+
+    async getAIModels(): Promise<AIModelOption[]> {
+        const data = await this.fetch<{ models: AIModelOption[] }>('/coding-agent/models');
+        return data.models;
     }
 }
 

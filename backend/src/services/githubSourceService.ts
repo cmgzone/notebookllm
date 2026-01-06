@@ -10,6 +10,7 @@ import pool from '../config/database.js';
 import { githubService } from './githubService.js';
 import crypto from 'crypto';
 import { codeAnalysisService, CodeAnalysisResult } from './codeAnalysisService.js';
+import { mcpUserSettingsService } from './mcpUserSettingsService.js';
 
 // ==================== INTERFACES ====================
 
@@ -356,7 +357,7 @@ class GitHubSourceService {
     );
     
     // Perform code analysis asynchronously (don't block source creation)
-    this.analyzeSourceAsync(sourceId, content, language, path, { owner, repo, branch: actualBranch });
+    this.analyzeSourceAsync(sourceId, content, language, path, { owner, repo, branch: actualBranch }, userId);
     
     return this.mapSource(result.rows[0]);
   }
@@ -555,7 +556,8 @@ class GitHubSourceService {
     content: string,
     language: string,
     filePath: string,
-    repoContext: { owner: string; repo: string; branch: string }
+    repoContext: { owner: string; repo: string; branch: string },
+    userId?: string
   ): Promise<void> {
     try {
       // Skip analysis for non-code files or very large files
@@ -575,7 +577,18 @@ class GitHubSourceService {
         return;
       }
       
-      console.log(`🔍 Analyzing code: ${filePath}`);
+      // Check if user has code analysis enabled and get their preferred model
+      let modelId: string | undefined;
+      if (userId) {
+        const isEnabled = await mcpUserSettingsService.isCodeAnalysisEnabled(userId);
+        if (!isEnabled) {
+          console.log(`⏭️ Code analysis disabled for user: ${userId}`);
+          return;
+        }
+        modelId = (await mcpUserSettingsService.getCodeAnalysisModelId(userId)) || undefined;
+      }
+      
+      console.log(`🔍 Analyzing code: ${filePath}${modelId ? ` (model: ${modelId})` : ''}`);
       
       // Perform analysis
       const analysis = await codeAnalysisService.analyzeCode({
@@ -583,6 +596,8 @@ class GitHubSourceService {
         language,
         filePath,
         repoContext,
+        modelId,
+        userId,
       });
       
       // Generate fact-check friendly summary
@@ -605,7 +620,7 @@ class GitHubSourceService {
         ]
       );
       
-      console.log(`✅ Analysis complete for ${filePath}: Rating ${analysis.rating}/10`);
+      console.log(`✅ Analysis complete for ${filePath}: Rating ${analysis.rating}/10 (${analysis.analyzedBy})`);
     } catch (error) {
       console.error(`❌ Analysis failed for source ${sourceId}:`, error);
       // Don't throw - analysis failure shouldn't affect source creation
@@ -648,6 +663,14 @@ class GitHubSourceService {
     const source = sourceResult.rows[0];
     const metadata = source.metadata as GitHubSourceMetadata;
     
+    // Get user's preferred model
+    let modelId: string | undefined;
+    const isEnabled = await mcpUserSettingsService.isCodeAnalysisEnabled(userId);
+    if (!isEnabled) {
+      throw new Error('Code analysis is disabled in your settings');
+    }
+    modelId = (await mcpUserSettingsService.getCodeAnalysisModelId(userId)) || undefined;
+    
     // Run analysis synchronously for re-analysis requests
     const analysis = await codeAnalysisService.analyzeCode({
       code: source.content,
@@ -658,6 +681,8 @@ class GitHubSourceService {
         repo: metadata.repo,
         branch: metadata.branch,
       },
+      modelId,
+      userId,
     });
     
     const analysisSummary = await codeAnalysisService.generateFactCheckContext(analysis);

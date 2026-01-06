@@ -21,6 +21,7 @@ import { agentWebSocketService } from '../services/agentWebSocketService.js';
 import { mcpLimitsService } from '../services/mcpLimitsService.js';
 import { unifiedContextBuilder } from '../services/unifiedContextBuilder.js';
 import { githubWebhookBuilder } from '../services/githubWebhookBuilder.js';
+import { mcpUserSettingsService } from '../services/mcpUserSettingsService.js';
 
 const router = Router();
 
@@ -1822,6 +1823,81 @@ router.get('/context/agent/:sessionId/:notebookId', authenticateToken, async (re
       return res.status(404).json({ error: error.message });
     }
     
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== MCP USER SETTINGS ENDPOINTS ====================
+
+/**
+ * GET /api/coding-agent/settings
+ * Get user's MCP settings (code analysis model preference, etc.)
+ */
+router.get('/settings', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    
+    const settings = await mcpUserSettingsService.getSettings(userId);
+    
+    res.json({
+      success: true,
+      settings: {
+        codeAnalysisModelId: settings.codeAnalysisModelId,
+        codeAnalysisEnabled: settings.codeAnalysisEnabled,
+        updatedAt: settings.updatedAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('Get MCP settings error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/coding-agent/settings
+ * Update user's MCP settings
+ */
+router.put('/settings', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { codeAnalysisModelId, codeAnalysisEnabled } = req.body;
+    
+    const settings = await mcpUserSettingsService.updateSettings(userId, {
+      codeAnalysisModelId,
+      codeAnalysisEnabled,
+    });
+    
+    console.log(`[Coding Agent] Settings updated for user ${userId}`);
+    
+    res.json({
+      success: true,
+      settings: {
+        codeAnalysisModelId: settings.codeAnalysisModelId,
+        codeAnalysisEnabled: settings.codeAnalysisEnabled,
+        updatedAt: settings.updatedAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('Update MCP settings error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/coding-agent/models
+ * Get available AI models for code analysis
+ */
+router.get('/models', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const models = await mcpUserSettingsService.getAvailableModels();
+    
+    res.json({
+      success: true,
+      models,
+      count: models.length,
+    });
+  } catch (error: any) {
+    console.error('Get AI models error:', error);
     res.status(500).json({ error: error.message });
   }
 });

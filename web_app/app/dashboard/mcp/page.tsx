@@ -22,12 +22,14 @@ import {
     Gauge,
     AlertTriangle,
     Crown,
+    Settings,
+    Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
-import api, { ApiToken, McpStats, McpUsageEntry, VerifiedSource, AgentNotebook, McpQuota } from "@/lib/api";
+import api, { ApiToken, McpStats, McpUsageEntry, VerifiedSource, AgentNotebook, McpQuota, McpUserSettings, AIModelOption } from "@/lib/api";
 
 export default function McpDashboardPage() {
     const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
@@ -38,8 +40,10 @@ export default function McpDashboardPage() {
     const [usage, setUsage] = useState<McpUsageEntry[]>([]);
     const [sources, setSources] = useState<VerifiedSource[]>([]);
     const [notebooks, setNotebooks] = useState<AgentNotebook[]>([]);
+    const [settings, setSettings] = useState<McpUserSettings | null>(null);
+    const [aiModels, setAiModels] = useState<AIModelOption[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<"overview" | "tokens" | "usage" | "sources">("overview");
+    const [activeTab, setActiveTab] = useState<"overview" | "tokens" | "usage" | "sources" | "settings">("overview");
 
     useEffect(() => {
         if (!authLoading && !isAuthenticated) {
@@ -54,13 +58,15 @@ export default function McpDashboardPage() {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [statsData, quotaData, tokensData, usageData, sourcesData, notebooksData] = await Promise.all([
+            const [statsData, quotaData, tokensData, usageData, sourcesData, notebooksData, settingsData, modelsData] = await Promise.all([
                 api.getMcpStats().catch(() => null),
                 api.getMcpQuota().catch(() => null),
                 api.getApiTokens().catch(() => []),
                 api.getMcpUsage(20).catch(() => []),
                 api.getVerifiedSources().catch(() => []),
                 api.getAgentNotebooks().catch(() => []),
+                api.getMcpSettings().catch(() => null),
+                api.getAIModels().catch(() => []),
             ]);
             setStats(statsData);
             setQuota(quotaData);
@@ -68,6 +74,8 @@ export default function McpDashboardPage() {
             setUsage(usageData);
             setSources(sourcesData);
             setNotebooks(notebooksData);
+            setSettings(settingsData);
+            setAiModels(modelsData);
         } catch (error) {
             console.error("Failed to load MCP data:", error);
         } finally {
@@ -114,14 +122,15 @@ export default function McpDashboardPage() {
 
                 {/* Tabs */}
                 <div className="flex gap-2 mb-6 border-b border-white/10 pb-4">
-                    {(["overview", "tokens", "usage", "sources"] as const).map((tab) => (
+                    {(["overview", "tokens", "usage", "sources", "settings"] as const).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                                 activeTab === tab ? "bg-blue-600 text-white" : "bg-white/5 text-neutral-400 hover:bg-white/10"
                             }`}
                         >
+                            {tab === "settings" && <Settings size={14} />}
                             {tab.charAt(0).toUpperCase() + tab.slice(1)}
                         </button>
                     ))}
@@ -137,6 +146,7 @@ export default function McpDashboardPage() {
                         {activeTab === "tokens" && <TokensTab tokens={tokens} quota={quota} onRefresh={loadData} />}
                         {activeTab === "usage" && <UsageTab usage={usage} quota={quota} />}
                         {activeTab === "sources" && <SourcesTab sources={sources} quota={quota} />}
+                        {activeTab === "settings" && <SettingsTab settings={settings} aiModels={aiModels} onRefresh={loadData} />}
                     </>
                 )}
             </main>
@@ -612,6 +622,222 @@ function SourcesTab({ sources, quota }: { sources: VerifiedSource[]; quota: McpQ
                     ))}
                 </div>
             )}
+        </div>
+    );
+}
+
+
+function SettingsTab({ settings, aiModels, onRefresh }: { settings: McpUserSettings | null; aiModels: AIModelOption[]; onRefresh: () => void }) {
+    const [isSaving, setIsSaving] = useState(false);
+    const [selectedModel, setSelectedModel] = useState<string | null>(settings?.codeAnalysisModelId || null);
+    const [analysisEnabled, setAnalysisEnabled] = useState(settings?.codeAnalysisEnabled ?? true);
+    const [saveSuccess, setSaveSuccess] = useState(false);
+
+    useEffect(() => {
+        if (settings) {
+            setSelectedModel(settings.codeAnalysisModelId);
+            setAnalysisEnabled(settings.codeAnalysisEnabled);
+        }
+    }, [settings]);
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        setSaveSuccess(false);
+        try {
+            await api.updateMcpSettings({
+                codeAnalysisModelId: selectedModel,
+                codeAnalysisEnabled: analysisEnabled,
+            });
+            setSaveSuccess(true);
+            onRefresh();
+            setTimeout(() => setSaveSuccess(false), 3000);
+        } catch (error) {
+            console.error("Failed to save settings:", error);
+            alert("Failed to save settings");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const getProviderColor = (provider: string) => {
+        switch (provider.toLowerCase()) {
+            case "gemini":
+                return "text-blue-400";
+            case "openrouter":
+                return "text-purple-400";
+            default:
+                return "text-neutral-400";
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Settings size={20} className="text-blue-400" />
+                    MCP Settings
+                </h3>
+            </div>
+
+            <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6 space-y-6">
+                {/* Code Analysis Toggle */}
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h4 className="font-medium flex items-center gap-2">
+                            <Sparkles size={16} className="text-amber-400" />
+                            Automatic Code Analysis
+                        </h4>
+                        <p className="text-sm text-neutral-400 mt-1">
+                            Automatically analyze GitHub files when added as sources
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => setAnalysisEnabled(!analysisEnabled)}
+                        className={`relative w-12 h-6 rounded-full transition-colors ${
+                            analysisEnabled ? "bg-blue-600" : "bg-neutral-700"
+                        }`}
+                    >
+                        <div
+                            className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                                analysisEnabled ? "left-7" : "left-1"
+                            }`}
+                        />
+                    </button>
+                </div>
+
+                {/* Model Selection */}
+                <div className={analysisEnabled ? "" : "opacity-50 pointer-events-none"}>
+                    <h4 className="font-medium mb-3">AI Model for Code Analysis</h4>
+                    <p className="text-sm text-neutral-400 mb-4">
+                        Select which AI model to use for analyzing your code. Models are configured by the administrator.
+                    </p>
+                    
+                    {aiModels.length === 0 ? (
+                        <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm">
+                            <AlertTriangle size={16} className="inline mr-2" />
+                            No AI models available. Contact your administrator to configure AI models.
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {/* Auto option */}
+                            <label
+                                className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                                    selectedModel === null
+                                        ? "border-blue-500 bg-blue-500/10"
+                                        : "border-white/10 bg-white/5 hover:bg-white/10"
+                                }`}
+                            >
+                                <input
+                                    type="radio"
+                                    name="model"
+                                    checked={selectedModel === null}
+                                    onChange={() => setSelectedModel(null)}
+                                    className="sr-only"
+                                />
+                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                    selectedModel === null ? "border-blue-500" : "border-neutral-500"
+                                }`}>
+                                    {selectedModel === null && <div className="w-2 h-2 rounded-full bg-blue-500" />}
+                                </div>
+                                <div className="flex-1">
+                                    <div className="font-medium">Auto (Recommended)</div>
+                                    <div className="text-sm text-neutral-400">
+                                        Automatically select the best available model with fallback support
+                                    </div>
+                                </div>
+                            </label>
+
+                            {/* Model options */}
+                            {aiModels.map((model) => (
+                                <label
+                                    key={model.id}
+                                    className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                                        selectedModel === model.modelId
+                                            ? "border-blue-500 bg-blue-500/10"
+                                            : "border-white/10 bg-white/5 hover:bg-white/10"
+                                    }`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="model"
+                                        checked={selectedModel === model.modelId}
+                                        onChange={() => setSelectedModel(model.modelId)}
+                                        className="sr-only"
+                                    />
+                                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                        selectedModel === model.modelId ? "border-blue-500" : "border-neutral-500"
+                                    }`}>
+                                        {selectedModel === model.modelId && <div className="w-2 h-2 rounded-full bg-blue-500" />}
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="font-medium flex items-center gap-2">
+                                            {model.name}
+                                            <span className={`text-xs px-2 py-0.5 rounded-full bg-white/10 ${getProviderColor(model.provider)}`}>
+                                                {model.provider}
+                                            </span>
+                                            {model.isPremium && (
+                                                <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 flex items-center gap-1">
+                                                    <Crown size={10} />
+                                                    Premium
+                                                </span>
+                                            )}
+                                        </div>
+                                        {model.description && (
+                                            <div className="text-sm text-neutral-400 mt-1">{model.description}</div>
+                                        )}
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Save Button */}
+                <div className="flex items-center gap-4 pt-4 border-t border-white/10">
+                    <button
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="flex items-center gap-2 px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium"
+                    >
+                        {isSaving ? (
+                            <Loader2 size={16} className="animate-spin" />
+                        ) : saveSuccess ? (
+                            <Check size={16} />
+                        ) : (
+                            <Settings size={16} />
+                        )}
+                        {saveSuccess ? "Saved!" : "Save Settings"}
+                    </button>
+                    {settings?.updatedAt && (
+                        <span className="text-sm text-neutral-500">
+                            Last updated: {new Date(settings.updatedAt).toLocaleString()}
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            {/* Info Card */}
+            <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
+                <h4 className="font-medium mb-3 flex items-center gap-2">
+                    <BrainCircuit size={16} className="text-purple-400" />
+                    About Code Analysis
+                </h4>
+                <div className="text-sm text-neutral-400 space-y-2">
+                    <p>
+                        When you add GitHub files as sources via MCP, they are automatically analyzed by AI to provide:
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                        <li>Code quality rating (1-10 scale)</li>
+                        <li>Architecture and design pattern detection</li>
+                        <li>Quality metrics (readability, maintainability, etc.)</li>
+                        <li>Strengths and improvement suggestions</li>
+                        <li>Security notes and best practices</li>
+                    </ul>
+                    <p className="mt-3">
+                        This analysis improves fact-checking results by giving the AI deep knowledge about your codebase.
+                    </p>
+                </div>
+            </div>
         </div>
     );
 }

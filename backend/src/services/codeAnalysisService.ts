@@ -13,11 +13,13 @@
  * This analysis improves fact-checking results for code sources
  * by providing the AI with deep knowledge about the codebase.
  * 
- * Supports both Gemini and OpenRouter with automatic fallback.
+ * Supports admin-configured AI models from the database.
+ * Users can select which model to use for analysis.
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
+import pool from '../config/database.js';
 
 // ==================== INTERFACES ====================
 
@@ -30,6 +32,8 @@ export interface CodeAnalysisRequest {
     repo: string;
     branch: string;
   };
+  modelId?: string; // Optional: specific model to use for analysis
+  userId?: string;  // Optional: user ID to check model access
 }
 
 export interface CodeAnalysisResult {
@@ -59,7 +63,9 @@ export interface CodeAnalysisResult {
   language: string;
   linesOfCode: number;
   complexity: 'low' | 'medium' | 'high';
-  analyzedBy: 'gemini' | 'openrouter' | 'basic';
+  analyzedBy: string; // Model ID or 'basic'
+  provider: 'gemini' | 'openrouter' | 'basic';
+  modelName?: string; // Human-readable model name
 }
 
 export interface ComponentAnalysis {
@@ -89,12 +95,26 @@ export interface DependencyAnalysis {
   internalDependencies: string[];
 }
 
+// ==================== AI MODEL INTERFACE ====================
+
+export interface AIModel {
+  id: string;
+  name: string;
+  model_id: string;
+  provider: 'gemini' | 'openrouter';
+  description: string;
+  context_window: number;
+  is_active: boolean;
+  is_premium: boolean;
+}
+
 // ==================== SERVICE CLASS ====================
 
 class CodeAnalysisService {
   private genAI: GoogleGenerativeAI | null = null;
   private openRouterApiKey: string | null = null;
   private initialized = false;
+  private defaultModelId: string | null = null;
 
   initialize() {
     // Initialize Gemini
@@ -115,6 +135,64 @@ class CodeAnalysisService {
     }
     
     this.initialized = true;
+  }
+
+  /**
+   * Get available AI models for code analysis
+   */
+  async getAvailableModels(): Promise<AIModel[]> {
+    try {
+      const result = await pool.query(
+        `SELECT id, name, model_id, provider, description, context_window, is_active, is_premium 
+         FROM ai_models 
+         WHERE is_active = true 
+         ORDER BY provider, name`
+      );
+      return result.rows;
+    } catch (error) {
+      console.error('Error fetching AI models:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get a specific model by ID
+   */
+  async getModel(modelId: string): Promise<AIModel | null> {
+    try {
+      const result = await pool.query(
+        `SELECT id, name, model_id, provider, description, context_window, is_active, is_premium 
+         FROM ai_models 
+         WHERE model_id = $1 AND is_active = true`,
+        [modelId]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error('Error fetching model:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get the default model for code analysis (first active model)
+   */
+  async getDefaultModel(): Promise<AIModel | null> {
+    try {
+      // Prefer Gemini models for code analysis
+      const result = await pool.query(
+        `SELECT id, name, model_id, provider, description, context_window, is_active, is_premium 
+         FROM ai_models 
+         WHERE is_active = true 
+         ORDER BY 
+           CASE WHEN provider = 'gemini' THEN 0 ELSE 1 END,
+           name
+         LIMIT 1`
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error('Error fetching default model:', error);
+      return null;
+    }
   }
 
   /**
@@ -161,13 +239,52 @@ class CodeAnalysisService {
 
   /**
    * Generate content with automatic fallback between providers
+   * Supports user-selected model from admin-configured models
    */
-  private async generateContent(prompt: string): Promise<{ text: string; provider: 'gemini' | 'openrouter' }> {
-    // Try Gemini first
+  private async generateContent(
+    prompt: string, 
+    modelId?: string
+  ): Promise<{ text: string; provider: 'gemini' | 'openrouter' | 'basic'; modelName?: string }> {
+    // If a specific model is requested, try to use it
+    if (modelId) {
+      const model = await this.getModel(modelId);
+      if (model) {
+        try {
+          if (model.provider === 'gemini' && this.genAI) {
+            const genModel = this.genAI.getGenerativeModel({ model: model.model_id });
+            const result = await genModel.generateContent(prompt);
+            return { text: result.response.text(), provider: 'gemini', modelName: model.name };
+          } else if (model.provider === 'openrouter' && this.openRouterApiKey) {
+            const response = await axios.post(
+              'https://openrouter.ai/api/v1/chat/completions',
+              {
+                model: model.model_id,
+                messages: [{ role: 'user', content: prompt }],
+                max_tokens: 4096,
+              },
+              {
+                timeout: 120000,
+                headers: {
+                  'Authorization': `Bearer ${this.openRouterApiKey}`,
+                  'Content-Type': 'application/json',
+                  'HTTP-Referer': 'https://notebookllm.app',
+                  'X-Title': 'Notebook LLM Code Analysis'
+                }
+              }
+            );
+            return { text: response.data.choices[0].message.content, provider: 'openrouter', modelName: model.name };
+          }
+        } catch (error: any) {
+          console.log(`Selected model ${model.name} failed, falling back:`, error.message);
+        }
+      }
+    }
+
+    // Try Gemini first (default fallback)
     if (this.genAI) {
       try {
         const text = await this.generateWithGemini(prompt);
-        return { text, provider: 'gemini' };
+        return { text, provider: 'gemini', modelName: 'Gemini 1.5 Flash' };
       } catch (error: any) {
         console.log('Gemini failed, trying OpenRouter:', error.message);
       }
@@ -177,7 +294,7 @@ class CodeAnalysisService {
     if (this.openRouterApiKey) {
       try {
         const text = await this.generateWithOpenRouter(prompt);
-        return { text, provider: 'openrouter' };
+        return { text, provider: 'openrouter', modelName: 'Llama 3.3 70B' };
       } catch (error: any) {
         console.log('OpenRouter also failed:', error.message);
         throw error;
@@ -191,7 +308,7 @@ class CodeAnalysisService {
    * Analyze code and generate comprehensive analysis
    */
   async analyzeCode(request: CodeAnalysisRequest): Promise<CodeAnalysisResult> {
-    const { code, language, filePath, repoContext } = request;
+    const { code, language, filePath, repoContext, modelId, userId } = request;
     
     // Basic metrics
     const linesOfCode = code.split('\n').length;
@@ -259,7 +376,7 @@ Rating guidelines:
 
 Be thorough but concise. Focus on actionable insights.`;
 
-      const { text, provider } = await this.generateContent(prompt);
+      const { text, provider, modelName } = await this.generateContent(prompt, modelId);
       
       // Extract JSON from response
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -296,7 +413,9 @@ Be thorough but concise. Focus on actionable insights.`;
           language,
           linesOfCode,
           complexity,
-          analyzedBy: provider,
+          analyzedBy: modelName || provider,
+          provider,
+          modelName,
         };
       }
     } catch (error) {
@@ -405,6 +524,8 @@ ${analysis.securityNotes.length > 0 ? `**Security Notes:**\n${analysis.securityN
       linesOfCode,
       complexity,
       analyzedBy: 'basic',
+      provider: 'basic',
+      modelName: undefined,
     };
   }
 
