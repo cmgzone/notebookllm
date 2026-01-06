@@ -14,7 +14,6 @@ import {
   Zap,
   Settings,
   FileCode,
-  ArrowRight,
   ExternalLink,
   BookOpen,
   Cpu,
@@ -36,6 +35,9 @@ export default function DocsPage() {
             <QuickStartSection />
             <AuthenticationSection />
             <ToolsSection />
+            <GitHubToolsSection />
+            <PlanningToolsSection />
+            <CodeAnalysisSection />
             <ConfigurationSection />
             <TokenManagementSection />
             <ArchitectureSection />
@@ -83,6 +85,9 @@ function Sidebar() {
     { id: "quick-start", label: "Quick Start", icon: Zap },
     { id: "authentication", label: "Authentication", icon: Key },
     { id: "tools", label: "MCP Tools", icon: Code },
+    { id: "github-tools", label: "GitHub Integration", icon: FileCode },
+    { id: "planning-tools", label: "Planning Mode", icon: Settings },
+    { id: "code-analysis", label: "Code Analysis", icon: Cpu },
     { id: "configuration", label: "Configuration", icon: Settings },
     { id: "token-management", label: "Token Management", icon: Lock },
     { id: "architecture", label: "Architecture", icon: Cpu },
@@ -123,10 +128,10 @@ function HeroSection() {
       </div>
       <p className="text-lg text-neutral-300 leading-relaxed mt-6">
         The NotebookLM MCP (Model Context Protocol) server allows third-party coding agents 
-        like Claude, Kiro, and Cursor to verify code and save it as sources in your notebooks. 
-        This enables seamless integration between your AI coding workflow and research management.
+        like Claude, Kiro, and Cursor to verify code, access GitHub repositories, manage implementation plans,
+        and save sources to your notebooks. This enables seamless integration between your AI coding workflow and research management.
       </p>
-      <div className="grid sm:grid-cols-3 gap-4 mt-8">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
         <FeatureCard
           icon={<Shield className="text-green-400" size={20} />}
           title="Secure Authentication"
@@ -139,8 +144,13 @@ function HeroSection() {
         />
         <FeatureCard
           icon={<FileCode className="text-purple-400" size={20} />}
-          title="Source Management"
-          description="Save verified code directly to notebooks"
+          title="GitHub Integration"
+          description="Access repos, files, and create issues"
+        />
+        <FeatureCard
+          icon={<Cpu className="text-cyan-400" size={20} />}
+          title="AI Code Analysis"
+          description="Automatic quality analysis for code sources"
         />
       </div>
     </section>
@@ -419,6 +429,315 @@ function ToolsSection() {
         {tools.map((tool) => (
           <ToolCard key={tool.name} tool={tool} />
         ))}
+      </div>
+    </section>
+  );
+}
+
+function GitHubToolsSection() {
+  const tools = [
+    {
+      name: "github_status",
+      description: "Check if GitHub is connected for the current user.",
+      params: [],
+      example: `// No parameters required
+// Returns: { connected: boolean, username: string, scopes: string[] }`,
+    },
+    {
+      name: "github_list_repos",
+      description: "List GitHub repositories accessible to the user.",
+      params: [
+        { name: "type", type: "string", required: false, description: "Filter: all, owner, member" },
+        { name: "sort", type: "string", required: false, description: "Sort: created, updated, pushed" },
+        { name: "perPage", type: "number", required: false, description: "Results per page (max 100)" },
+      ],
+      example: `{
+  "type": "all",
+  "sort": "updated",
+  "perPage": 30
+}`,
+    },
+    {
+      name: "github_get_repo_tree",
+      description: "Get the file tree structure of a GitHub repository.",
+      params: [
+        { name: "owner", type: "string", required: true, description: "Repository owner" },
+        { name: "repo", type: "string", required: true, description: "Repository name" },
+        { name: "branch", type: "string", required: false, description: "Branch name" },
+      ],
+      example: `{
+  "owner": "username",
+  "repo": "project",
+  "branch": "main"
+}`,
+    },
+    {
+      name: "github_get_file",
+      description: "Get the contents of a file from a GitHub repository.",
+      params: [
+        { name: "owner", type: "string", required: true, description: "Repository owner" },
+        { name: "repo", type: "string", required: true, description: "Repository name" },
+        { name: "path", type: "string", required: true, description: "File path" },
+        { name: "branch", type: "string", required: false, description: "Branch name" },
+      ],
+      example: `{
+  "owner": "username",
+  "repo": "project",
+  "path": "src/index.ts"
+}`,
+    },
+    {
+      name: "github_add_as_source",
+      description: "Add a GitHub file as a source to a notebook with automatic code analysis.",
+      params: [
+        { name: "notebookId", type: "string", required: true, description: "Target notebook ID" },
+        { name: "owner", type: "string", required: true, description: "Repository owner" },
+        { name: "repo", type: "string", required: true, description: "Repository name" },
+        { name: "path", type: "string", required: true, description: "File path" },
+        { name: "branch", type: "string", required: false, description: "Branch name" },
+      ],
+      example: `{
+  "notebookId": "notebook-uuid",
+  "owner": "username",
+  "repo": "project",
+  "path": "src/index.ts"
+}`,
+    },
+    {
+      name: "github_create_issue",
+      description: "Create a new issue in a GitHub repository.",
+      params: [
+        { name: "owner", type: "string", required: true, description: "Repository owner" },
+        { name: "repo", type: "string", required: true, description: "Repository name" },
+        { name: "title", type: "string", required: true, description: "Issue title" },
+        { name: "body", type: "string", required: false, description: "Issue body (markdown)" },
+        { name: "labels", type: "array", required: false, description: "Labels to apply" },
+      ],
+      example: `{
+  "owner": "username",
+  "repo": "project",
+  "title": "Bug: Authentication fails",
+  "body": "## Description\\n...",
+  "labels": ["bug", "auth"]
+}`,
+    },
+  ];
+
+  return (
+    <section id="github-tools" className="mb-16">
+      <SectionHeader title="GitHub Integration" icon={<FileCode className="text-green-400" size={20} />} />
+      
+      <p className="text-neutral-400 mb-6">
+        Connect your GitHub account to access repositories, files, and create issues directly from coding agents.
+        Files added as sources are automatically analyzed by AI.
+      </p>
+      
+      <div className="space-y-6">
+        {tools.map((tool) => (
+          <ToolCard key={tool.name} tool={tool} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PlanningToolsSection() {
+  const tools = [
+    {
+      name: "list_plans",
+      description: "List all plans accessible to the authenticated user.",
+      params: [
+        { name: "status", type: "string", required: false, description: "Filter: draft, active, completed, archived" },
+        { name: "includeArchived", type: "boolean", required: false, description: "Include archived plans" },
+        { name: "limit", type: "number", required: false, description: "Max results (default: 50)" },
+      ],
+      example: `{
+  "status": "active",
+  "includeArchived": false,
+  "limit": 50
+}`,
+    },
+    {
+      name: "get_plan",
+      description: "Get a specific plan with full details including requirements, design notes, and tasks.",
+      params: [
+        { name: "planId", type: "string", required: true, description: "The plan ID" },
+        { name: "includeRelations", type: "boolean", required: false, description: "Include requirements, notes, tasks" },
+      ],
+      example: `{
+  "planId": "plan-uuid-here",
+  "includeRelations": true
+}`,
+    },
+    {
+      name: "create_plan",
+      description: "Create a new plan following the spec-driven format.",
+      params: [
+        { name: "title", type: "string", required: true, description: "Plan title" },
+        { name: "description", type: "string", required: false, description: "Plan description" },
+        { name: "isPrivate", type: "boolean", required: false, description: "Private plan (default: true)" },
+      ],
+      example: `{
+  "title": "User Authentication Feature",
+  "description": "Implement secure user authentication",
+  "isPrivate": true
+}`,
+    },
+    {
+      name: "create_task",
+      description: "Create a new task in a plan.",
+      params: [
+        { name: "planId", type: "string", required: true, description: "The plan ID" },
+        { name: "title", type: "string", required: true, description: "Task title" },
+        { name: "description", type: "string", required: false, description: "Task description" },
+        { name: "priority", type: "string", required: false, description: "low, medium, high, critical" },
+        { name: "requirementIds", type: "array", required: false, description: "Linked requirement IDs" },
+      ],
+      example: `{
+  "planId": "plan-uuid",
+  "title": "Implement login endpoint",
+  "description": "Create POST /auth/login",
+  "priority": "high"
+}`,
+    },
+    {
+      name: "update_task_status",
+      description: "Update a task's status (not_started, in_progress, paused, blocked, completed).",
+      params: [
+        { name: "planId", type: "string", required: true, description: "The plan ID" },
+        { name: "taskId", type: "string", required: true, description: "The task ID" },
+        { name: "status", type: "string", required: true, description: "New status" },
+        { name: "reason", type: "string", required: false, description: "Reason for change" },
+      ],
+      example: `{
+  "planId": "plan-uuid",
+  "taskId": "task-uuid",
+  "status": "in_progress"
+}`,
+    },
+    {
+      name: "complete_task",
+      description: "Complete a task with an optional summary.",
+      params: [
+        { name: "planId", type: "string", required: true, description: "The plan ID" },
+        { name: "taskId", type: "string", required: true, description: "The task ID" },
+        { name: "summary", type: "string", required: false, description: "Completion summary" },
+      ],
+      example: `{
+  "planId": "plan-uuid",
+  "taskId": "task-uuid",
+  "summary": "Implemented with JWT auth"
+}`,
+    },
+  ];
+
+  return (
+    <section id="planning-tools" className="mb-16">
+      <SectionHeader title="Planning Mode" icon={<Settings className="text-purple-400" size={20} />} />
+      
+      <p className="text-neutral-400 mb-6">
+        Create and manage implementation plans with structured requirements, design notes, and tasks.
+        Perfect for spec-driven development workflows.
+      </p>
+      
+      <div className="space-y-6">
+        {tools.map((tool) => (
+          <ToolCard key={tool.name} tool={tool} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CodeAnalysisSection() {
+  return (
+    <section id="code-analysis" className="mb-16">
+      <SectionHeader title="Code Analysis" icon={<Cpu className="text-cyan-400" size={20} />} />
+      
+      <p className="text-neutral-400 mb-6">
+        When GitHub files are added as sources, they are automatically analyzed by AI to provide
+        deep insights that improve fact-checking results.
+      </p>
+
+      <div className="space-y-6">
+        <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
+          <h3 className="text-lg font-semibold mb-4">Analysis Features</h3>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="p-4 rounded-lg bg-white/5">
+              <h4 className="font-medium mb-2 text-blue-400">Quality Rating (1-10)</h4>
+              <p className="text-sm text-neutral-400">
+                Overall code quality score with detailed explanation
+              </p>
+            </div>
+            <div className="p-4 rounded-lg bg-white/5">
+              <h4 className="font-medium mb-2 text-green-400">Quality Metrics</h4>
+              <p className="text-sm text-neutral-400">
+                Readability, maintainability, testability, documentation, error handling
+              </p>
+            </div>
+            <div className="p-4 rounded-lg bg-white/5">
+              <h4 className="font-medium mb-2 text-purple-400">Architecture Analysis</h4>
+              <p className="text-sm text-neutral-400">
+                Detected patterns, design patterns, separation of concerns
+              </p>
+            </div>
+            <div className="p-4 rounded-lg bg-white/5">
+              <h4 className="font-medium mb-2 text-amber-400">Recommendations</h4>
+              <p className="text-sm text-neutral-400">
+                Strengths, improvements, and security notes
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
+          <h3 className="text-lg font-semibold mb-4">Analysis Tools</h3>
+          <div className="space-y-4">
+            <div className="p-4 rounded-lg bg-white/5">
+              <code className="text-blue-400 font-mono">get_source_analysis</code>
+              <p className="text-sm text-neutral-400 mt-2">
+                Get the AI-generated code analysis for a GitHub source.
+              </p>
+              <CodeBlock language="json" code={`{ "sourceId": "source-uuid-here" }`} />
+            </div>
+            <div className="p-4 rounded-lg bg-white/5">
+              <code className="text-blue-400 font-mono">reanalyze_source</code>
+              <p className="text-sm text-neutral-400 mt-2">
+                Re-analyze a GitHub source to get fresh code analysis.
+              </p>
+              <CodeBlock language="json" code={`{ "sourceId": "source-uuid-here" }`} />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
+          <h3 className="text-lg font-semibold mb-4">User Settings</h3>
+          <p className="text-neutral-400 mb-4">
+            Configure code analysis settings in the <strong>MCP Dashboard → Settings</strong> tab:
+          </p>
+          <ul className="space-y-2 text-sm text-neutral-300">
+            <li>• <strong>Enable/Disable Analysis:</strong> Toggle automatic code analysis on or off</li>
+            <li>• <strong>AI Model Selection:</strong> Choose which AI model to use for analysis</li>
+            <li>• <strong>Auto (Recommended):</strong> Automatically selects the best available model with fallback</li>
+          </ul>
+          <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-200 text-sm">
+            <strong>Tip:</strong> Visit <a href="/dashboard/mcp" className="underline hover:text-white">/dashboard/mcp</a> to configure your settings.
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
+          <h3 className="text-lg font-semibold mb-4">Supported Languages</h3>
+          <div className="flex flex-wrap gap-2">
+            {["JavaScript", "TypeScript", "Python", "Dart", "Java", "Kotlin", "Swift", "Go", "Rust", "C/C++", "C#", "Ruby", "PHP"].map((lang) => (
+              <span
+                key={lang}
+                className="px-3 py-1 rounded-full bg-white/5 text-sm text-neutral-300 border border-white/10"
+              >
+                {lang}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   );
