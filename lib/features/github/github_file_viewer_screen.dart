@@ -40,18 +40,33 @@ class _GitHubFileViewerScreenState
     });
 
     try {
-      final file = await ref
-          .read(githubProvider.notifier)
-          .getFileContent(widget.filePath);
-      setState(() {
-        _file = file;
-        _isLoading = false;
-      });
+      final file = await ref.read(githubProvider.notifier).getFileContent(
+            widget.filePath,
+            owner: widget.repo.owner,
+            repo: widget.repo.name,
+          );
+
+      if (file == null) {
+        setState(() {
+          _error = 'File not found or could not be loaded';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      if (mounted) {
+        setState(() {
+          _file = file;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to load file: ${e.toString()}';
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -121,23 +136,43 @@ class _GitHubFileViewerScreenState
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_error != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const CircularProgressIndicator(),
             const SizedBox(height: 16),
-            Text(_error!),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadFile,
-              child: const Text('Retry'),
+            Text(
+              'Loading ${widget.filePath.split('/').last}...',
+              style: TextStyle(color: Colors.grey[600]),
             ),
           ],
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _loadFile,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
         ),
       );
     }

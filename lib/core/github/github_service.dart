@@ -227,13 +227,25 @@ class GitHubService {
     String path, {
     String? branch,
   }) async {
-    String url = '/github/repos/$owner/$repo/contents/$path';
+    // Ensure path doesn't start with slash
+    final cleanPath = path.startsWith('/') ? path.substring(1) : path;
+
+    String url = '/github/repos/$owner/$repo/contents/$cleanPath';
     if (branch != null) {
-      url += '?branch=$branch';
+      url += '?branch=${Uri.encodeComponent(branch)}';
     }
 
-    final response = await _api.get(url);
-    return GitHubFile.fromJson(response['file']);
+    try {
+      final response = await _api.get(url);
+      if (response['success'] == false) {
+        throw Exception(response['message'] ?? 'Failed to fetch file content');
+      }
+      return GitHubFile.fromJson(response['file']);
+    } catch (e) {
+      debugPrint('Error fetching file content: $e');
+      debugPrint('URL: $url');
+      rethrow;
+    }
   }
 
   /// Get repository README

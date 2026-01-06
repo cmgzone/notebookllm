@@ -150,18 +150,40 @@ class GitHubNotifier extends StateNotifier<GitHubState> {
   }
 
   /// Get file content
-  Future<GitHubFile?> getFileContent(String path) async {
-    if (state.selectedRepo == null) return null;
+  Future<GitHubFile?> getFileContent(String path,
+      {String? owner, String? repo}) async {
+    final repoOwner = owner ?? state.selectedRepo?.owner;
+    final repoName = repo ?? state.selectedRepo?.name;
+
+    if (repoOwner == null || repoName == null) {
+      state = state.copyWith(error: 'Repository information not available');
+      return null;
+    }
+
+    state = state.copyWith(clearError: true);
 
     try {
-      return await _githubService.getFileContent(
-        state.selectedRepo!.owner,
-        state.selectedRepo!.name,
+      final file = await _githubService.getFileContent(
+        repoOwner,
+        repoName,
         path,
       );
+      return file;
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      final errorMessage = e.toString().replaceAll('Exception: ', '');
+      state = state.copyWith(error: errorMessage);
       return null;
+    }
+  }
+
+  /// Validate that a file exists in the repository
+  Future<bool> validateFileExists(
+      String owner, String repo, String path) async {
+    try {
+      await _githubService.getFileContent(owner, repo, path);
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 
