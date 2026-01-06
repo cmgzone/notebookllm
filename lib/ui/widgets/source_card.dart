@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../../features/sources/source.dart';
 import '../../core/sources/source_icon_helper.dart';
 import '../../core/extensions/color_compat.dart';
@@ -129,6 +130,79 @@ class SourceCard extends StatelessWidget {
                                   ),
                                 ),
                               ),
+                              // Agent badge
+                              if (source.hasAgentSession) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        scheme.primary.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color:
+                                          scheme.primary.withValues(alpha: 0.2),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        LucideIcons.bot,
+                                        size: 10,
+                                        color: scheme.primary,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        source.agentName ?? 'Agent',
+                                        style: text.labelSmall?.copyWith(
+                                          color: scheme.primary,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              // Verification badge
+                              if (source.isVerified) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.verified,
+                                        size: 10,
+                                        color: Colors.green,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        source.verificationScore != null
+                                            ? '${source.verificationScore}%'
+                                            : '✓',
+                                        style: text.labelSmall?.copyWith(
+                                          color: Colors.green,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ],

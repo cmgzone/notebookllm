@@ -60,4 +60,27 @@ extension SourceExtensions on Source {
 
   /// Get the GitHub URL if this is a GitHub source
   String? get githubUrl => metadata['githubUrl'] as String?;
+
+  /// Get the original conversation context if this source was created by an agent
+  String? get conversationContext =>
+      metadata['conversationContext'] as String? ??
+      metadata['originalContext'] as String?;
+
+  /// Check if this source has conversation context
+  bool get hasConversationContext =>
+      conversationContext != null && conversationContext!.isNotEmpty;
+
+  /// Get verification result if this is a verified code source
+  Map<String, dynamic>? get verification =>
+      metadata['verification'] as Map<String, dynamic>?;
+
+  /// Check if this source is verified
+  bool get isVerified =>
+      verification != null && verification!['isValid'] == true;
+
+  /// Get verification score
+  int? get verificationScore => verification?['score'] as int?;
+
+  /// Get the description if available
+  String? get description => metadata['description'] as String?;
 }

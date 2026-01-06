@@ -152,7 +152,7 @@ class SourceDetailScreen extends ConsumerWidget {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'Agent',
+                          source.agentName ?? 'Agent',
                           style: text.labelSmall?.copyWith(
                             color: scheme.primary,
                             fontWeight: FontWeight.w600,
@@ -164,6 +164,9 @@ class SourceDetailScreen extends ConsumerWidget {
               ],
             ),
           ),
+          // Agent context section - show conversation context for agent-created sources
+          if (source.hasConversationContext || source.hasAgentSession)
+            _AgentContextSection(source: source),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
@@ -298,7 +301,7 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
                       child: _buildMatchesPanel(context),
                     ),
                   const SizedBox(height: 8),
-                  Expanded(
+                  Flexible(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       child: _buildChunkList(context),
@@ -314,7 +317,7 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
                       padding: const EdgeInsets.all(16),
                       child: _buildMatchesPanel(context),
                     ),
-                  Expanded(
+                  Flexible(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: _buildChunkList(context),
@@ -1017,6 +1020,164 @@ class _FactCheckSheetState extends ConsumerState<_FactCheckSheet> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Widget to display agent context and metadata for agent-created sources
+class _AgentContextSection extends StatelessWidget {
+  const _AgentContextSection({required this.source});
+  final Source source;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            scheme.primaryContainer.withValues(alpha: 0.3),
+            scheme.secondaryContainer.withValues(alpha: 0.2),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: scheme.primary.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.1),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(15)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  LucideIcons.bot,
+                  size: 18,
+                  color: scheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Created by ${source.agentName ?? 'Coding Agent'}',
+                        style: textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                      if (source.description != null)
+                        Text(
+                          source.description!,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurface.withValues(alpha: 0.7),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                // Verification badge
+                if (source.isVerified)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.green.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.verified,
+                          size: 14,
+                          color: Colors.green,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          source.verificationScore != null
+                              ? '${source.verificationScore}%'
+                              : 'Verified',
+                          style: textTheme.labelSmall?.copyWith(
+                            color: Colors.green,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Conversation context
+          if (source.hasConversationContext)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        LucideIcons.messageSquare,
+                        size: 14,
+                        color: scheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Original Context',
+                        style: textTheme.labelMedium?.copyWith(
+                          color: scheme.onSurface.withValues(alpha: 0.6),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: scheme.surface.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: scheme.outline.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    child: Text(
+                      source.conversationContext!,
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurface.withValues(alpha: 0.85),
+                        height: 1.5,
+                      ),
+                      maxLines: 5,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

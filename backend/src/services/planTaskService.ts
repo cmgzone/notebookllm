@@ -83,6 +83,7 @@ export interface ListTasksOptions {
   status?: TaskStatus;
   parentTaskId?: string | null;
   includeSubTasks?: boolean;
+  includeOutputs?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -177,7 +178,7 @@ class PlanTaskService {
    * @returns Array of Tasks
    */
   async listTasks(planId: string, options: ListTasksOptions = {}): Promise<Task[]> {
-    const { status, parentTaskId, includeSubTasks = false, limit = 100, offset = 0 } = options;
+    const { status, parentTaskId, includeSubTasks = false, includeOutputs = true, limit = 100, offset = 0 } = options;
 
     let query = `SELECT * FROM plan_tasks WHERE plan_id = $1`;
     const params: any[] = [planId];
@@ -206,10 +207,16 @@ class PlanTaskService {
     const result = await pool.query(query, params);
     const tasks = result.rows.map(row => this.mapRowToTask(row));
 
-    // Optionally load sub-tasks for each task
-    if (includeSubTasks) {
-      for (const task of tasks) {
+    // Load relations for each task
+    for (const task of tasks) {
+      // Optionally load sub-tasks
+      if (includeSubTasks) {
         task.subTasks = await this.getSubTasks(task.id);
+      }
+      // Load status history and agent outputs (needed for task detail view)
+      if (includeOutputs) {
+        task.statusHistory = await this.getStatusHistory(task.id);
+        task.agentOutputs = await this.getAgentOutputs(task.id);
       }
     }
 
