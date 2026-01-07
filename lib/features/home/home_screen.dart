@@ -208,7 +208,7 @@ class HomeScreen extends ConsumerWidget {
 
     final grouped = <String, List<Notebook>>{};
     for (var n in notebooks) {
-      final category = n.category ?? 'General';
+      final category = n.category;
       grouped.putIfAbsent(category, () => []).add(n);
     }
 
