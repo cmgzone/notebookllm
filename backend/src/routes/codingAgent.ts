@@ -1909,11 +1909,12 @@ import { codeReviewService } from '../services/codeReviewService.js';
 /**
  * POST /api/coding-agent/review
  * Submit code for AI-powered review
+ * Supports context-aware reviews using GitHub repository files
  */
 router.post('/review', authenticateToken, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).userId;
-    const { code, language, reviewType, context, saveReview } = req.body;
+    const { code, language, reviewType, context, saveReview, githubContext } = req.body;
 
     if (!code || !language) {
       return res.status(400).json({ 
@@ -1924,16 +1925,30 @@ router.post('/review', authenticateToken, async (req: Request, res: Response) =>
     // Track API call
     await mcpLimitsService.incrementApiCallCount(userId);
 
+    // Parse GitHub context if provided
+    let parsedGithubContext;
+    if (githubContext && githubContext.owner && githubContext.repo) {
+      parsedGithubContext = {
+        owner: githubContext.owner,
+        repo: githubContext.repo,
+        branch: githubContext.branch,
+        maxFiles: githubContext.maxFiles || 5,
+        maxFileSize: githubContext.maxFileSize || 50000,
+      };
+      console.log(`[Code Review] Context-aware review using ${githubContext.owner}/${githubContext.repo}`);
+    }
+
     const review = await codeReviewService.reviewCode(
       userId,
       code,
       language,
       reviewType || 'comprehensive',
       context,
-      saveReview !== false
+      saveReview !== false,
+      parsedGithubContext
     );
 
-    console.log(`[Code Review] Reviewed ${language} code - Score: ${review.score}`);
+    console.log(`[Code Review] Reviewed ${language} code - Score: ${review.score}${review.relatedFilesUsed?.length ? ` (with ${review.relatedFilesUsed.length} context files)` : ''}`);
 
     res.json({
       success: true,
@@ -1945,6 +1960,7 @@ router.post('/review', authenticateToken, async (req: Request, res: Response) =>
         suggestions: review.suggestions,
         language: review.language,
         reviewType: review.reviewType,
+        relatedFilesUsed: review.relatedFilesUsed,
         createdAt: review.createdAt,
       },
     });

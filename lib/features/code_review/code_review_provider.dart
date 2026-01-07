@@ -46,6 +46,7 @@ class CodeReview {
   final String summary;
   final List<CodeReviewIssue> issues;
   final List<String> suggestions;
+  final List<String>? relatedFilesUsed;
   final DateTime createdAt;
 
   CodeReview({
@@ -57,6 +58,7 @@ class CodeReview {
     required this.summary,
     required this.issues,
     required this.suggestions,
+    this.relatedFilesUsed,
     required this.createdAt,
   });
 
@@ -76,12 +78,17 @@ class CodeReview {
               ?.map((e) => e.toString())
               .toList() ??
           [],
+      relatedFilesUsed: (json['relatedFilesUsed'] as List<dynamic>?)
+          ?.map((e) => e.toString())
+          .toList(),
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : DateTime.now(),
     );
   }
 
+  bool get isContextAware =>
+      relatedFilesUsed != null && relatedFilesUsed!.isNotEmpty;
   int get errorCount => issues.where((i) => i.severity == 'error').length;
   int get warningCount => issues.where((i) => i.severity == 'warning').length;
   int get infoCount => issues.where((i) => i.severity == 'info').length;
@@ -163,6 +170,31 @@ class CodeComparisonResult {
   }
 }
 
+/// GitHub context for context-aware code reviews
+class GitHubReviewContext {
+  final String owner;
+  final String repo;
+  final String? branch;
+  final int maxFiles;
+  final int maxFileSize;
+
+  GitHubReviewContext({
+    required this.owner,
+    required this.repo,
+    this.branch,
+    this.maxFiles = 5,
+    this.maxFileSize = 50000,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'owner': owner,
+        'repo': repo,
+        if (branch != null) 'branch': branch,
+        'maxFiles': maxFiles,
+        'maxFileSize': maxFileSize,
+      };
+}
+
 // State
 class CodeReviewState {
   final bool isLoading;
@@ -208,17 +240,25 @@ class CodeReviewNotifier extends StateNotifier<CodeReviewState> {
     String reviewType = 'comprehensive',
     String? context,
     bool saveReview = true,
+    GitHubReviewContext? githubContext,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final response = await _apiService.post('/coding-agent/review', {
+      final body = <String, dynamic>{
         'code': code,
         'language': language,
         'reviewType': reviewType,
         'context': context,
         'saveReview': saveReview,
-      });
+      };
+
+      // Add GitHub context if provided for context-aware review
+      if (githubContext != null) {
+        body['githubContext'] = githubContext.toJson();
+      }
+
+      final response = await _apiService.post('/coding-agent/review', body);
 
       if (response['success'] == true && response['review'] != null) {
         final review = CodeReview.fromJson(response['review']);

@@ -3,6 +3,7 @@ import { generateWithGemini, generateWithOpenRouter, ChatMessage } from './aiSer
 import { mcpUserSettingsService } from './mcpUserSettingsService.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
+import { githubService } from './githubService.js';
 
 // Initialize Gemini
 const genAI = process.env.GEMINI_API_KEY
@@ -43,7 +44,22 @@ export interface CodeReview {
   issues: CodeReviewIssue[];
   suggestions: string[];
   context?: string;
+  relatedFilesUsed?: string[];
   createdAt: Date;
+}
+
+export interface GitHubContextOptions {
+  owner: string;
+  repo: string;
+  branch?: string;
+  maxFiles?: number;
+  maxFileSize?: number;
+}
+
+export interface RelatedFile {
+  path: string;
+  content: string;
+  language: string;
 }
 
 export interface ReviewComparisonResult {
@@ -56,6 +72,226 @@ export interface ReviewComparisonResult {
 }
 
 class CodeReviewService {
+  /**
+   * Extract imports/dependencies from code based on language
+   */
+  private extractImports(code: string, language: string): string[] {
+    const imports: string[] = [];
+    
+    switch (language.toLowerCase()) {
+      case 'typescript':
+      case 'javascript':
+      case 'tsx':
+      case 'jsx':
+        // ES6 imports: import X from './path' or import { X } from './path'
+        const esImports = code.matchAll(/import\s+(?:[\w{},\s*]+\s+from\s+)?['"]([^'"]+)['"]/g);
+        for (const match of esImports) {
+          if (match[1] && !match[1].startsWith('@') && !match[1].includes('node_modules')) {
+            imports.push(match[1]);
+          }
+        }
+        // require statements
+        const requires = code.matchAll(/require\s*\(\s*['"]([^'"]+)['"]\s*\)/g);
+        for (const match of requires) {
+          if (match[1] && !match[1].startsWith('@') && !match[1].includes('node_modules')) {
+            imports.push(match[1]);
+          }
+        }
+        break;
+        
+      case 'python':
+        // from X import Y or import X
+        const pyImports = code.matchAll(/(?:from\s+(\S+)\s+import|import\s+(\S+))/g);
+        for (const match of pyImports) {
+          const importPath = match[1] || match[2];
+          if (importPath && !importPath.includes('.')) {
+            // Relative imports
+            imports.push(importPath.replace(/\./g, '/') + '.py');
+          }
+        }
+        break;
+        
+      case 'dart':
+        // import 'package:X' or import 'X.dart'
+        const dartImports = code.matchAll(/import\s+['"]([^'"]+)['"]/g);
+        for (const match of dartImports) {
+          if (match[1] && !match[1].startsWith('package:') && !match[1].startsWith('dart:')) {
+            imports.push(match[1]);
+          }
+        }
+        break;
+        
+      case 'java':
+      case 'kotlin':
+        // import com.example.Class
+        const javaImports = code.matchAll(/import\s+([\w.]+)/g);
+        for (const match of javaImports) {
+          if (match[1] && !match[1].startsWith('java.') && !match[1].startsWith('javax.')) {
+            imports.push(match[1].replace(/\./g, '/') + (language === 'kotlin' ? '.kt' : '.java'));
+          }
+        }
+        break;
+        
+      case 'go':
+        // import "path/to/package"
+        const goImports = code.matchAll(/import\s+(?:\(\s*)?["']([^"']+)["']/g);
+        for (const match of goImports) {
+          if (match[1] && !match[1].includes('github.com') && !match[1].includes('/')) {
+            imports.push(match[1]);
+          }
+        }
+        break;
+        
+      case 'rust':
+        // use crate::module or mod module
+        const rustImports = code.matchAll(/(?:use\s+crate::(\w+)|mod\s+(\w+))/g);
+        for (const match of rustImports) {
+          const mod = match[1] || match[2];
+          if (mod) imports.push(mod + '.rs');
+        }
+        break;
+    }
+    
+    return [...new Set(imports)]; // Remove duplicates
+  }
+
+  /**
+   * Resolve import path to actual file path
+   */
+  private resolveImportPath(importPath: string, language: string, currentFilePath?: string): string {
+    // Remove leading ./ or ../
+    let resolved = importPath.replace(/^\.\//, '').replace(/^\.\.\//, '');
+    
+    // Add extension if missing
+    const extensions: Record<string, string[]> = {
+      typescript: ['.ts', '.tsx', '/index.ts', '/index.tsx'],
+      javascript: ['.js', '.jsx', '/index.js', '/index.jsx'],
+      tsx: ['.tsx', '.ts', '/index.tsx', '/index.ts'],
+      jsx: ['.jsx', '.js', '/index.jsx', '/index.js'],
+    };
+    
+    const langExtensions = extensions[language.toLowerCase()];
+    if (langExtensions && !langExtensions.some(ext => resolved.endsWith(ext))) {
+      // Return base path, we'll try multiple extensions when fetching
+      return resolved;
+    }
+    
+    return resolved;
+  }
+
+  /**
+   * Fetch related files from GitHub based on imports
+   */
+  async fetchGitHubContext(
+    userId: string,
+    code: string,
+    language: string,
+    options: GitHubContextOptions
+  ): Promise<RelatedFile[]> {
+    const relatedFiles: RelatedFile[] = [];
+    const imports = this.extractImports(code, language);
+    
+    if (imports.length === 0) {
+      console.log('[Code Review] No imports detected in code');
+      return relatedFiles;
+    }
+    
+    console.log(`[Code Review] Detected ${imports.length} imports:`, imports);
+    
+    const maxFiles = options.maxFiles || 5;
+    const maxFileSize = options.maxFileSize || 50000; // 50KB max per file
+    
+    // Get repo tree to find matching files
+    let repoTree: Array<{ path: string; type: string; size?: number }> = [];
+    try {
+      repoTree = await githubService.getRepoTree(userId, options.owner, options.repo, options.branch);
+    } catch (error: any) {
+      console.log('[Code Review] Failed to get repo tree:', error.message);
+      return relatedFiles;
+    }
+    
+    // Find matching files for each import
+    const filesToFetch: string[] = [];
+    const extensions = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
+    
+    for (const importPath of imports) {
+      if (filesToFetch.length >= maxFiles) break;
+      
+      const resolved = this.resolveImportPath(importPath, language);
+      
+      // Try to find matching file in repo tree
+      for (const ext of extensions) {
+        const possiblePath = resolved + ext;
+        const match = repoTree.find(item => 
+          item.type === 'blob' && 
+          (item.path === possiblePath || 
+           item.path.endsWith('/' + possiblePath) ||
+           item.path.includes(resolved))
+        );
+        
+        if (match && match.size && match.size < maxFileSize) {
+          if (!filesToFetch.includes(match.path)) {
+            filesToFetch.push(match.path);
+            break;
+          }
+        }
+      }
+    }
+    
+    console.log(`[Code Review] Fetching ${filesToFetch.length} related files:`, filesToFetch);
+    
+    // Fetch file contents
+    for (const filePath of filesToFetch) {
+      try {
+        const fileContent = await githubService.getFileContent(
+          userId, 
+          options.owner, 
+          options.repo, 
+          filePath,
+          options.branch
+        );
+        
+        if (fileContent.content) {
+          relatedFiles.push({
+            path: filePath,
+            content: fileContent.content,
+            language: this.detectLanguage(filePath),
+          });
+        }
+      } catch (error: any) {
+        console.log(`[Code Review] Failed to fetch ${filePath}:`, error.message);
+      }
+    }
+    
+    return relatedFiles;
+  }
+
+  /**
+   * Detect language from file extension
+   */
+  private detectLanguage(filePath: string): string {
+    const ext = filePath.split('.').pop()?.toLowerCase();
+    const langMap: Record<string, string> = {
+      ts: 'typescript',
+      tsx: 'typescript',
+      js: 'javascript',
+      jsx: 'javascript',
+      py: 'python',
+      dart: 'dart',
+      java: 'java',
+      kt: 'kotlin',
+      go: 'go',
+      rs: 'rust',
+      rb: 'ruby',
+      php: 'php',
+      cs: 'csharp',
+      cpp: 'cpp',
+      c: 'c',
+      swift: 'swift',
+    };
+    return langMap[ext || ''] || ext || 'text';
+  }
+
   /**
    * Get a specific model by ID from the database
    */
@@ -169,7 +405,8 @@ class CodeReviewService {
     language: string,
     reviewType: string = 'comprehensive',
     context?: string,
-    saveReview: boolean = true
+    saveReview: boolean = true,
+    githubContext?: GitHubContextOptions
   ): Promise<CodeReview> {
     // Get user's preferred AI model for code analysis
     let modelId: string | null = null;
@@ -182,17 +419,29 @@ class CodeReviewService {
       console.log('[Code Review] Could not get user model preference, using default');
     }
 
-    // Generate AI review with user's preferred model
-    const reviewResult = await this.generateAIReview(code, language, reviewType, context, modelId || undefined);
+    // Fetch related files from GitHub if context options provided
+    let relatedFiles: RelatedFile[] = [];
+    if (githubContext) {
+      try {
+        relatedFiles = await this.fetchGitHubContext(userId, code, language, githubContext);
+        console.log(`[Code Review] Fetched ${relatedFiles.length} related files for context`);
+      } catch (error: any) {
+        console.log('[Code Review] Failed to fetch GitHub context:', error.message);
+      }
+    }
+
+    // Generate AI review with user's preferred model and context
+    const reviewResult = await this.generateAIReview(code, language, reviewType, context, modelId || undefined, relatedFiles);
     
     if (saveReview) {
       // Save to database
       const result = await pool.query(
-        `INSERT INTO code_reviews (user_id, code, language, review_type, score, summary, issues, suggestions, context)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO code_reviews (user_id, code, language, review_type, score, summary, issues, suggestions, context, related_files_used)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
         [userId, code, language, reviewType, reviewResult.score, reviewResult.summary, 
-         JSON.stringify(reviewResult.issues), JSON.stringify(reviewResult.suggestions), context]
+         JSON.stringify(reviewResult.issues), JSON.stringify(reviewResult.suggestions), context,
+         relatedFiles.length > 0 ? JSON.stringify(relatedFiles.map(f => f.path)) : null]
       );
       
       return this.mapRowToReview(result.rows[0]);
@@ -205,6 +454,7 @@ class CodeReviewService {
       language,
       reviewType,
       ...reviewResult,
+      relatedFilesUsed: relatedFiles.map(f => f.path),
       createdAt: new Date(),
     };
   }
@@ -214,7 +464,8 @@ class CodeReviewService {
     language: string,
     reviewType: string,
     context?: string,
-    modelId?: string
+    modelId?: string,
+    relatedFiles?: RelatedFile[]
   ): Promise<{ score: number; summary: string; issues: CodeReviewIssue[]; suggestions: string[]; modelUsed?: string }> {
     const focusAreas = {
       comprehensive: 'security, performance, readability, best practices, and potential bugs',
@@ -223,12 +474,31 @@ class CodeReviewService {
       readability: 'code clarity, naming conventions, documentation, and maintainability',
     };
 
+    // Build related files context
+    let relatedFilesContext = '';
+    if (relatedFiles && relatedFiles.length > 0) {
+      relatedFilesContext = `\n\n## Related Files (for context)
+The following files are imported/used by the code being reviewed. Use them to understand the full context:
+
+${relatedFiles.map(f => `### ${f.path}
+\`\`\`${f.language}
+${f.content.slice(0, 3000)}${f.content.length > 3000 ? '\n// ... (truncated)' : ''}
+\`\`\``).join('\n\n')}
+`;
+    }
+
     const prompt = `You are an expert code reviewer. Analyze the following ${language} code and provide a detailed review.
 
 Focus on: ${focusAreas[reviewType as keyof typeof focusAreas] || focusAreas.comprehensive}
 ${context ? `Context: ${context}` : ''}
+${relatedFiles && relatedFiles.length > 0 ? `\nThis review is CONTEXT-AWARE. You have access to ${relatedFiles.length} related file(s) that this code imports or depends on. Use this context to:
+- Verify correct usage of imported functions/classes
+- Check for type mismatches with imported modules
+- Identify potential integration issues
+- Understand the broader codebase patterns` : ''}
+${relatedFilesContext}
 
-Code to review:
+## Code to Review:
 \`\`\`${language}
 ${code}
 \`\`\`
@@ -236,12 +506,12 @@ ${code}
 Respond with a JSON object in this exact format:
 {
   "score": <number 0-100>,
-  "summary": "<brief overview of code quality>",
+  "summary": "<brief overview of code quality${relatedFiles && relatedFiles.length > 0 ? ', including how well it integrates with related files' : ''}>",
   "issues": [
     {
       "id": "<unique-id>",
       "severity": "error|warning|info",
-      "category": "security|performance|style|logic|best-practice",
+      "category": "security|performance|style|logic|best-practice|integration",
       "message": "<description of the issue>",
       "line": <line number if applicable>,
       "suggestion": "<how to fix>",
@@ -256,11 +526,12 @@ Be thorough but fair. Score guidelines:
 - 70-89: Good code with minor issues
 - 50-69: Acceptable but needs improvement
 - 30-49: Significant issues need addressing
-- 0-29: Major problems, needs rewrite`;
+- 0-29: Major problems, needs rewrite
+${relatedFiles && relatedFiles.length > 0 ? '\nNote: Include "integration" category for issues related to how this code interacts with the imported files.' : ''}`;
 
     try {
       const { text: response, provider, modelName } = await this.generateWithModel(prompt, modelId);
-      console.log(`[Code Review] Generated review using ${modelName || provider}`);
+      console.log(`[Code Review] Generated review using ${modelName || provider}${relatedFiles?.length ? ` with ${relatedFiles.length} context files` : ''}`);
 
       // Parse JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -395,6 +666,9 @@ Be thorough but fair. Score guidelines:
       issues: typeof row.issues === 'string' ? JSON.parse(row.issues) : row.issues,
       suggestions: typeof row.suggestions === 'string' ? JSON.parse(row.suggestions) : row.suggestions,
       context: row.context,
+      relatedFilesUsed: row.related_files_used 
+        ? (typeof row.related_files_used === 'string' ? JSON.parse(row.related_files_used) : row.related_files_used)
+        : undefined,
       createdAt: row.created_at,
     };
   }

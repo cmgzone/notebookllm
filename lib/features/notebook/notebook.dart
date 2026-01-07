@@ -21,6 +21,7 @@ class Notebook with _$Notebook {
     String? agentIdentifier,
     @Default('active')
     String agentStatus, // 'active', 'expired', 'disconnected'
+    @Default('General') String category,
   }) = _Notebook;
 
   factory Notebook.fromJson(Map<String, dynamic> json) =>

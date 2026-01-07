@@ -14,6 +14,16 @@ class CreateNotebookDialog extends ConsumerStatefulWidget {
 class _CreateNotebookDialogState extends ConsumerState<CreateNotebookDialog> {
   final _controller = TextEditingController();
   bool _isCreating = false;
+  String _selectedCategory = 'General';
+  final _categories = [
+    'General',
+    'Work',
+    'Study',
+    'Personal',
+    'Research',
+    'Coding',
+    'Creative'
+  ];
 
   @override
   void dispose() {
@@ -29,7 +39,7 @@ class _CreateNotebookDialogState extends ConsumerState<CreateNotebookDialog> {
     try {
       await ref
           .read(notebookProvider.notifier)
-          .addNotebook(_controller.text.trim());
+          .addNotebook(_controller.text.trim(), category: _selectedCategory);
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -71,6 +81,17 @@ class _CreateNotebookDialogState extends ConsumerState<CreateNotebookDialog> {
               enabled: !_isCreating,
               decoration: const InputDecoration(labelText: 'Title'),
               onSubmitted: _isCreating ? null : (_) => _createNotebook(),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: _selectedCategory,
+              decoration: const InputDecoration(labelText: 'Category'),
+              items: _categories
+                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                  .toList(),
+              onChanged: _isCreating
+                  ? null
+                  : (v) => setState(() => _selectedCategory = v!),
             ),
             const SizedBox(height: 24),
             Row(

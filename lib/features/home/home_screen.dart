@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'dashboard_grid.dart';
 
 import '../../ui/widgets/notebook_card.dart';
 import '../../core/auth/custom_auth_service.dart';
@@ -79,7 +80,7 @@ class HomeScreen extends ConsumerWidget {
                             ).animate().fadeIn().slideX(),
                             const SizedBox(height: 4),
                             Text(
-                              'Your Notebooks',
+                              'Dashboard',
                               style: text.displaySmall?.copyWith(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
@@ -181,8 +182,20 @@ class HomeScreen extends ConsumerWidget {
               child: const SizedBox.shrink(),
             ),
           ),
+          const DashboardGrid(),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+              child: Text(
+                'Recent Notebooks',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+            ),
+          ),
           const SliverPadding(
-            padding: EdgeInsets.all(20),
+            padding: EdgeInsets.symmetric(horizontal: 20),
             sliver: _NotebookGrid(),
           ),
           const SliverToBoxAdapter(

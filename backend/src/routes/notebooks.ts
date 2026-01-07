@@ -10,7 +10,7 @@ router.use(authenticateToken);
 router.get('/', async (req: AuthRequest, res: Response) => {
     try {
         console.log(`[Notebooks] GET / - userId: ${req.userId}`);
-        
+
         // First try with agent session info, fall back to simple query if agent_sessions table doesn't exist
         let result;
         try {
@@ -40,7 +40,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
                 [req.userId]
             );
         }
-        
+
         console.log(`[Notebooks] Found ${result.rows.length} notebooks for user ${req.userId}`);
         res.json({ success: true, notebooks: result.rows });
     } catch (error) {
@@ -75,8 +75,8 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 // Create a new notebook
 router.post('/', async (req: AuthRequest, res: Response) => {
     try {
-        const { title, description, coverImage } = req.body;
-        
+        const { title, description, coverImage, category } = req.body;
+
         console.log(`[Notebooks] POST / - userId: ${req.userId}, title: ${title}`);
 
         if (!title) {
@@ -85,10 +85,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
         const id = uuidv4();
         const result = await pool.query(
-            `INSERT INTO notebooks (id, user_id, title, description, cover_image, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+            `INSERT INTO notebooks (id, user_id, title, description, cover_image, category, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
              RETURNING *`,
-            [id, req.userId, title, description || null, coverImage || null]
+            [id, req.userId, title, description || null, coverImage || null, category || 'General']
         );
 
         console.log(`[Notebooks] Created notebook ${id} for user ${req.userId}`);
@@ -134,6 +134,10 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
         if (coverImage !== undefined) {
             updates.push(`cover_image = $${paramIndex++}`);
             values.push(coverImage);
+        }
+        if (req.body.category !== undefined) {
+            updates.push(`category = $${paramIndex++}`);
+            values.push(req.body.category);
         }
 
         if (updates.length === 0) {

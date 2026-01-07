@@ -34,7 +34,9 @@ mixin _$Notebook {
   String? get agentSessionId => throw _privateConstructorUsedError;
   String? get agentName => throw _privateConstructorUsedError;
   String? get agentIdentifier => throw _privateConstructorUsedError;
-  String get agentStatus => throw _privateConstructorUsedError;
+  String get agentStatus =>
+      throw _privateConstructorUsedError; // 'active', 'expired', 'disconnected'
+  String get category => throw _privateConstructorUsedError;
 
   /// Serializes this Notebook to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -64,7 +66,8 @@ abstract class $NotebookCopyWith<$Res> {
       String? agentSessionId,
       String? agentName,
       String? agentIdentifier,
-      String agentStatus});
+      String agentStatus,
+      String category});
 }
 
 /// @nodoc
@@ -95,6 +98,7 @@ class _$NotebookCopyWithImpl<$Res, $Val extends Notebook>
     Object? agentName = freezed,
     Object? agentIdentifier = freezed,
     Object? agentStatus = null,
+    Object? category = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -149,6 +153,10 @@ class _$NotebookCopyWithImpl<$Res, $Val extends Notebook>
           ? _value.agentStatus
           : agentStatus // ignore: cast_nullable_to_non_nullable
               as String,
+      category: null == category
+          ? _value.category
+          : category // ignore: cast_nullable_to_non_nullable
+              as String,
     ) as $Val);
   }
 }
@@ -174,7 +182,8 @@ abstract class _$$NotebookImplCopyWith<$Res>
       String? agentSessionId,
       String? agentName,
       String? agentIdentifier,
-      String agentStatus});
+      String agentStatus,
+      String category});
 }
 
 /// @nodoc
@@ -203,6 +212,7 @@ class __$$NotebookImplCopyWithImpl<$Res>
     Object? agentName = freezed,
     Object? agentIdentifier = freezed,
     Object? agentStatus = null,
+    Object? category = null,
   }) {
     return _then(_$NotebookImpl(
       id: null == id
@@ -257,6 +267,10 @@ class __$$NotebookImplCopyWithImpl<$Res>
           ? _value.agentStatus
           : agentStatus // ignore: cast_nullable_to_non_nullable
               as String,
+      category: null == category
+          ? _value.category
+          : category // ignore: cast_nullable_to_non_nullable
+              as String,
     ));
   }
 }
@@ -277,7 +291,8 @@ class _$NotebookImpl implements _Notebook {
       this.agentSessionId,
       this.agentName,
       this.agentIdentifier,
-      this.agentStatus = 'active'});
+      this.agentStatus = 'active',
+      this.category = 'General'});
 
   factory _$NotebookImpl.fromJson(Map<String, dynamic> json) =>
       _$$NotebookImplFromJson(json);
@@ -313,10 +328,14 @@ class _$NotebookImpl implements _Notebook {
   @override
   @JsonKey()
   final String agentStatus;
+// 'active', 'expired', 'disconnected'
+  @override
+  @JsonKey()
+  final String category;
 
   @override
   String toString() {
-    return 'Notebook(id: $id, userId: $userId, title: $title, description: $description, coverImage: $coverImage, sourceCount: $sourceCount, createdAt: $createdAt, updatedAt: $updatedAt, isAgentNotebook: $isAgentNotebook, agentSessionId: $agentSessionId, agentName: $agentName, agentIdentifier: $agentIdentifier, agentStatus: $agentStatus)';
+    return 'Notebook(id: $id, userId: $userId, title: $title, description: $description, coverImage: $coverImage, sourceCount: $sourceCount, createdAt: $createdAt, updatedAt: $updatedAt, isAgentNotebook: $isAgentNotebook, agentSessionId: $agentSessionId, agentName: $agentName, agentIdentifier: $agentIdentifier, agentStatus: $agentStatus, category: $category)';
   }
 
   @override
@@ -346,7 +365,9 @@ class _$NotebookImpl implements _Notebook {
             (identical(other.agentIdentifier, agentIdentifier) ||
                 other.agentIdentifier == agentIdentifier) &&
             (identical(other.agentStatus, agentStatus) ||
-                other.agentStatus == agentStatus));
+                other.agentStatus == agentStatus) &&
+            (identical(other.category, category) ||
+                other.category == category));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -365,7 +386,8 @@ class _$NotebookImpl implements _Notebook {
       agentSessionId,
       agentName,
       agentIdentifier,
-      agentStatus);
+      agentStatus,
+      category);
 
   /// Create a copy of Notebook
   /// with the given fields replaced by the non-null parameter values.
@@ -397,7 +419,8 @@ abstract class _Notebook implements Notebook {
       final String? agentSessionId,
       final String? agentName,
       final String? agentIdentifier,
-      final String agentStatus}) = _$NotebookImpl;
+      final String agentStatus,
+      final String category}) = _$NotebookImpl;
 
   factory _Notebook.fromJson(Map<String, dynamic> json) =
       _$NotebookImpl.fromJson;
@@ -427,7 +450,9 @@ abstract class _Notebook implements Notebook {
   @override
   String? get agentIdentifier;
   @override
-  String get agentStatus;
+  String get agentStatus; // 'active', 'expired', 'disconnected'
+  @override
+  String get category;
 
   /// Create a copy of Notebook
   /// with the given fields replaced by the non-null parameter values.

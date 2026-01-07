@@ -5,7 +5,16 @@ class AppTheme {
   static ThemeData get light => _baseTheme(Brightness.light);
   static ThemeData get dark => _baseTheme(Brightness.dark);
 
-  static const premiumGradient = LinearGradient(
+  // --- Premium Colors ---
+  static const Color _lightPrimary = Color(0xFF6366F1); // Indigo 500
+  static const Color _darkPrimary = Color(0xFF818CF8); // Indigo 400
+
+  static const Color _lightBackground = Color(0xFFF8FAFC); // Slate 50
+  static const Color _darkBackground =
+      Color(0xFF020617); // Slate 950 (Deep Void)
+
+  // --- Gradients ---
+  static const LinearGradient premiumGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
@@ -15,47 +24,52 @@ class AppTheme {
     ],
   );
 
+  static const LinearGradient neonGradient = LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: [
+      Color(0xFF22D3EE), // Cyan
+      Color(0xFF818CF8), // Indigo
+    ],
+  );
+
+  // --- Glass Effects ---
+  static Color get glassColorLight => Colors.white.withValues(alpha: 0.7);
+  static Color get glassColorDark =>
+      const Color(0xFF0F172A).withValues(alpha: 0.6);
+  static const double glassBlur = 10.0;
+
   static ThemeData _baseTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
-    const primary = Color(0xFF6366F1); // Indigo as primary
-    const secondary = Color(0xFF0EA5E9); // Sky Blue
-    const surface = Color(0xFFF8FAFC); // Slate 50
-    // Richer, deeper dark background (Slate 950) for premium feel
-    const surfaceDark = Color(0xFF020617);
 
-    final baseScheme = ColorScheme.fromSeed(
+    // Core colors
+    final primary = isDark ? _darkPrimary : _lightPrimary;
+    final background = isDark ? _darkBackground : _lightBackground;
+
+    // Surfaces (Cards, Bottom Sheets)
+    // Dark mode uses deep slate with slight transparency for glass effects
+    final surface = isDark ? const Color(0xFF0F172A) : const Color(0xFFFFFFFF);
+    final surfaceContainer =
+        isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
+
+    final colorScheme = ColorScheme.fromSeed(
       brightness: brightness,
       seedColor: primary,
       primary: primary,
-      secondary: secondary,
+      secondary: isDark
+          ? const Color(0xFF22D3EE)
+          : const Color(0xFF0EA5E9), // Cyan accent
       tertiary: const Color(0xFFEC4899), // Pink
-    );
-
-    final colorScheme = baseScheme.copyWith(
-      surface: isDark ? surfaceDark : surface,
-      // Explicitly define container colors for layering
-      surfaceContainer: isDark
-          ? const Color(0xFF0F172A)
-          : const Color(0xFFFFFFFF), // Slate 900
-      surfaceContainerLow:
-          isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-      surfaceContainerHighest: isDark
-          ? const Color(0xFF334155)
-          : const Color(0xFFE2E8F0), // Slate 700 for inputs
-
-      // White text for dark mode - full opacity for readability
-      onSurface: isDark ? const Color(0xFFFFFFFF) : const Color(0xFF0F172A),
-      // Lighter gray for secondary text in dark mode (more visible)
-      onSurfaceVariant:
-          isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
-
-      // Improved outline visibility
-      outline: isDark ? const Color(0xFF64748B) : const Color(0xFFCBD5E1),
+      surface: surface,
+    ).copyWith(
+      // Custom overrides for premium feel
+      surfaceContainer: surfaceContainer,
+      outline: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
       outlineVariant:
-          isDark ? const Color(0xFF475569) : const Color(0xFFE2E8F0),
-
-      // Tertiary colors for additional text
-      onTertiary: isDark ? const Color(0xFFFFFFFF) : const Color(0xFF475569),
+          isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+      shadow: isDark
+          ? Colors.black.withValues(alpha: 0.5)
+          : Colors.black.withValues(alpha: 0.1),
     );
 
     final textTheme = GoogleFonts.plusJakartaSansTextTheme().copyWith(
@@ -64,57 +78,75 @@ class AppTheme {
           letterSpacing: -1.0,
           color: colorScheme.onSurface),
       headlineLarge: GoogleFonts.outfit(
-          fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+          fontWeight: FontWeight.bold,
+          letterSpacing: -0.5,
+          color: colorScheme.onSurface),
       headlineMedium: GoogleFonts.outfit(
           fontWeight: FontWeight.w600, color: colorScheme.onSurface),
       titleLarge: GoogleFonts.plusJakartaSans(
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.15,
+          color: colorScheme.onSurface),
+      titleMedium: GoogleFonts.plusJakartaSans(
           fontWeight: FontWeight.w600, color: colorScheme.onSurface),
       bodyLarge: GoogleFonts.plusJakartaSans(
-          height: 1.5, color: colorScheme.onSurface),
+          height: 1.6, color: colorScheme.onSurface),
       bodyMedium: GoogleFonts.plusJakartaSans(
           height: 1.5, color: colorScheme.onSurface),
       labelLarge: GoogleFonts.plusJakartaSans(
-          fontWeight: FontWeight.w600, color: colorScheme.onSurface),
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+          color: colorScheme.onSurface),
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
       textTheme: textTheme,
-      scaffoldBackgroundColor: colorScheme.surface,
+      scaffoldBackgroundColor: background,
+
+      // --- AppBar ---
       appBarTheme: AppBarTheme(
-        backgroundColor: colorScheme.surface,
+        backgroundColor: Colors.transparent, // Transparent for glass effect
         foregroundColor: colorScheme.onSurface,
         elevation: 0,
         centerTitle: true,
+        scrolledUnderElevation: 0,
         titleTextStyle: textTheme.titleLarge?.copyWith(
           color: colorScheme.onSurface,
           fontWeight: FontWeight.bold,
         ),
         iconTheme: IconThemeData(color: colorScheme.onSurface),
       ),
+
+      // --- Cards (Glass Style) ---
       cardTheme: CardThemeData(
         elevation: 0,
         margin: EdgeInsets.zero,
-        // Using surfaceContainer (Slate 900) for cards against Slate 950 background
+        // Semi-transparent color
         color: isDark
-            ? colorScheme.surfaceContainer.withValues(alpha: 0.8)
-            : colorScheme.surfaceContainer.withValues(alpha: 0.8),
+            ? const Color(0xFF1E293B).withValues(alpha: 0.5)
+            : Colors.white,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24), // Softer corners
           side: BorderSide(
-            color: colorScheme.outline.withValues(alpha: isDark ? 0.2 : 0.1),
+            color: isDark
+                ? const Color(0xFF334155).withValues(alpha: 0.5)
+                : const Color(0xFFE2E8F0),
             width: 1,
           ),
         ),
       ),
+
+      // --- Inputs ---
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        // Lighter inputs on dark background
         fillColor: isDark
-            ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.2)
-            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            ? const Color(0xFF0F172A).withValues(alpha: 0.5)
+            : const Color(0xFFF1F5F9),
         hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
@@ -122,58 +154,75 @@ class AppTheme {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(
-            color: colorScheme.outline.withValues(alpha: isDark ? 0.2 : 0.1),
+            color: colorScheme.outline.withValues(alpha: 0.3),
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: primary, width: 2),
+          borderSide: BorderSide(color: primary, width: 2),
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       ),
+
+      // --- Buttons ---
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           textStyle: textTheme.labelLarge?.copyWith(fontSize: 16),
+          elevation: isDark ? 0 : 2,
+          shadowColor: primary.withValues(alpha: 0.4),
         ),
       ),
-      chipTheme: ChipThemeData(
+
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          backgroundColor: colorScheme.surfaceContainer,
+          foregroundColor: colorScheme.onSurface,
+          elevation: 0,
+          side: BorderSide(
+            color: colorScheme.outline.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
+
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          foregroundColor: colorScheme.onSurface,
+        ),
+      ),
+
+      // --- Navigation Bar ---
+      navigationBarTheme: NavigationBarThemeData(
         backgroundColor: isDark
-            ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
-            : colorScheme.surfaceContainerHighest,
-        side: BorderSide.none,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        labelStyle: textTheme.labelMedium?.copyWith(
-          color: colorScheme.onSurface,
-        ),
-        iconTheme: IconThemeData(
-          color: colorScheme.onSurfaceVariant,
-          size: 18,
-        ),
-        secondaryLabelStyle: textTheme.labelMedium?.copyWith(
-          color: colorScheme.onSurfaceVariant,
-        ),
+            ? const Color(0xFF0F172A).withValues(alpha: 0.8)
+            : Colors.white,
+        indicatorColor: primary.withValues(alpha: 0.2),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return IconThemeData(color: primary);
+          }
+          return IconThemeData(color: colorScheme.onSurfaceVariant);
+        }),
       ),
+
+      // --- Other ---
       dividerTheme: DividerThemeData(
         color: colorScheme.outline.withValues(alpha: 0.2),
         thickness: 1,
       ),
-      iconTheme: IconThemeData(
-        color: colorScheme.onSurface,
-      ),
-      dialogTheme: DialogThemeData(
-        backgroundColor: colorScheme.surfaceContainer,
-        surfaceTintColor: Colors.transparent,
-      ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: colorScheme.surfaceContainer,
-        modalBackgroundColor: colorScheme.surfaceContainer,
+        backgroundColor: isDark
+            ? const Color(0xFF0F172A).withValues(alpha: 0.9)
+            : Colors.white,
+        modalBackgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
         ),
       ),
     );

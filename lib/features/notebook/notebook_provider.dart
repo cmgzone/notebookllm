@@ -129,6 +129,7 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
           agentName: notebook['agent_name'] as String?,
           agentIdentifier: notebook['agent_identifier'] as String?,
           agentStatus: notebook['agent_status'] as String? ?? 'active',
+          category: notebook['category'] as String? ?? 'General',
         );
       }).toList();
 
@@ -149,7 +150,7 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
     await loadNotebooks();
   }
 
-  Future<String?> addNotebook(String title) async {
+  Future<String?> addNotebook(String title, {String? category}) async {
     try {
       final authState = ref.read(customAuthStateProvider);
       final user = authState.user;
@@ -161,11 +162,12 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
       final apiService = ref.read(apiServiceProvider);
 
       debugPrint(
-          '📝 NotebookNotifier addNotebook: title=$title, user=${user.uid}');
+          '📝 NotebookNotifier addNotebook: title=$title, category=$category, user=${user.uid}');
 
       final notebookData = await apiService.createNotebook(
         title: title,
         description: '',
+        category: category ?? 'General',
       );
 
       debugPrint('📝 API response: $notebookData');
@@ -179,6 +181,7 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
         sourceCount: 0,
         createdAt: DateTime.parse(notebookData['created_at'] as String),
         updatedAt: DateTime.parse(notebookData['updated_at'] as String),
+        category: notebookData['category'] as String? ?? 'General',
       );
 
       // Update state immediately with the new notebook

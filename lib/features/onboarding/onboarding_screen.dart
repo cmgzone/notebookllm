@@ -57,41 +57,36 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         OnboardingPage(
           title: 'Welcome to Notebook AI',
           description:
-              'Your intelligent companion for organizing, understanding, and creating knowledge from any source.',
-          imageUrl:
-              'https://trae-api-sg.mchost.guru/api/ide/v1/text_to_image?prompt=A%20beautiful%20minimalist%20illustration%20of%20a%20premium%20notebook%20with%20glowing%20AI%20elements%2C%20elegant%20design%2C%20modern%20aesthetic%2C%20soft%20gradient%20background%2C%20professional%20and%20clean%20style&image_size=portrait_4_3',
+              'Your intelligent companion for organizing, understanding, and creating knowledge from any source. Now with advanced AI.',
+          imageUrl: 'assets/images/onboarding_collaboration.png',
           icon: Icons.auto_awesome,
         ),
         OnboardingPage(
-          title: 'Add Your Sources',
+          title: 'Connect Any Data (MCP)',
           description:
-              'Upload PDFs, paste text, or add web links. Our AI will analyze and organize your content intelligently.',
-          imageUrl:
-              'https://trae-api-sg.mchost.guru/api/ide/v1/text_to_image?prompt=A%20modern%20mobile%20interface%20showing%20document%20upload%20with%20PDF%20files%2C%20text%20snippets%2C%20and%20web%20links%20floating%20elegantly%2C%20premium%20UI%20design%2C%20soft%20blue%20gradient%20background%2C%20minimalist%20style&image_size=portrait_4_3',
-          icon: Icons.upload_file,
+              'Powered by the Model Context Protocol. Connect databases, local files, and remote APIs seamlessly to your AI context.',
+          imageUrl: 'assets/images/onboarding_mcp.png',
+          icon: Icons.hub,
         ),
         OnboardingPage(
-          title: 'Chat with Your Knowledge',
+          title: 'AI Coding Agent',
           description:
-              'Ask questions about your sources and get instant, contextual answers with citations.',
-          imageUrl:
-              'https://trae-api-sg.mchost.guru/api/ide/v1/text_to_image?prompt=A%20premium%20chat%20interface%20with%20AI%20assistant%2C%20elegant%20message%20bubbles%2C%20citations%20and%20references%20floating%20around%2C%20modern%20design%2C%20soft%20purple%20gradient%2C%20professional%20aesthetic&image_size=portrait_4_3',
-          icon: Icons.chat_bubble_outline,
+              'Build custom tools and apps directly within your notebook. Let the AI Coding Agent write and execute code for you.',
+          imageUrl: 'assets/images/onboarding_coding_agent.png',
+          icon: Icons.code,
         ),
         OnboardingPage(
-          title: 'Create Amazing Content',
+          title: 'Deep Study & Research',
           description:
-              'Generate study guides, briefs, FAQs, timelines, and audio overviews from your knowledge base.',
-          imageUrl:
-              'https://trae-api-sg.mchost.guru/api/ide/v1/text_to_image?prompt=A%20premium%20studio%20workspace%20with%20study%20guides%2C%20documents%2C%20audio%20waveforms%2C%20and%20creative%20tools%2C%20elegant%20layout%2C%20soft%20gradient%20background%2C%20modern%20professional%20design&image_size=portrait_4_3',
-          icon: Icons.create,
+              'Analyze documents, generate study guides, and get citations. Your personal AI tutor is always ready to help.',
+          imageUrl: 'assets/images/onboarding_ai_study.png',
+          icon: Icons.school,
         ),
         OnboardingPage(
-          title: 'Ready to Start',
+          title: 'Ready to Achieve',
           description:
-              'Your AI-powered notebook is ready. Let\'s organize your knowledge and unlock new insights!',
-          imageUrl:
-              'https://trae-api-sg.mchost.guru/api/ide/v1/text_to_image?prompt=A%20premium%20mobile%20app%20launch%20screen%2C%20elegant%20checkmark%20or%20completion%20symbol%2C%20soft%20green%20gradient%20background%2C%20modern%20minimalist%20design%2C%20professional%20and%20clean%20style&image_size=portrait_4_3',
+              'Start your journey to higher productivity and smarter learning. Join the future of knowledge management.',
+          imageUrl: 'assets/images/onboarding_success.png',
           icon: Icons.rocket_launch,
         ),
       ];
@@ -117,6 +112,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         return Icons.book;
       case 'lightbulb':
         return Icons.lightbulb;
+      case 'hub':
+        return Icons.hub;
+      case 'code':
+        return Icons.code;
       default:
         return Icons.auto_awesome;
     }
@@ -332,56 +331,85 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              child: Image.network(
-                page.imageUrl,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          scheme.primary.withValues(alpha: 0.1),
-                          scheme.secondary.withValues(alpha: 0.1),
-                        ],
-                      ),
+              child: page.imageUrl.startsWith('http')
+                  ? Image.network(
+                      page.imageUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                scheme.primary.withValues(alpha: 0.1),
+                                scheme.secondary.withValues(alpha: 0.1),
+                              ],
+                            ),
+                          ),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                      loadingProgress.expectedTotalBytes!
+                                  : null,
+                              color: scheme.primary,
+                            ),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                scheme.primary.withValues(alpha: 0.1),
+                                scheme.secondary.withValues(alpha: 0.1),
+                              ],
+                            ),
+                          ),
+                          child: Center(
+                            child: Icon(
+                              page.icon,
+                              size: 64,
+                              color: scheme.primary.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        );
+                      },
+                    )
+                  : Image.asset(
+                      page.imageUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (context, error, stackTrace) {
+                        debugPrint(
+                            'Error loading asset image: ${page.imageUrl}, error: $error');
+                        return Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                scheme.primary.withValues(alpha: 0.1),
+                                scheme.secondary.withValues(alpha: 0.1),
+                              ],
+                            ),
+                          ),
+                          child: Center(
+                            child: Icon(
+                              page.icon,
+                              size: 64,
+                              color: scheme.primary.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        value: loadingProgress.expectedTotalBytes != null
-                            ? loadingProgress.cumulativeBytesLoaded /
-                                loadingProgress.expectedTotalBytes!
-                            : null,
-                        color: scheme.primary,
-                      ),
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          scheme.primary.withValues(alpha: 0.1),
-                          scheme.secondary.withValues(alpha: 0.1),
-                        ],
-                      ),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        page.icon,
-                        size: 64,
-                        color: scheme.primary.withValues(alpha: 0.5),
-                      ),
-                    ),
-                  );
-                },
-              ),
             ),
           ).animate().slideY(begin: 0.3, delay: 300.ms).fadeIn(),
         ],

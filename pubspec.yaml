@@ -80,6 +80,12 @@ flutter:
     - assets/images/app_logo.png
     - assets/images/empty_notebooks.png
     - assets/images/empty_sources.png
+    - assets/images/onboarding_collaboration.png
+    - assets/images/onboarding_ai_study.png
+    - assets/images/onboarding_success.png
+    - assets/images/onboarding_mcp.png
+    - assets/images/onboarding_coding_agent.png
+    - assets/images/onboarding_real_collaboration.png
 
 flutter_launcher_icons:
   android: true

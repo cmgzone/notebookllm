@@ -419,11 +419,13 @@ class ApiService {
     required String title,
     String? description,
     String? coverImage,
+    String? category,
   }) async {
     final response = await post('/notebooks', {
       'title': title,
       if (description != null) 'description': description,
       if (coverImage != null) 'coverImage': coverImage,
+      if (category != null) 'category': category,
     });
     return response['notebook'];
   }
@@ -433,11 +435,13 @@ class ApiService {
     String? title,
     String? description,
     String? coverImage,
+    String? category,
   }) async {
     final response = await put('/notebooks/$id', {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
       if (coverImage != null) 'coverImage': coverImage,
+      if (category != null) 'category': category,
     });
     return response['notebook'];
   }

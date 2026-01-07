@@ -21,6 +21,7 @@ _$NotebookImpl _$$NotebookImplFromJson(Map<String, dynamic> json) =>
       agentName: json['agentName'] as String?,
       agentIdentifier: json['agentIdentifier'] as String?,
       agentStatus: json['agentStatus'] as String? ?? 'active',
+      category: json['category'] as String? ?? 'General',
     );
 
 Map<String, dynamic> _$$NotebookImplToJson(_$NotebookImpl instance) =>
@@ -38,4 +39,5 @@ Map<String, dynamic> _$$NotebookImplToJson(_$NotebookImpl instance) =>
       'agentName': instance.agentName,
       'agentIdentifier': instance.agentIdentifier,
       'agentStatus': instance.agentStatus,
+      'category': instance.category,
     };

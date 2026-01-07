@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'code_review_provider.dart';
+import '../github/github_provider.dart';
 
 class CodeReviewScreen extends ConsumerStatefulWidget {
   const CodeReviewScreen({super.key});
@@ -14,8 +15,14 @@ class _CodeReviewScreenState extends ConsumerState<CodeReviewScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _codeController = TextEditingController();
+  final _ownerController = TextEditingController();
+  final _repoController = TextEditingController();
+  final _branchController = TextEditingController();
   String _selectedLanguage = 'dart';
   String _selectedReviewType = 'comprehensive';
+
+  // GitHub context for context-aware reviews
+  bool _useGitHubContext = false;
 
   final _languages = [
     'dart',
@@ -56,6 +63,9 @@ class _CodeReviewScreenState extends ConsumerState<CodeReviewScreen>
   void dispose() {
     _tabController.dispose();
     _codeController.dispose();
+    _ownerController.dispose();
+    _repoController.dispose();
+    _branchController.dispose();
     super.dispose();
   }
 
@@ -174,6 +184,10 @@ class _CodeReviewScreenState extends ConsumerState<CodeReviewScreen>
           ),
           const SizedBox(height: 16),
 
+          // GitHub Context Toggle
+          _buildGitHubContextSection(theme),
+          const SizedBox(height: 16),
+
           // Submit button
           FilledButton.icon(
             onPressed: state.isLoading ? null : _submitReview,
@@ -222,7 +236,46 @@ class _CodeReviewScreenState extends ConsumerState<CodeReviewScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Quality Score', style: theme.textTheme.titleMedium),
+                      Row(
+                        children: [
+                          Text('Quality Score',
+                              style: theme.textTheme.titleMedium),
+                          if (review.isContextAware) ...[
+                            const SizedBox(width: 8),
+                            Tooltip(
+                              message:
+                                  'Review used ${review.relatedFilesUsed!.length} related file(s) for context',
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primaryContainer,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.auto_awesome,
+                                        size: 12,
+                                        color: theme
+                                            .colorScheme.onPrimaryContainer),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Context-Aware',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: theme
+                                            .colorScheme.onPrimaryContainer,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                       const SizedBox(height: 4),
                       Text(review.summary, style: theme.textTheme.bodySmall),
                     ],
@@ -232,6 +285,53 @@ class _CodeReviewScreenState extends ConsumerState<CodeReviewScreen>
             ),
           ),
         ),
+
+        // Context files used
+        if (review.isContextAware && review.relatedFilesUsed!.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Card(
+            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.folder_open,
+                          size: 16, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Related Files Used for Context',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: review.relatedFilesUsed!.map((file) {
+                      return Tooltip(
+                        message: file,
+                        child: Chip(
+                          avatar: const Icon(Icons.insert_drive_file, size: 14),
+                          label: Text(
+                            file.split('/').last,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
 
         // Issue counts
@@ -542,6 +642,132 @@ class _CodeReviewScreenState extends ConsumerState<CodeReviewScreen>
     }
   }
 
+  Widget _buildGitHubContextSection(ThemeData theme) {
+    final githubState = ref.watch(githubProvider);
+    final isConnected = githubState.isConnected;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  size: 20,
+                  color: _useGitHubContext
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.outline,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Context-Aware Review',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+                Switch(
+                  value: _useGitHubContext,
+                  onChanged: isConnected
+                      ? (value) => setState(() => _useGitHubContext = value)
+                      : null,
+                ),
+              ],
+            ),
+            if (!isConnected) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Connect GitHub to enable context-aware reviews',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () =>
+                    Navigator.pushNamed(context, '/github/connect'),
+                icon: const Icon(Icons.link, size: 16),
+                label: const Text('Connect GitHub'),
+              ),
+            ] else if (_useGitHubContext) ...[
+              const SizedBox(height: 12),
+              Text(
+                'The AI will fetch related files from your repo to understand imports and dependencies.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _ownerController,
+                      decoration: const InputDecoration(
+                        labelText: 'Owner',
+                        hintText: 'username',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('/'),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: _repoController,
+                      decoration: const InputDecoration(
+                        labelText: 'Repository',
+                        hintText: 'repo-name',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _branchController,
+                decoration: const InputDecoration(
+                  labelText: 'Branch (optional)',
+                  hintText: 'main',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Quick select from connected repos
+              if (githubState.repos.isNotEmpty)
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: githubState.repos.take(5).map((repo) {
+                    return ActionChip(
+                      avatar: const Icon(Icons.folder, size: 16),
+                      label:
+                          Text(repo.name, style: const TextStyle(fontSize: 12)),
+                      onPressed: () {
+                        setState(() {
+                          _ownerController.text = repo.owner;
+                          _repoController.text = repo.name;
+                          _branchController.text = repo.defaultBranch;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _submitReview() async {
     if (_codeController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -550,10 +776,25 @@ class _CodeReviewScreenState extends ConsumerState<CodeReviewScreen>
       return;
     }
 
+    // Build GitHub context if enabled
+    GitHubReviewContext? githubContext;
+    if (_useGitHubContext &&
+        _ownerController.text.isNotEmpty &&
+        _repoController.text.isNotEmpty) {
+      githubContext = GitHubReviewContext(
+        owner: _ownerController.text.trim(),
+        repo: _repoController.text.trim(),
+        branch: _branchController.text.trim().isNotEmpty
+            ? _branchController.text.trim()
+            : null,
+      );
+    }
+
     await ref.read(codeReviewProvider.notifier).reviewCode(
           code: _codeController.text,
           language: _selectedLanguage,
           reviewType: _selectedReviewType,
+          githubContext: githubContext,
         );
   }
 
