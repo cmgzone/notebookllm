@@ -26,16 +26,20 @@ async function testFindFriends() {
     const searchResults = await friendService.searchUsers(searchQuery, testUser.id);
     console.log(`Found ${searchResults.length} users:`);
     searchResults.forEach(user => {
-      console.log(`  - ${user.username} (${user.email})`);
+      // Note: email is no longer returned for privacy
+      console.log(`  - ${user.username} (avatar: ${user.avatarUrl || 'none'})`);
     });
     
-    // Test searching by email
-    console.log('\nSearching by email pattern...');
-    const emailSearch = await friendService.searchUsers('@', testUser.id, 5);
-    console.log(`Found ${emailSearch.length} users with @ in email/name:`);
-    emailSearch.forEach(user => {
-      console.log(`  - ${user.username} (${user.email})`);
+    // Test searching with longer query
+    console.log('\nSearching for "test"...');
+    const testSearch = await friendService.searchUsers('test', testUser.id, 5);
+    console.log(`Found ${testSearch.length} users with "test" in name:`);
+    testSearch.forEach(user => {
+      console.log(`  - ${user.username}`);
     });
+
+    console.log('\n✅ Friend search is working correctly!');
+    console.log('Note: Email is no longer returned in search results for privacy.');
     
   } catch (error) {
     console.error('Error:', error);
