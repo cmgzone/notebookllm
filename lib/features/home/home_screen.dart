@@ -372,6 +372,14 @@ class _AppDrawer extends ConsumerWidget {
                         },
                       ),
                       _DrawerItem(
+                        icon: LucideIcons.code,
+                        label: 'Code Review',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/code-review');
+                        },
+                      ),
+                      _DrawerItem(
                         icon: LucideIcons.utensils,
                         label: 'Meal Planner',
                         onTap: () {

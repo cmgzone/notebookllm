@@ -993,11 +993,15 @@ Generate design notes that provide clear technical guidance for implementation.'
       final lines = markdown.split('\n');
       for (final line in lines) {
         final trimmed = line.trim();
-        if (trimmed.isEmpty || trimmed.length < 5 || trimmed.length > 300)
+        if (trimmed.isEmpty || trimmed.length < 5 || trimmed.length > 300) {
           continue;
-        if (trimmed.startsWith('#') && !trimmed.contains('Task')) continue;
-        if (trimmed.startsWith('**Generated') || trimmed.startsWith('✅'))
+        }
+        if (trimmed.startsWith('#') && !trimmed.contains('Task')) {
           continue;
+        }
+        if (trimmed.startsWith('**Generated') || trimmed.startsWith('✅')) {
+          continue;
+        }
 
         var title = trimmed
             .replaceFirst(RegExp(r'^#{1,3}\s*'), '')

@@ -58,6 +58,7 @@ import '../features/planning/ui/plan_detail_screen.dart';
 import '../features/planning/ui/planning_ai_screen.dart';
 import '../features/planning/ui/ui_design_generator_screen.dart';
 import '../features/planning/ui/project_prototype_screen.dart';
+import '../features/code_review/code_review_screen.dart';
 
 String getInitialLocation(bool hasSeenOnboarding) {
   return hasSeenOnboarding ? '/home' : '/onboarding';
@@ -421,6 +422,13 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
                 child: ProjectPrototypeScreen(planId: planId),
               );
             },
+          ),
+          // Code Review route
+          GoRoute(
+            path: '/code-review',
+            name: 'code-review',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const CodeReviewScreen()),
           ),
         ],
       ),

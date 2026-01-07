@@ -118,13 +118,13 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet>
               TabBar(
                 controller: _tabController,
                 tabs: [
-                  Tab(
+                  const Tab(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(LucideIcons.info, size: 16),
-                        const SizedBox(width: 6),
-                        const Text('Details'),
+                        Icon(LucideIcons.info, size: 16),
+                        SizedBox(width: 6),
+                        Text('Details'),
                       ],
                     ),
                   ),

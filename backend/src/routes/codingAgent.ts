@@ -1902,4 +1902,164 @@ router.get('/models', authenticateToken, async (req: Request, res: Response) => 
   }
 });
 
+// ==================== CODE REVIEW ENDPOINTS ====================
+
+import { codeReviewService } from '../services/codeReviewService.js';
+
+/**
+ * POST /api/coding-agent/review
+ * Submit code for AI-powered review
+ */
+router.post('/review', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { code, language, reviewType, context, saveReview } = req.body;
+
+    if (!code || !language) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: code, language' 
+      });
+    }
+
+    // Track API call
+    await mcpLimitsService.incrementApiCallCount(userId);
+
+    const review = await codeReviewService.reviewCode(
+      userId,
+      code,
+      language,
+      reviewType || 'comprehensive',
+      context,
+      saveReview !== false
+    );
+
+    console.log(`[Code Review] Reviewed ${language} code - Score: ${review.score}`);
+
+    res.json({
+      success: true,
+      review: {
+        id: review.id,
+        score: review.score,
+        summary: review.summary,
+        issues: review.issues,
+        suggestions: review.suggestions,
+        language: review.language,
+        reviewType: review.reviewType,
+        createdAt: review.createdAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('Code review error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/coding-agent/reviews
+ * Get code review history
+ */
+router.get('/reviews', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { language, limit, minScore, maxScore } = req.query;
+
+    // Track API call
+    await mcpLimitsService.incrementApiCallCount(userId);
+
+    const reviews = await codeReviewService.getReviewHistory(userId, {
+      language: language as string,
+      limit: limit ? parseInt(limit as string) : 20,
+      minScore: minScore ? parseInt(minScore as string) : undefined,
+      maxScore: maxScore ? parseInt(maxScore as string) : undefined,
+    });
+
+    res.json({
+      success: true,
+      reviews: reviews.map(r => ({
+        id: r.id,
+        codePreview: r.code.substring(0, 200) + (r.code.length > 200 ? '...' : ''),
+        language: r.language,
+        reviewType: r.reviewType,
+        score: r.score,
+        issueCount: {
+          errors: r.issues.filter(i => i.severity === 'error').length,
+          warnings: r.issues.filter(i => i.severity === 'warning').length,
+          info: r.issues.filter(i => i.severity === 'info').length,
+        },
+        createdAt: r.createdAt,
+      })),
+      count: reviews.length,
+    });
+  } catch (error: any) {
+    console.error('Get review history error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/coding-agent/reviews/:id
+ * Get a specific code review by ID
+ */
+router.get('/reviews/:id', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { id } = req.params;
+
+    // Track API call
+    await mcpLimitsService.incrementApiCallCount(userId);
+
+    const review = await codeReviewService.getReviewById(id, userId);
+
+    if (!review) {
+      return res.status(404).json({ error: 'Review not found' });
+    }
+
+    res.json({
+      success: true,
+      review,
+    });
+  } catch (error: any) {
+    console.error('Get review detail error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/coding-agent/review/compare
+ * Compare two versions of code
+ */
+router.post('/review/compare', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { originalCode, updatedCode, language, context } = req.body;
+
+    if (!originalCode || !updatedCode || !language) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: originalCode, updatedCode, language' 
+      });
+    }
+
+    // Track API call
+    await mcpLimitsService.incrementApiCallCount(userId);
+
+    const comparison = await codeReviewService.compareCodeVersions(
+      userId,
+      originalCode,
+      updatedCode,
+      language,
+      context
+    );
+
+    console.log(`[Code Review] Compared code versions - Improvement: ${comparison.improvement}`);
+
+    res.json({
+      success: true,
+      comparison,
+    });
+  } catch (error: any) {
+    console.error('Compare code versions error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
