@@ -1,5 +1,5 @@
-import { pool } from '../config/database';
-import { friendService } from './friendService';
+import pool from '../config/database.js';
+import { friendService } from './friendService.js';
 
 export type ActivityType = 
   | 'achievement_unlocked' 
