@@ -1,6 +1,6 @@
 import { Router, type Response } from 'express';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
-import { friendService } from '../services/friendService.js';
+import { friendService, NotFoundError, ConflictError, ValidationError } from '../services/friendService.js';
 import { studyGroupService } from '../services/studyGroupService.js';
 import { activityFeedService } from '../services/activityFeedService.js';
 import { leaderboardService } from '../services/leaderboardService.js';
@@ -10,6 +10,40 @@ const router = Router();
 // All routes require authentication
 router.use(authenticateToken);
 
+// Helper to handle errors consistently
+const handleError = (error: any, res: Response) => {
+  console.error('Social API error:', error.message);
+  
+  if (error instanceof ValidationError) {
+    return res.status(400).json({ error: error.message, code: error.code });
+  }
+  if (error instanceof NotFoundError) {
+    return res.status(404).json({ error: error.message, code: error.code });
+  }
+  if (error instanceof ConflictError) {
+    return res.status(409).json({ error: error.message, code: error.code });
+  }
+  
+  // Don't expose internal errors
+  res.status(500).json({ error: 'An error occurred', code: 'INTERNAL_ERROR' });
+};
+
+// Validation helpers
+const isValidUUID = (id: string): boolean => {
+  if (!id || typeof id !== 'string') return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(id);
+};
+
+const validateUserId = (req: AuthRequest, res: Response): string | null => {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: 'Unauthorized', code: 'UNAUTHORIZED' });
+    return null;
+  }
+  return userId;
+};
+
 // ============================================
 // FRIENDS
 // ============================================
@@ -17,78 +51,132 @@ router.use(authenticateToken);
 // Search users
 router.get('/users/search', async (req: AuthRequest, res: Response) => {
   try {
-    const { q } = req.query;
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { q, limit } = req.query;
     if (!q || typeof q !== 'string') {
-      return res.status(400).json({ error: 'Search query required' });
+      return res.status(400).json({ error: 'Search query required', code: 'VALIDATION_ERROR' });
     }
-    const users = await friendService.searchUsers(q, req.userId!);
+    if (q.length < 2) {
+      return res.status(400).json({ error: 'Search query must be at least 2 characters', code: 'VALIDATION_ERROR' });
+    }
+    
+    const safeLimit = limit ? Math.min(parseInt(limit as string) || 20, 50) : 20;
+    const users = await friendService.searchUsers(q, userId, safeLimit);
     res.json({ users });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
-// Get friends list
+// Get friends list with pagination
 router.get('/friends', async (req: AuthRequest, res: Response) => {
   try {
-    const friends = await friendService.getFriends(req.userId!);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { limit, offset } = req.query;
+    const friends = await friendService.getFriends(userId, {
+      limit: limit ? Math.min(parseInt(limit as string) || 50, 100) : 50,
+      offset: offset ? parseInt(offset as string) || 0 : 0
+    });
     res.json({ friends });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Get pending friend requests
 router.get('/friends/requests', async (req: AuthRequest, res: Response) => {
   try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
     const [received, sent] = await Promise.all([
-      friendService.getPendingRequests(req.userId!),
-      friendService.getSentRequests(req.userId!)
+      friendService.getPendingRequests(userId),
+      friendService.getSentRequests(userId)
     ]);
     res.json({ received, sent });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Send friend request
 router.post('/friends/request', async (req: AuthRequest, res: Response) => {
   try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
     const { friendId } = req.body;
-    const request = await friendService.sendFriendRequest(req.userId!, friendId);
+    
+    // Validate friendId
+    if (!friendId || typeof friendId !== 'string') {
+      return res.status(400).json({ error: 'Valid friendId required', code: 'VALIDATION_ERROR' });
+    }
+    if (friendId === userId) {
+      return res.status(400).json({ error: 'Cannot send friend request to yourself', code: 'VALIDATION_ERROR' });
+    }
+    
+    const request = await friendService.sendFriendRequest(userId, friendId);
     res.json({ request });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Accept friend request
 router.post('/friends/accept/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const friendship = await friendService.acceptFriendRequest(req.params.id, req.userId!);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Request ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    const friendship = await friendService.acceptFriendRequest(id, userId);
     res.json({ friendship });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Decline friend request
 router.post('/friends/decline/:id', async (req: AuthRequest, res: Response) => {
   try {
-    await friendService.declineFriendRequest(req.params.id, req.userId!);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Request ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    await friendService.declineFriendRequest(id, userId);
     res.json({ success: true });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Remove friend
 router.delete('/friends/:id', async (req: AuthRequest, res: Response) => {
   try {
-    await friendService.removeFriend(req.params.id, req.userId!);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Friendship ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    await friendService.removeFriend(id, userId);
     res.json({ success: true });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
@@ -99,182 +187,288 @@ router.delete('/friends/:id', async (req: AuthRequest, res: Response) => {
 // Get pending group invitations (must be before :id routes)
 router.get('/groups/invitations/pending', async (req: AuthRequest, res: Response) => {
   try {
-    const invitations = await studyGroupService.getUserPendingInvitations(req.userId!);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const invitations = await studyGroupService.getUserPendingInvitations(userId);
     res.json({ invitations });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Accept group invitation
 router.post('/groups/invitations/:id/accept', async (req: AuthRequest, res: Response) => {
   try {
-    await studyGroupService.acceptInvitation(req.params.id, req.userId!);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Invitation ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    await studyGroupService.acceptInvitation(id, userId);
     res.json({ success: true });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Get user's groups
 router.get('/groups', async (req: AuthRequest, res: Response) => {
   try {
-    const groups = await studyGroupService.getUserGroups(req.userId!);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const groups = await studyGroupService.getUserGroups(userId);
     res.json({ groups });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Create group
 router.post('/groups', async (req: AuthRequest, res: Response) => {
   try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
     const { name, description, icon, isPublic } = req.body;
+    
+    if (!name || typeof name !== 'string' || name.trim().length < 1) {
+      return res.status(400).json({ error: 'Group name is required', code: 'VALIDATION_ERROR' });
+    }
+    if (name.length > 100) {
+      return res.status(400).json({ error: 'Group name must be 100 characters or less', code: 'VALIDATION_ERROR' });
+    }
+    
     const group = await studyGroupService.createGroup({
-      name,
-      description,
+      name: name.trim(),
+      description: description?.trim(),
       icon,
-      isPublic,
-      ownerId: req.userId!
+      isPublic: Boolean(isPublic),
+      ownerId: userId
     });
     res.json({ group });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Get group details
 router.get('/groups/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const group = await studyGroupService.getGroup(req.params.id, req.userId!);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    const group = await studyGroupService.getGroup(id, userId);
     if (!group) {
-      return res.status(404).json({ error: 'Group not found' });
+      return res.status(404).json({ error: 'Group not found', code: 'NOT_FOUND' });
     }
     res.json({ group });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Update group
 router.put('/groups/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const group = await studyGroupService.updateGroup(req.params.id, req.userId!, req.body);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    const group = await studyGroupService.updateGroup(id, userId, req.body);
     res.json({ group });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Delete group
 router.delete('/groups/:id', async (req: AuthRequest, res: Response) => {
   try {
-    await studyGroupService.deleteGroup(req.params.id, req.userId!);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    await studyGroupService.deleteGroup(id, userId);
     res.json({ success: true });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Get group members
 router.get('/groups/:id/members', async (req: AuthRequest, res: Response) => {
   try {
-    const members = await studyGroupService.getMembers(req.params.id);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    const members = await studyGroupService.getMembers(id);
     res.json({ members });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Invite user to group
 router.post('/groups/:id/invite', async (req: AuthRequest, res: Response) => {
   try {
-    const { userId } = req.body;
-    const invitation = await studyGroupService.inviteUser(req.params.id, userId, req.userId!);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    const { userId: invitedUserId } = req.body;
+    
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID required', code: 'VALIDATION_ERROR' });
+    }
+    if (!invitedUserId || typeof invitedUserId !== 'string') {
+      return res.status(400).json({ error: 'User ID to invite is required', code: 'VALIDATION_ERROR' });
+    }
+    if (invitedUserId === userId) {
+      return res.status(400).json({ error: 'Cannot invite yourself', code: 'VALIDATION_ERROR' });
+    }
+    
+    const invitation = await studyGroupService.inviteUser(id, invitedUserId, userId);
     res.json({ invitation });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Leave group
 router.post('/groups/:id/leave', async (req: AuthRequest, res: Response) => {
   try {
-    await studyGroupService.leaveGroup(req.params.id, req.userId!);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    await studyGroupService.leaveGroup(id, userId);
     res.json({ success: true });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// Get pending group invitations
-router.get('/groups/invitations/pending', async (req: AuthRequest, res: Response) => {
-  try {
-    const invitations = await studyGroupService.getUserPendingInvitations(req.userId!);
-    res.json({ invitations });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Accept group invitation
-router.post('/groups/invitations/:id/accept', async (req: AuthRequest, res: Response) => {
-  try {
-    await studyGroupService.acceptInvitation(req.params.id, req.userId!);
-    res.json({ success: true });
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Study sessions
 router.post('/groups/:id/sessions', async (req: AuthRequest, res: Response) => {
   try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
     const { title, description, scheduledAt, durationMinutes, meetingUrl } = req.body;
+    
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID required', code: 'VALIDATION_ERROR' });
+    }
+    if (!title || typeof title !== 'string') {
+      return res.status(400).json({ error: 'Session title is required', code: 'VALIDATION_ERROR' });
+    }
+    if (!scheduledAt) {
+      return res.status(400).json({ error: 'Scheduled time is required', code: 'VALIDATION_ERROR' });
+    }
+    
     const session = await studyGroupService.createSession({
-      groupId: req.params.id,
-      title,
-      description,
+      groupId: id,
+      title: title.trim(),
+      description: description?.trim(),
       scheduledAt: new Date(scheduledAt),
-      durationMinutes,
+      durationMinutes: Math.min(Math.max(15, durationMinutes || 60), 480), // 15min to 8hrs
       meetingUrl,
-      createdBy: req.userId!
+      createdBy: userId
     });
     res.json({ session });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 router.get('/groups/:id/sessions', async (req: AuthRequest, res: Response) => {
   try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID required', code: 'VALIDATION_ERROR' });
+    }
+    
     const upcoming = req.query.upcoming !== 'false';
-    const sessions = await studyGroupService.getGroupSessions(req.params.id, upcoming);
+    const sessions = await studyGroupService.getGroupSessions(id, upcoming);
     res.json({ sessions });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 // Share notebook with group
 router.post('/groups/:id/notebooks', async (req: AuthRequest, res: Response) => {
   try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
     const { notebookId, permission } = req.body;
+    
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID required', code: 'VALIDATION_ERROR' });
+    }
+    if (!notebookId || typeof notebookId !== 'string') {
+      return res.status(400).json({ error: 'Notebook ID is required', code: 'VALIDATION_ERROR' });
+    }
+    
+    const validPermissions = ['viewer', 'editor'];
+    const safePermission = validPermissions.includes(permission) ? permission : 'viewer';
+    
     const share = await studyGroupService.shareNotebookWithGroup(
-      notebookId, req.params.id, req.userId!, permission
+      notebookId, id, userId, safePermission
     );
     res.json({ share });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 router.get('/groups/:id/notebooks', async (req: AuthRequest, res: Response) => {
   try {
-    const notebooks = await studyGroupService.getGroupSharedNotebooks(req.params.id);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    const notebooks = await studyGroupService.getGroupSharedNotebooks(id);
     res.json({ notebooks });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
@@ -284,47 +478,80 @@ router.get('/groups/:id/notebooks', async (req: AuthRequest, res: Response) => {
 
 router.get('/feed', async (req: AuthRequest, res: Response) => {
   try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
     const { limit, offset, filter } = req.query;
-    const activities = await activityFeedService.getFeed(req.userId!, {
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
-      filter: filter as any
+    
+    const safeLimit = limit ? Math.min(parseInt(limit as string) || 20, 50) : 20;
+    const safeOffset = offset ? Math.max(0, parseInt(offset as string) || 0) : 0;
+    const validFilters = ['all', 'friends', 'groups'];
+    const safeFilter = validFilters.includes(filter as string) ? filter : 'all';
+    
+    const activities = await activityFeedService.getFeed(userId, {
+      limit: safeLimit,
+      offset: safeOffset,
+      filter: safeFilter as any
     });
     res.json({ activities });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 router.get('/users/:id/activities', async (req: AuthRequest, res: Response) => {
   try {
-    const activities = await activityFeedService.getUserActivities(
-      req.params.id, req.userId!
-    );
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'User ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    const activities = await activityFeedService.getUserActivities(id, userId);
     res.json({ activities });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 router.post('/activities/:id/react', async (req: AuthRequest, res: Response) => {
   try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
     const { reactionType } = req.body;
-    const reaction = await activityFeedService.addReaction(
-      req.params.id, req.userId!, reactionType || 'like'
-    );
+    
+    if (!id) {
+      return res.status(400).json({ error: 'Activity ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    const validReactions = ['like', 'love', 'celebrate', 'support'];
+    const safeReaction = validReactions.includes(reactionType) ? reactionType : 'like';
+    
+    const reaction = await activityFeedService.addReaction(id, userId, safeReaction);
     res.json({ reaction });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
 router.delete('/activities/:id/react', async (req: AuthRequest, res: Response) => {
   try {
-    await activityFeedService.removeReaction(req.params.id, req.userId!);
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Activity ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    await activityFeedService.removeReaction(id, userId);
     res.json({ success: true });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
@@ -332,18 +559,42 @@ router.delete('/activities/:id/react', async (req: AuthRequest, res: Response) =
 // LEADERBOARD
 // ============================================
 
+// Valid options for leaderboard
+const VALID_PERIODS = ['daily', 'weekly', 'monthly', 'all_time'] as const;
+const VALID_METRICS = ['xp', 'quizzes', 'flashcards', 'study_time'] as const;
+const VALID_TYPES = ['global', 'friends'] as const;
+
+type LeaderboardPeriod = typeof VALID_PERIODS[number];
+type LeaderboardMetric = typeof VALID_METRICS[number];
+type LeaderboardType = typeof VALID_TYPES[number];
+
 router.get('/leaderboard', async (req: AuthRequest, res: Response) => {
   try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
     const { type, period, metric, limit } = req.query;
-    const leaderboardType = type as string || 'global';
-    const leaderboardPeriod = (period as any) || 'weekly';
-    const leaderboardMetric = (metric as any) || 'xp';
-    const leaderboardLimit = limit ? parseInt(limit as string) : 50;
+    
+    // Validate and sanitize inputs
+    const leaderboardType: LeaderboardType = VALID_TYPES.includes(type as any) 
+      ? (type as LeaderboardType) 
+      : 'global';
+    const leaderboardPeriod: LeaderboardPeriod = VALID_PERIODS.includes(period as any) 
+      ? (period as LeaderboardPeriod) 
+      : 'weekly';
+    const leaderboardMetric: LeaderboardMetric = VALID_METRICS.includes(metric as any) 
+      ? (metric as LeaderboardMetric) 
+      : 'xp';
+    
+    // Clamp limit between 1 and 100
+    const leaderboardLimit = limit 
+      ? Math.min(Math.max(1, parseInt(limit as string) || 50), 100) 
+      : 50;
 
     let leaderboard;
     if (leaderboardType === 'friends') {
       leaderboard = await leaderboardService.getFriendsLeaderboard(
-        req.userId!, leaderboardPeriod, leaderboardMetric, leaderboardLimit
+        userId, leaderboardPeriod, leaderboardMetric, leaderboardLimit
       );
     } else {
       leaderboard = await leaderboardService.getGlobalLeaderboard(
@@ -352,12 +603,12 @@ router.get('/leaderboard', async (req: AuthRequest, res: Response) => {
     }
 
     const userRank = await leaderboardService.getUserRank(
-      req.userId!, leaderboardPeriod, leaderboardMetric
+      userId, leaderboardPeriod, leaderboardMetric
     );
 
     res.json({ leaderboard, userRank });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    handleError(error, res);
   }
 });
 
