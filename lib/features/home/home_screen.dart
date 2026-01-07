@@ -10,6 +10,7 @@ import '../../ui/widgets/notebook_card.dart';
 import '../../core/auth/custom_auth_service.dart';
 import 'create_notebook_dialog.dart';
 import '../notebook/notebook_provider.dart';
+import '../notebook/notebook.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../core/extensions/color_compat.dart';
@@ -183,21 +184,9 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
           const DashboardGrid(),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-              child: Text(
-                'Recent Notebooks',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-            ),
-          ),
-          const SliverPadding(
-            padding: EdgeInsets.symmetric(horizontal: 20),
-            sliver: _NotebookGrid(),
-          ),
+          if (ref.watch(notebookProvider).isEmpty)
+            const SliverToBoxAdapter(child: _EmptyState()),
+          ..._buildCategorizedNotebooks(context, ref),
           const SliverToBoxAdapter(
             child: SizedBox(height: 80), // Bottom padding
           ),
@@ -210,6 +199,166 @@ class HomeScreen extends ConsumerWidget {
         backgroundColor: scheme.primary,
         foregroundColor: scheme.onPrimary,
       ).animate().scale(delay: 500.ms),
+    );
+  }
+
+  List<Widget> _buildCategorizedNotebooks(BuildContext context, WidgetRef ref) {
+    final notebooks = ref.watch(notebookProvider);
+    if (notebooks.isEmpty) return [];
+
+    final grouped = <String, List<Notebook>>{};
+    for (var n in notebooks) {
+      final category = n.category ?? 'General';
+      grouped.putIfAbsent(category, () => []).add(n);
+    }
+
+    final sortedCategories = grouped.keys.toList()
+      ..sort((a, b) {
+        if (a == 'General') return -1;
+        if (b == 'General') return 1;
+        return a.compareTo(b);
+      });
+
+    final slivers = <Widget>[];
+
+    for (final category in sortedCategories) {
+      final categoryNotebooks = grouped[category]!;
+
+      slivers.add(
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color:
+                        Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    _getCategoryIcon(category),
+                    size: 20,
+                    color: Theme.of(context).primaryColor,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  category,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const Spacer(),
+                Text(
+                  '${categoryNotebooks.length}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.secondary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ],
+            ).animate().fadeIn().slideX(),
+          ),
+        ),
+      );
+
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 220,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 0.8,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final n = categoryNotebooks[index];
+                return NotebookCard(
+                  key: ValueKey(n.id),
+                  title: n.title,
+                  sourceCount: n.sourceCount,
+                  notebookId: n.id,
+                  coverImage: n.coverImage,
+                  isAgentNotebook: n.isAgentNotebook,
+                  agentName: n.agentName,
+                  agentStatus: n.agentStatus,
+                ).animate().fadeIn(delay: Duration(milliseconds: index * 50));
+              },
+              childCount: categoryNotebooks.length,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return slivers;
+  }
+
+  IconData _getCategoryIcon(String category) {
+    switch (category.toLowerCase()) {
+      case 'work':
+        return LucideIcons.briefcase;
+      case 'study':
+        return LucideIcons.graduationCap;
+      case 'personal':
+        return LucideIcons.user;
+      case 'research':
+        return LucideIcons.microscope;
+      case 'coding':
+        return LucideIcons.code;
+      case 'creative':
+        return LucideIcons.palette;
+      default:
+        return LucideIcons.folderOpen;
+    }
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Image.asset(
+            'assets/images/empty_notebooks.png',
+            height: 200,
+          ).animate().scale(duration: 600.ms, curve: Curves.elasticOut),
+          const SizedBox(height: 24),
+          Text(
+            'No notebooks yet',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ).animate().fadeIn(delay: 200.ms),
+          const SizedBox(height: 12),
+          Text(
+            'Create your first notebook to start organizing your AI-powered learning journey.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: scheme.secondaryText,
+                ),
+            textAlign: TextAlign.center,
+          ).animate().fadeIn(delay: 400.ms),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: () => showDialog(
+              context: context,
+              builder: (_) => const CreateNotebookDialog(),
+            ),
+            icon: const Icon(Icons.add),
+            label: const Text('Create Notebook'),
+          ).animate().fadeIn(delay: 600.ms),
+        ],
+      ),
     );
   }
 }
@@ -634,78 +783,4 @@ class _DrawerItem extends StatelessWidget {
   }
 }
 
-class _NotebookGrid extends ConsumerWidget {
-  const _NotebookGrid();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final notebooks = ref.watch(notebookProvider);
-
-    if (notebooks.isEmpty) {
-      final scheme = Theme.of(context).colorScheme;
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(
-                'assets/images/empty_notebooks.png',
-                height: 200,
-              ).animate().scale(duration: 600.ms, curve: Curves.elasticOut),
-              const SizedBox(height: 24),
-              Text(
-                'No notebooks yet',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ).animate().fadeIn(delay: 200.ms),
-              const SizedBox(height: 12),
-              Text(
-                'Create your first notebook to start organizing your AI-powered learning journey.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.secondaryText,
-                    ),
-                textAlign: TextAlign.center,
-              ).animate().fadeIn(delay: 400.ms),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: () => showDialog(
-                  context: context,
-                  builder: (_) => const CreateNotebookDialog(),
-                ),
-                icon: const Icon(Icons.add),
-                label: const Text('Create Notebook'),
-              ).animate().fadeIn(delay: 600.ms),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return SliverGrid(
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 220, // Responsive sizing
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 0.8,
-      ),
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          final n = notebooks[index];
-          return NotebookCard(
-            title: n.title,
-            sourceCount: n.sourceCount,
-            notebookId: n.id,
-            coverImage: n.coverImage,
-            // Agent notebook fields (Requirements 1.4, 4.1)
-            isAgentNotebook: n.isAgentNotebook,
-            agentName: n.agentName,
-            agentStatus: n.agentStatus,
-          ).animate().fadeIn(delay: Duration(milliseconds: index * 50));
-        },
-        childCount: notebooks.length,
-      ),
-    );
-  }
-}
+// NotebookGrid removed in favor of categorized display
