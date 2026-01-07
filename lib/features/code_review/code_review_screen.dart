@@ -95,20 +95,28 @@ class _CodeReviewScreenState extends ConsumerState<CodeReviewScreen>
           Row(
             children: [
               Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedLanguage,
+                child: InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'Language',
                     border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
-                  items: _languages.map((lang) {
-                    return DropdownMenuItem(value: lang, child: Text(lang));
-                  }).toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _selectedLanguage = value);
-                    }
-                  },
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedLanguage,
+                      isExpanded: true,
+                      isDense: true,
+                      items: _languages.map((lang) {
+                        return DropdownMenuItem(value: lang, child: Text(lang));
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedLanguage = value);
+                        }
+                      },
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 16),

@@ -1,4 +1,4 @@
-import { pool } from '../config/database.js';
+import pool from '../config/database.js';
 import { generateWithGemini, generateWithOpenRouter, ChatMessage } from './aiService.js';
 import { mcpUserSettingsService } from './mcpUserSettingsService.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
