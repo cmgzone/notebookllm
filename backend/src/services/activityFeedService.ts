@@ -68,7 +68,7 @@ export const activityFeedService = {
     const result = await pool.query(`
       SELECT 
         a.*,
-        u.username,
+        u.display_name as username,
         u.avatar_url,
         (SELECT COUNT(*) FROM activity_reactions WHERE activity_id = a.id) as reaction_count,
         (SELECT reaction_type FROM activity_reactions WHERE activity_id = a.id AND user_id = $1) as user_reaction
@@ -93,7 +93,7 @@ export const activityFeedService = {
     const result = await pool.query(`
       SELECT 
         a.*,
-        u.username,
+        u.display_name as username,
         u.avatar_url,
         (SELECT COUNT(*) FROM activity_reactions WHERE activity_id = a.id) as reaction_count,
         (SELECT reaction_type FROM activity_reactions WHERE activity_id = a.id AND user_id = $3) as user_reaction
@@ -127,7 +127,7 @@ export const activityFeedService = {
 
   async getActivityReactions(activityId: string) {
     const result = await pool.query(`
-      SELECT r.*, u.username, u.avatar_url
+      SELECT r.*, u.display_name as username, u.avatar_url
       FROM activity_reactions r
       JOIN users u ON u.id = r.user_id
       WHERE r.activity_id = $1

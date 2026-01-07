@@ -26,13 +26,13 @@ export const leaderboardService = {
     const result = await pool.query(`
       SELECT 
         u.id as user_id,
-        u.username,
+        u.display_name as username,
         u.avatar_url,
         COALESCE(SUM(ls.${metricColumn}), 0) as score
       FROM users u
       LEFT JOIN leaderboard_snapshots ls ON ls.user_id = u.id 
         AND ls.period_start >= $1
-      GROUP BY u.id, u.username, u.avatar_url
+      GROUP BY u.id, u.display_name, u.avatar_url
       HAVING COALESCE(SUM(ls.${metricColumn}), 0) > 0
       ORDER BY score DESC
       LIMIT $2
@@ -61,14 +61,14 @@ export const leaderboardService = {
     const result = await pool.query(`
       SELECT 
         u.id as user_id,
-        u.username,
+        u.display_name as username,
         u.avatar_url,
         COALESCE(SUM(ls.${metricColumn}), 0) as score
       FROM users u
       LEFT JOIN leaderboard_snapshots ls ON ls.user_id = u.id 
         AND ls.period_start >= $2
       WHERE u.id = ANY($1)
-      GROUP BY u.id, u.username, u.avatar_url
+      GROUP BY u.id, u.display_name, u.avatar_url
       ORDER BY score DESC
       LIMIT $3
     `, [allUserIds, periodStart, limit]);

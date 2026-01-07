@@ -65,7 +65,7 @@ export const studyGroupService = {
       SELECT g.*, 
         (SELECT COUNT(*) FROM study_group_members WHERE group_id = g.id) as member_count,
         (SELECT role FROM study_group_members WHERE group_id = g.id AND user_id = $2) as user_role,
-        u.username as owner_username
+        u.display_name as owner_username
       FROM study_groups g
       JOIN users u ON u.id = g.owner_id
       WHERE g.id = $1
@@ -192,7 +192,7 @@ export const studyGroupService = {
 
   async getMembers(groupId: string) {
     const result = await pool.query(`
-      SELECT m.*, u.username, u.email, u.avatar_url
+      SELECT m.*, u.display_name as username, u.email, u.avatar_url
       FROM study_group_members m
       JOIN users u ON u.id = m.user_id
       WHERE m.group_id = $1
@@ -222,7 +222,7 @@ export const studyGroupService = {
 
   async getGroupSessions(groupId: string, upcoming = true) {
     const result = await pool.query(`
-      SELECT s.*, u.username as created_by_username
+      SELECT s.*, u.display_name as created_by_username
       FROM study_sessions s
       JOIN users u ON u.id = s.created_by
       WHERE s.group_id = $1
@@ -234,7 +234,7 @@ export const studyGroupService = {
 
   async getUserPendingInvitations(userId: string) {
     const result = await pool.query(`
-      SELECT i.*, g.name as group_name, g.icon as group_icon, u.username as invited_by_username
+      SELECT i.*, g.name as group_name, g.icon as group_icon, u.display_name as invited_by_username
       FROM group_invitations i
       JOIN study_groups g ON g.id = i.group_id
       JOIN users u ON u.id = i.invited_by
@@ -256,7 +256,7 @@ export const studyGroupService = {
 
   async getGroupSharedNotebooks(groupId: string) {
     const result = await pool.query(`
-      SELECT n.*, ns.permission, u.username as shared_by_username
+      SELECT n.*, ns.permission, u.display_name as shared_by_username
       FROM notebook_shares ns
       JOIN notebooks n ON n.id = ns.notebook_id
       JOIN users u ON u.id = ns.shared_by

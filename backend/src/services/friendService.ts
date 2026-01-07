@@ -24,10 +24,10 @@ export interface FriendRequest {
 export const friendService = {
   async searchUsers(query: string, currentUserId: string, limit = 20) {
     const result = await pool.query(`
-      SELECT id, username, email, avatar_url
+      SELECT id, display_name as username, email, avatar_url
       FROM users
       WHERE id != $1
-        AND (username ILIKE $2 OR email ILIKE $2)
+        AND (display_name ILIKE $2 OR email ILIKE $2)
         AND id NOT IN (
           SELECT friend_id FROM friendships WHERE user_id = $1
           UNION
@@ -103,7 +103,7 @@ export const friendService = {
       SELECT 
         f.id,
         CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END as friend_id,
-        u.username,
+        u.display_name as username,
         u.email,
         u.avatar_url,
         f.status,
@@ -122,7 +122,7 @@ export const friendService = {
       SELECT 
         f.id,
         f.user_id as from_user_id,
-        u.username as from_username,
+        u.display_name as from_username,
         u.email as from_email,
         u.avatar_url as from_avatar_url,
         f.created_at
@@ -139,7 +139,7 @@ export const friendService = {
       SELECT 
         f.id,
         f.friend_id as to_user_id,
-        u.username as to_username,
+        u.display_name as to_username,
         u.email as to_email,
         u.avatar_url as to_avatar_url,
         f.created_at
