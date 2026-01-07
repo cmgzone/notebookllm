@@ -1,5 +1,6 @@
 import pool from '../config/database.js';
 
+// Social Features - Friend Service
 export interface Friend {
   id: string;
   friendId: string;
