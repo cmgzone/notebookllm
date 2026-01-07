@@ -59,6 +59,11 @@ import '../features/planning/ui/planning_ai_screen.dart';
 import '../features/planning/ui/ui_design_generator_screen.dart';
 import '../features/planning/ui/project_prototype_screen.dart';
 import '../features/code_review/code_review_screen.dart';
+import '../features/social/ui/social_hub_screen.dart';
+import '../features/social/ui/friends_screen.dart';
+import '../features/social/ui/study_groups_screen.dart';
+import '../features/social/ui/activity_feed_screen.dart';
+import '../features/social/ui/social_leaderboard_screen.dart';
 
 String getInitialLocation(bool hasSeenOnboarding) {
   return hasSeenOnboarding ? '/home' : '/onboarding';
@@ -429,6 +434,37 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             name: 'code-review',
             pageBuilder: (context, state) =>
                 buildTransitionPage(child: const CodeReviewScreen()),
+          ),
+          // Social routes
+          GoRoute(
+            path: '/social',
+            name: 'social',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const SocialHubScreen()),
+          ),
+          GoRoute(
+            path: '/social/friends',
+            name: 'friends',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const FriendsScreen()),
+          ),
+          GoRoute(
+            path: '/social/groups',
+            name: 'study-groups',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const StudyGroupsScreen()),
+          ),
+          GoRoute(
+            path: '/social/feed',
+            name: 'activity-feed',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const ActivityFeedScreen()),
+          ),
+          GoRoute(
+            path: '/social/leaderboard',
+            name: 'leaderboard',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const SocialLeaderboardScreen()),
           ),
         ],
       ),

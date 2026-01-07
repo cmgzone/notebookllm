@@ -582,6 +582,40 @@ class _AppDrawer extends ConsumerWidget {
                         },
                       ),
                       const Divider(height: 32),
+                      const _DrawerSection(title: 'Social'),
+                      _DrawerItem(
+                        icon: LucideIcons.users,
+                        label: 'Social Hub',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/social');
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: LucideIcons.userPlus,
+                        label: 'Friends',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/social/friends');
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: LucideIcons.users2,
+                        label: 'Study Groups',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/social/groups');
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: LucideIcons.barChart3,
+                        label: 'Leaderboard',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/social/leaderboard');
+                        },
+                      ),
+                      const Divider(height: 32),
                       const _DrawerSection(title: 'Progress'),
                       _DrawerItem(
                         icon: LucideIcons.trophy,
