@@ -96,6 +96,26 @@ router.delete('/friends/:id', async (req: AuthRequest, res: Response) => {
 // STUDY GROUPS
 // ============================================
 
+// Get pending group invitations (must be before :id routes)
+router.get('/groups/invitations/pending', async (req: AuthRequest, res: Response) => {
+  try {
+    const invitations = await studyGroupService.getUserPendingInvitations(req.userId!);
+    res.json({ invitations });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Accept group invitation
+router.post('/groups/invitations/:id/accept', async (req: AuthRequest, res: Response) => {
+  try {
+    await studyGroupService.acceptInvitation(req.params.id, req.userId!);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // Get user's groups
 router.get('/groups', async (req: AuthRequest, res: Response) => {
   try {
