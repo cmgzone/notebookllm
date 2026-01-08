@@ -218,11 +218,12 @@ class _NotebookCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         onTap: () {
-          // Record view and navigate
+          // Record view
           ref
               .read(socialSharingServiceProvider)
               .recordView('notebook', notebook.id);
-          // TODO: Navigate to notebook detail
+          // Show notebook preview
+          _showNotebookPreview(context, ref, notebook);
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -336,7 +337,8 @@ class _PlanCard extends ConsumerWidget {
       child: InkWell(
         onTap: () {
           ref.read(socialSharingServiceProvider).recordView('plan', plan.id);
-          // TODO: Navigate to plan detail
+          // Show plan preview dialog
+          _showPlanPreview(context, plan);
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -488,9 +490,9 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.5)),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Text(
         status.toUpperCase(),
@@ -499,4 +501,153 @@ class _StatusChip extends StatelessWidget {
       ),
     );
   }
+}
+
+// Helper functions for showing previews
+void _showNotebookPreview(
+    BuildContext context, WidgetRef ref, DiscoverableNotebook notebook) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(notebook.title),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundImage: notebook.avatarUrl != null
+                      ? NetworkImage(notebook.avatarUrl!)
+                      : null,
+                  child: notebook.avatarUrl == null
+                      ? Text(notebook.username?[0].toUpperCase() ?? '?')
+                      : null,
+                ),
+                const SizedBox(width: 8),
+                Text(notebook.username ?? 'Unknown'),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (notebook.description != null &&
+                notebook.description!.isNotEmpty)
+              Text(notebook.description!),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Column(
+                  children: [
+                    const Icon(Icons.source, size: 20),
+                    Text('${notebook.sourceCount} sources'),
+                  ],
+                ),
+                Column(
+                  children: [
+                    const Icon(Icons.visibility, size: 20),
+                    Text('${notebook.viewCount} views'),
+                  ],
+                ),
+                Column(
+                  children: [
+                    const Icon(Icons.favorite, size: 20),
+                    Text('${notebook.likeCount} likes'),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        FilledButton.icon(
+          onPressed: () {
+            ref.read(discoverProvider.notifier).likeNotebook(notebook.id);
+            Navigator.pop(context);
+          },
+          icon:
+              Icon(notebook.userLiked ? Icons.favorite : Icons.favorite_border),
+          label: Text(notebook.userLiked ? 'Liked' : 'Like'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _showPlanPreview(BuildContext context, DiscoverablePlan plan) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(plan.title),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundImage: plan.avatarUrl != null
+                      ? NetworkImage(plan.avatarUrl!)
+                      : null,
+                  child: plan.avatarUrl == null
+                      ? Text(plan.username?[0].toUpperCase() ?? '?')
+                      : null,
+                ),
+                const SizedBox(width: 8),
+                Text(plan.username ?? 'Unknown'),
+                const Spacer(),
+                _StatusChip(status: plan.status),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (plan.description != null && plan.description!.isNotEmpty)
+              Text(plan.description!),
+            const SizedBox(height: 16),
+            if (plan.taskCount > 0) ...[
+              Text('Progress: ${plan.completionPercentage}%'),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: plan.completionPercentage / 100,
+                backgroundColor: Colors.grey[200],
+              ),
+              const SizedBox(height: 8),
+              Text('${plan.taskCount} tasks'),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Column(
+                  children: [
+                    const Icon(Icons.visibility, size: 20),
+                    Text('${plan.viewCount} views'),
+                  ],
+                ),
+                Column(
+                  children: [
+                    const Icon(Icons.favorite, size: 20),
+                    Text('${plan.likeCount} likes'),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
 }
