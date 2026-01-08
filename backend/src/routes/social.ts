@@ -76,13 +76,16 @@ router.get('/friends', async (req: AuthRequest, res: Response) => {
     const userId = validateUserId(req, res);
     if (!userId) return;
     
+    console.log('[Social] Getting friends for user:', userId);
     const { limit, offset } = req.query;
     const friends = await friendService.getFriends(userId, {
       limit: limit ? Math.min(parseInt(limit as string) || 50, 100) : 50,
       offset: offset ? parseInt(offset as string) || 0 : 0
     });
+    console.log('[Social] Found', friends.length, 'friends');
     res.json({ friends });
   } catch (error: any) {
+    console.error('[Social] Error getting friends:', error.message);
     handleError(error, res);
   }
 });
@@ -221,9 +224,12 @@ router.get('/groups', async (req: AuthRequest, res: Response) => {
     const userId = validateUserId(req, res);
     if (!userId) return;
     
+    console.log('[Social] Getting groups for user:', userId);
     const groups = await studyGroupService.getUserGroups(userId);
+    console.log('[Social] Found', groups.length, 'groups');
     res.json({ groups });
   } catch (error: any) {
+    console.error('[Social] Error getting groups:', error.message);
     handleError(error, res);
   }
 });

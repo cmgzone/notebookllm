@@ -1,3 +1,7 @@
+import 'package:notebook_llm/core/utils/app_logger.dart';
+
+const _logger = AppLogger('Friend');
+
 class Friend {
   final String id;
   final String friendId;
@@ -37,8 +41,8 @@ class Friend {
             : null,
       );
     } catch (e) {
-      print('Error parsing Friend from JSON: $e');
-      print('JSON data: $json');
+      _logger.error('Error parsing Friend from JSON', e);
+      _logger.debug('JSON data: $json');
       rethrow;
     }
   }
@@ -75,8 +79,8 @@ class FriendRequest {
             DateTime.parse((json['created_at'] ?? json['createdAt']) as String),
       );
     } catch (e) {
-      print('Error parsing FriendRequest from JSON: $e');
-      print('JSON data: $json');
+      _logger.error('Error parsing FriendRequest from JSON', e);
+      _logger.debug('JSON data: $json');
       rethrow;
     }
   }
@@ -104,8 +108,8 @@ class UserSearchResult {
         avatarUrl: (json['avatar_url'] ?? json['avatarUrl']) as String?,
       );
     } catch (e) {
-      print('Error parsing UserSearchResult from JSON: $e');
-      print('JSON data: $json');
+      _logger.error('Error parsing UserSearchResult from JSON', e);
+      _logger.debug('JSON data: $json');
       rethrow;
     }
   }

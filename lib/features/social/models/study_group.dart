@@ -1,3 +1,7 @@
+import 'package:notebook_llm/core/utils/app_logger.dart';
+
+const _logger = AppLogger('StudyGroup');
+
 class StudyGroup {
   final String id;
   final String name;
@@ -47,8 +51,8 @@ class StudyGroup {
             DateTime.parse((json['created_at'] ?? json['createdAt']) as String),
       );
     } catch (e) {
-      print('Error parsing StudyGroup from JSON: $e');
-      print('JSON data: $json');
+      _logger.error('Error parsing StudyGroup from JSON', e);
+      _logger.debug('JSON data: $json');
       rethrow;
     }
   }

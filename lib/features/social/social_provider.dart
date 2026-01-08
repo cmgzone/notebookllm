@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_service.dart';
+import '../../core/utils/app_logger.dart';
 import 'models/friend.dart';
 import 'models/study_group.dart';
 import 'models/activity.dart';
+
+const _logger = AppLogger('SocialProvider');
 
 // State classes
 class FriendsState {
@@ -142,27 +145,43 @@ class FriendsNotifier extends StateNotifier<FriendsState> {
   Future<void> loadFriends() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
+      _logger.debug('Loading friends...');
       final response = await _api.get('/social/friends');
+      _logger.debug('Friends response: $response');
+      final friendsList = response['friends'];
+      if (friendsList == null) {
+        _logger.debug('Friends list is null, returning empty list');
+        state = state.copyWith(friends: [], isLoading: false);
+        return;
+      }
       final friends =
-          (response['friends'] as List).map((f) => Friend.fromJson(f)).toList();
+          (friendsList as List).map((f) => Friend.fromJson(f)).toList();
+      _logger.debug('Loaded ${friends.length} friends');
       state = state.copyWith(friends: friends, isLoading: false);
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+    } catch (e, stack) {
+      _logger.error('Error loading friends', e, stack);
+      final errorMsg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+      state = state.copyWith(isLoading: false, error: errorMsg);
     }
   }
 
   Future<void> loadRequests() async {
     try {
       final response = await _api.get('/social/friends/requests');
-      final received = (response['received'] as List)
-          .map((r) => FriendRequest.fromJson(r))
-          .toList();
-      final sent = (response['sent'] as List)
-          .map((r) => FriendRequest.fromJson(r))
-          .toList();
+      final receivedList = response['received'];
+      final sentList = response['sent'];
+      final received = receivedList != null
+          ? (receivedList as List)
+              .map((r) => FriendRequest.fromJson(r))
+              .toList()
+          : <FriendRequest>[];
+      final sent = sentList != null
+          ? (sentList as List).map((r) => FriendRequest.fromJson(r)).toList()
+          : <FriendRequest>[];
       state = state.copyWith(receivedRequests: received, sentRequests: sent);
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      final errorMsg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+      state = state.copyWith(error: errorMsg);
     }
   }
 
@@ -208,25 +227,45 @@ class StudyGroupsNotifier extends StateNotifier<StudyGroupsState> {
   Future<void> loadGroups() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
+      _logger.debug('Loading study groups...');
       final response = await _api.get('/social/groups');
-      final groups = (response['groups'] as List)
-          .map((g) => StudyGroup.fromJson(g))
-          .toList();
+      _logger.debug('Groups response: $response');
+      final groupsList = response['groups'];
+      if (groupsList == null) {
+        _logger.debug('Groups list is null, returning empty list');
+        state = state.copyWith(groups: [], isLoading: false);
+        return;
+      }
+      final groups =
+          (groupsList as List).map((g) => StudyGroup.fromJson(g)).toList();
+      _logger.debug('Loaded ${groups.length} groups');
       state = state.copyWith(groups: groups, isLoading: false);
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+    } catch (e, stack) {
+      _logger.error('Error loading groups', e, stack);
+      final errorMsg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+      state = state.copyWith(isLoading: false, error: errorMsg);
     }
   }
 
   Future<void> loadInvitations() async {
     try {
+      _logger.debug('Loading group invitations...');
       final response = await _api.get('/social/groups/invitations/pending');
-      final invitations = (response['invitations'] as List)
+      _logger.debug('Invitations response: $response');
+      final invitationsList = response['invitations'];
+      if (invitationsList == null) {
+        state = state.copyWith(invitations: []);
+        return;
+      }
+      final invitations = (invitationsList as List)
           .map((i) => GroupInvitation.fromJson(i))
           .toList();
+      _logger.debug('Loaded ${invitations.length} invitations');
       state = state.copyWith(invitations: invitations);
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
+    } catch (e, stack) {
+      _logger.error('Error loading invitations', e, stack);
+      final errorMsg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+      state = state.copyWith(error: errorMsg);
     }
   }
 

@@ -28,6 +28,24 @@ class _SocialHubScreenState extends ConsumerState<SocialHubScreen> {
     });
   }
 
+  String _formatError(String error) {
+    // Clean up common error patterns for better readability
+    if (error.contains('relation') && error.contains('does not exist')) {
+      return 'Social features database tables not found. Please contact support.';
+    }
+    if (error.contains('connection') || error.contains('ECONNREFUSED')) {
+      return 'Unable to connect to server. Please check your internet connection.';
+    }
+    if (error.contains('401') || error.contains('Unauthorized')) {
+      return 'Session expired. Please log in again.';
+    }
+    if (error.contains('500') || error.contains('Internal')) {
+      return 'Server error. Please try again later.';
+    }
+    // Remove "Exception: " prefix if present
+    return error.replaceFirst(RegExp(r'^Exception:\s*'), '');
+  }
+
   @override
   Widget build(BuildContext context) {
     final friendsState = ref.watch(friendsProvider);
@@ -48,33 +66,101 @@ class _SocialHubScreenState extends ConsumerState<SocialHubScreen> {
       ),
       body: friendsState.error != null || groupsState.error != null
           ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Error loading social data',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                  if (friendsState.error != null)
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Text(
-                        friendsState.error!,
-                        style: const TextStyle(fontSize: 12, color: Colors.red),
-                        textAlign: TextAlign.center,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Error loading social data',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      ref.read(friendsProvider.notifier).loadFriends();
-                      ref.read(studyGroupsProvider.notifier).loadGroups();
-                    },
-                    child: const Text('Retry'),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    if (friendsState.error != null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Friends Error:',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatError(friendsState.error!),
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.red),
+                              textAlign: TextAlign.left,
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (groupsState.error != null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Groups Error:',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatError(groupsState.error!),
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.orange),
+                              textAlign: TextAlign.left,
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'This may be a temporary issue. Please try again.',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        ref.read(friendsProvider.notifier).loadFriends();
+                        ref.read(friendsProvider.notifier).loadRequests();
+                        ref.read(studyGroupsProvider.notifier).loadGroups();
+                        ref
+                            .read(studyGroupsProvider.notifier)
+                            .loadInvitations();
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
               ),
             )
           : ListView(
