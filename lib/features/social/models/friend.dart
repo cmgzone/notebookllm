@@ -21,18 +21,26 @@ class Friend {
   });
 
   factory Friend.fromJson(Map<String, dynamic> json) {
-    return Friend(
-      id: json['id'],
-      friendId: json['friend_id'] ?? json['friendId'],
-      username: json['username'],
-      email: json['email'], // Optional
-      avatarUrl: json['avatar_url'] ?? json['avatarUrl'],
-      status: json['status'] ?? 'accepted',
-      createdAt: DateTime.parse(json['created_at'] ?? json['createdAt']),
-      acceptedAt: json['accepted_at'] != null || json['acceptedAt'] != null
-          ? DateTime.parse(json['accepted_at'] ?? json['acceptedAt'])
-          : null,
-    );
+    try {
+      return Friend(
+        id: json['id'] as String,
+        friendId: (json['friend_id'] ?? json['friendId']) as String,
+        username: json['username'] as String,
+        email: json['email'] as String?, // Optional
+        avatarUrl: (json['avatar_url'] ?? json['avatarUrl']) as String?,
+        status: (json['status'] ?? 'accepted') as String,
+        createdAt:
+            DateTime.parse((json['created_at'] ?? json['createdAt']) as String),
+        acceptedAt: (json['accepted_at'] ?? json['acceptedAt']) != null
+            ? DateTime.parse(
+                (json['accepted_at'] ?? json['acceptedAt']) as String)
+            : null,
+      );
+    } catch (e) {
+      print('Error parsing Friend from JSON: $e');
+      print('JSON data: $json');
+      rethrow;
+    }
   }
 }
 
@@ -54,14 +62,23 @@ class FriendRequest {
   });
 
   factory FriendRequest.fromJson(Map<String, dynamic> json) {
-    return FriendRequest(
-      id: json['id'],
-      fromUserId: json['from_user_id'] ?? json['fromUserId'],
-      fromUsername: json['from_username'] ?? json['fromUsername'],
-      fromEmail: json['from_email'] ?? json['fromEmail'], // Optional
-      fromAvatarUrl: json['from_avatar_url'] ?? json['fromAvatarUrl'],
-      createdAt: DateTime.parse(json['created_at'] ?? json['createdAt']),
-    );
+    try {
+      return FriendRequest(
+        id: json['id'] as String,
+        fromUserId: (json['from_user_id'] ?? json['fromUserId']) as String,
+        fromUsername: (json['from_username'] ?? json['fromUsername']) as String,
+        fromEmail:
+            (json['from_email'] ?? json['fromEmail']) as String?, // Optional
+        fromAvatarUrl:
+            (json['from_avatar_url'] ?? json['fromAvatarUrl']) as String?,
+        createdAt:
+            DateTime.parse((json['created_at'] ?? json['createdAt']) as String),
+      );
+    } catch (e) {
+      print('Error parsing FriendRequest from JSON: $e');
+      print('JSON data: $json');
+      rethrow;
+    }
   }
 }
 
@@ -79,11 +96,17 @@ class UserSearchResult {
   });
 
   factory UserSearchResult.fromJson(Map<String, dynamic> json) {
-    return UserSearchResult(
-      id: json['id'],
-      username: json['username'],
-      email: json['email'], // Optional
-      avatarUrl: json['avatar_url'] ?? json['avatarUrl'],
-    );
+    try {
+      return UserSearchResult(
+        id: json['id'] as String,
+        username: json['username'] as String,
+        email: json['email'] as String?, // Optional
+        avatarUrl: (json['avatar_url'] ?? json['avatarUrl']) as String?,
+      );
+    } catch (e) {
+      print('Error parsing UserSearchResult from JSON: $e');
+      print('JSON data: $json');
+      rethrow;
+    }
   }
 }

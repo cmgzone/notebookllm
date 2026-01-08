@@ -28,20 +28,29 @@ class StudyGroup {
   });
 
   factory StudyGroup.fromJson(Map<String, dynamic> json) {
-    return StudyGroup(
-      id: json['id'],
-      name: json['name'],
-      description: json['description'],
-      ownerId: json['owner_id'] ?? json['ownerId'],
-      ownerUsername: json['owner_username'] ?? json['ownerUsername'],
-      icon: json['icon'] ?? '📚',
-      coverImageUrl: json['cover_image_url'] ?? json['coverImageUrl'],
-      isPublic: json['is_public'] ?? json['isPublic'] ?? false,
-      maxMembers: json['max_members'] ?? json['maxMembers'] ?? 50,
-      memberCount: json['member_count'] ?? json['memberCount'] ?? 1,
-      userRole: json['user_role'] ?? json['userRole'],
-      createdAt: DateTime.parse(json['created_at'] ?? json['createdAt']),
-    );
+    try {
+      return StudyGroup(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        description: json['description'] as String?,
+        ownerId: (json['owner_id'] ?? json['ownerId']) as String,
+        ownerUsername:
+            (json['owner_username'] ?? json['ownerUsername']) as String?,
+        icon: (json['icon'] ?? '📚') as String,
+        coverImageUrl:
+            (json['cover_image_url'] ?? json['coverImageUrl']) as String?,
+        isPublic: (json['is_public'] ?? json['isPublic'] ?? false) as bool,
+        maxMembers: (json['max_members'] ?? json['maxMembers'] ?? 50) as int,
+        memberCount: (json['member_count'] ?? json['memberCount'] ?? 1) as int,
+        userRole: (json['user_role'] ?? json['userRole']) as String?,
+        createdAt:
+            DateTime.parse((json['created_at'] ?? json['createdAt']) as String),
+      );
+    } catch (e) {
+      print('Error parsing StudyGroup from JSON: $e');
+      print('JSON data: $json');
+      rethrow;
+    }
   }
 
   bool get isOwner => userRole == 'owner';
