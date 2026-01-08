@@ -453,5 +453,179 @@ export const socialSharingService = {
       totalLikes: parseInt(row?.total_likes) || 0,
       totalShares: parseInt(row?.total_shares) || 0
     };
+  },
+
+  // =====================================================
+  // Get Public Notebook Details with Sources
+  // =====================================================
+  async getPublicNotebookDetails(notebookId: string, viewerId?: string): Promise<{
+    notebook: any;
+    sources: any[];
+    owner: any;
+  } | null> {
+    // Get notebook details
+    const notebookResult = await pool.query(`
+      SELECT 
+        n.*,
+        u.display_name as username,
+        u.avatar_url,
+        (SELECT COUNT(*) FROM sources WHERE notebook_id = n.id) as source_count,
+        (SELECT COUNT(*) FROM content_likes WHERE content_type = 'notebook' AND content_id::text = n.id) as like_count,
+        ${viewerId ? `EXISTS(SELECT 1 FROM content_likes WHERE content_type = 'notebook' AND content_id::text = n.id AND user_id = $2) as user_liked` : 'false as user_liked'}
+      FROM notebooks n
+      JOIN users u ON u.id = n.user_id
+      WHERE n.id = $1 AND n.is_public = true AND n.is_locked = false
+    `, viewerId ? [notebookId, viewerId] : [notebookId]);
+
+    if (notebookResult.rows.length === 0) {
+      return null;
+    }
+
+    const notebook = notebookResult.rows[0];
+
+    // Get sources (without full content for privacy, just metadata)
+    const sourcesResult = await pool.query(`
+      SELECT 
+        id, notebook_id, title, type, added_at, 
+        CASE 
+          WHEN type = 'text' THEN LEFT(content, 500) || CASE WHEN LENGTH(content) > 500 THEN '...' ELSE '' END
+          ELSE NULL 
+        END as content_preview,
+        summary,
+        thumbnail_url,
+        metadata
+      FROM sources
+      WHERE notebook_id = $1
+      ORDER BY added_at DESC
+    `, [notebookId]);
+
+    return {
+      notebook,
+      sources: sourcesResult.rows,
+      owner: {
+        id: notebook.user_id,
+        username: notebook.username,
+        avatarUrl: notebook.avatar_url
+      }
+    };
+  },
+
+  // =====================================================
+  // Get Public Source Details
+  // =====================================================
+  async getPublicSourceDetails(sourceId: string, viewerId?: string): Promise<any | null> {
+    const result = await pool.query(`
+      SELECT 
+        s.*,
+        n.title as notebook_title,
+        n.is_public as notebook_is_public,
+        n.is_locked as notebook_is_locked,
+        u.display_name as owner_username,
+        u.avatar_url as owner_avatar
+      FROM sources s
+      JOIN notebooks n ON n.id = s.notebook_id
+      JOIN users u ON u.id = n.user_id
+      WHERE s.id = $1 AND n.is_public = true AND n.is_locked = false
+    `, [sourceId]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return result.rows[0];
+  },
+
+  // =====================================================
+  // Fork Notebook (Copy to User's Account)
+  // =====================================================
+  async forkNotebook(notebookId: string, userId: string, options: {
+    newTitle?: string;
+    includeSources?: boolean;
+  } = {}): Promise<{ notebook: any; sourcesCopied: number }> {
+    const { newTitle, includeSources = true } = options;
+
+    // Get original notebook
+    const originalResult = await pool.query(`
+      SELECT n.*, u.display_name as original_owner
+      FROM notebooks n
+      JOIN users u ON u.id = n.user_id
+      WHERE n.id = $1 AND n.is_public = true AND n.is_locked = false
+    `, [notebookId]);
+
+    if (originalResult.rows.length === 0) {
+      throw new Error('Notebook not found or not available for forking');
+    }
+
+    const original = originalResult.rows[0];
+
+    // Create new notebook
+    const title = newTitle || `${original.title} (Fork)`;
+    const description = `Forked from ${original.original_owner}'s notebook: ${original.title}`;
+
+    const newNotebookResult = await pool.query(`
+      INSERT INTO notebooks (user_id, title, description, category, icon, is_public, metadata)
+      VALUES ($1, $2, $3, $4, $5, false, $6)
+      RETURNING *
+    `, [
+      userId, 
+      title, 
+      description, 
+      original.category,
+      original.icon,
+      JSON.stringify({
+        forkedFrom: notebookId,
+        originalOwner: original.user_id,
+        originalTitle: original.title,
+        forkedAt: new Date().toISOString()
+      })
+    ]);
+
+    const newNotebook = newNotebookResult.rows[0];
+    let sourcesCopied = 0;
+
+    // Copy sources if requested
+    if (includeSources) {
+      const sourcesResult = await pool.query(`
+        SELECT * FROM sources WHERE notebook_id = $1
+      `, [notebookId]);
+
+      for (const source of sourcesResult.rows) {
+        await pool.query(`
+          INSERT INTO sources (notebook_id, title, type, content, summary, thumbnail_url, metadata)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [
+          newNotebook.id,
+          source.title,
+          source.type,
+          source.content,
+          source.summary,
+          source.thumbnail_url,
+          JSON.stringify({
+            ...source.metadata,
+            forkedFrom: source.id,
+            originalNotebookId: notebookId
+          })
+        ]);
+        sourcesCopied++;
+      }
+    }
+
+    // Log activity
+    await activityFeedService.createActivity({
+      userId,
+      activityType: 'notebook_forked',
+      title: `Forked notebook: ${original.title}`,
+      description: `Created "${title}" from ${original.original_owner}'s notebook`,
+      referenceId: newNotebook.id,
+      referenceType: 'notebook',
+      metadata: { 
+        originalNotebookId: notebookId,
+        originalOwner: original.user_id,
+        sourcesCopied
+      },
+      isPublic: false
+    });
+
+    return { notebook: newNotebook, sourcesCopied };
   }
 };

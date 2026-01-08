@@ -343,4 +343,74 @@ router.get('/my-stats', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// =====================================================
+// Get Public Notebook Details with Sources
+// =====================================================
+router.get('/public/notebooks/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const viewerId = req.userId; // Optional - user may not be logged in
+
+    const details = await socialSharingService.getPublicNotebookDetails(id, viewerId);
+    
+    if (!details) {
+      return res.status(404).json({ error: 'Notebook not found or not public' });
+    }
+
+    res.json({ success: true, ...details });
+  } catch (error: any) {
+    console.error('Get public notebook details error:', error);
+    res.status(500).json({ error: 'Failed to get notebook details' });
+  }
+});
+
+// =====================================================
+// Get Public Source Details
+// =====================================================
+router.get('/public/sources/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const viewerId = req.userId;
+
+    const source = await socialSharingService.getPublicSourceDetails(id, viewerId);
+    
+    if (!source) {
+      return res.status(404).json({ error: 'Source not found or not public' });
+    }
+
+    res.json({ success: true, source });
+  } catch (error: any) {
+    console.error('Get public source details error:', error);
+    res.status(500).json({ error: 'Failed to get source details' });
+  }
+});
+
+// =====================================================
+// Fork Notebook (Copy to User's Account)
+// =====================================================
+router.post('/fork/notebook/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized - login required to fork' });
+
+    const { id } = req.params;
+    const { newTitle, includeSources } = req.body;
+
+    const result = await socialSharingService.forkNotebook(id, userId, {
+      newTitle,
+      includeSources: includeSources !== false // Default to true
+    });
+
+    res.json({ 
+      success: true, 
+      notebook: result.notebook,
+      sourcesCopied: result.sourcesCopied,
+      message: `Notebook forked successfully with ${result.sourcesCopied} sources`
+    });
+  } catch (error: any) {
+    console.error('Fork notebook error:', error);
+    res.status(500).json({ error: error.message || 'Failed to fork notebook' });
+  }
+});
+
 export default router;

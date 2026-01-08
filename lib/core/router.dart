@@ -67,6 +67,7 @@ import '../features/social/ui/social_leaderboard_screen.dart';
 import '../features/social/ui/direct_chat_screen.dart';
 import '../features/social/ui/conversations_screen.dart';
 import '../features/social/ui/group_chat_screen.dart';
+import '../features/social/ui/public_notebook_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 
 String getInitialLocation(bool hasSeenOnboarding) {
@@ -502,6 +503,16 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
               final groupName = state.extra as String?;
               return buildTransitionPage(
                 child: GroupChatScreen(groupId: groupId, groupName: groupName),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/social/notebook/:notebookId',
+            name: 'public-notebook',
+            pageBuilder: (context, state) {
+              final notebookId = state.pathParameters['notebookId']!;
+              return buildTransitionPage(
+                child: PublicNotebookScreen(notebookId: notebookId),
               );
             },
           ),

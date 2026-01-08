@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../social_sharing_provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
@@ -218,12 +219,8 @@ class _NotebookCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         onTap: () {
-          // Record view
-          ref
-              .read(socialSharingServiceProvider)
-              .recordView('notebook', notebook.id);
-          // Show notebook preview
-          _showNotebookPreview(context, ref, notebook);
+          // Navigate to public notebook screen
+          context.push('/social/notebook/${notebook.id}');
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -501,83 +498,6 @@ class _StatusChip extends StatelessWidget {
       ),
     );
   }
-}
-
-// Helper functions for showing previews
-void _showNotebookPreview(
-    BuildContext context, WidgetRef ref, DiscoverableNotebook notebook) {
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(notebook.title),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 16,
-                  backgroundImage: notebook.avatarUrl != null
-                      ? NetworkImage(notebook.avatarUrl!)
-                      : null,
-                  child: notebook.avatarUrl == null
-                      ? Text(notebook.username?[0].toUpperCase() ?? '?')
-                      : null,
-                ),
-                const SizedBox(width: 8),
-                Text(notebook.username ?? 'Unknown'),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (notebook.description != null &&
-                notebook.description!.isNotEmpty)
-              Text(notebook.description!),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                Column(
-                  children: [
-                    const Icon(Icons.source, size: 20),
-                    Text('${notebook.sourceCount} sources'),
-                  ],
-                ),
-                Column(
-                  children: [
-                    const Icon(Icons.visibility, size: 20),
-                    Text('${notebook.viewCount} views'),
-                  ],
-                ),
-                Column(
-                  children: [
-                    const Icon(Icons.favorite, size: 20),
-                    Text('${notebook.likeCount} likes'),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-        FilledButton.icon(
-          onPressed: () {
-            ref.read(discoverProvider.notifier).likeNotebook(notebook.id);
-            Navigator.pop(context);
-          },
-          icon:
-              Icon(notebook.userLiked ? Icons.favorite : Icons.favorite_border),
-          label: Text(notebook.userLiked ? 'Liked' : 'Like'),
-        ),
-      ],
-    ),
-  );
 }
 
 void _showPlanPreview(BuildContext context, DiscoverablePlan plan) {
