@@ -1,9 +1,10 @@
 import 'dart:math';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'achievement.dart';
 import 'daily_challenge.dart';
 import '../../core/api/api_service.dart';
+import '../../core/services/activity_logger_service.dart';
 
 /// State for gamification system
 class GamificationState {
@@ -412,6 +413,15 @@ class GamificationNotifier extends StateNotifier<GamificationState> {
     if (streak >= 7) _updateAchievementProgress('streak_7', streak, true);
     if (streak >= 30) _updateAchievementProgress('streak_30', streak, true);
     if (streak >= 100) _updateAchievementProgress('streak_100', streak, true);
+
+    // Log streak milestones to activity feed
+    if (streak == 3 ||
+        streak == 7 ||
+        streak == 14 ||
+        streak == 30 ||
+        streak == 100) {
+      ref.read(activityLoggerProvider).logStudyStreak(streak);
+    }
   }
 
   Future<void> _updateAchievementProgress(
@@ -423,6 +433,27 @@ class GamificationNotifier extends StateNotifier<GamificationState> {
         value: value,
         isUnlocked: isUnlocked,
       );
+
+      // Log achievement unlock to activity feed
+      if (isUnlocked) {
+        // Find the achievement title from definitions
+        final achievement = AchievementDefinitions.all.firstWhere(
+          (a) => a.id == achievementId,
+          orElse: () => const Achievement(
+            id: 'unknown',
+            title: 'Achievement',
+            description: '',
+            category: AchievementCategory.learning,
+            tier: AchievementTier.bronze,
+            icon: Icons.emoji_events,
+            targetValue: 1,
+          ),
+        );
+        ref.read(activityLoggerProvider).logAchievementUnlocked(
+              achievement.title,
+              achievementId,
+            );
+      }
     } catch (e) {
       debugPrint('Error updating achievement: $e');
     }

@@ -6,6 +6,7 @@ import 'infographic.dart';
 import '../sources/source_provider.dart';
 import '../../core/api/api_service.dart';
 import '../../core/ai/ai_settings_service.dart';
+import '../../core/services/activity_logger_service.dart';
 
 /// Provider for managing infographics
 class InfographicNotifier extends StateNotifier<List<Infographic>> {
@@ -136,6 +137,13 @@ Return ONLY the image generation prompt, no other text.
     );
 
     await addInfographic(infographic);
+
+    // Log activity to social feed
+    ref.read(activityLoggerProvider).logInfographicCreated(
+          title,
+          infographic.id,
+        );
+
     return infographic;
   }
 

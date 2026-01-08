@@ -15,6 +15,7 @@ import '../../core/ai/ai_settings_service.dart';
 import '../../core/services/wakelock_service.dart';
 import '../../core/services/overlay_bubble_service.dart';
 import '../../core/api/api_service.dart';
+import '../../core/services/activity_logger_service.dart';
 import '../sources/source_provider.dart';
 
 // Timeouts and retry settings
@@ -568,6 +569,13 @@ $context
 
       // Save to backend
       await _saveOverview(overview);
+
+      // Log activity to social feed
+      ref.read(activityLoggerProvider).logPodcastGenerated(
+            title,
+            overview.id,
+            durationSeconds: overview.duration.inSeconds,
+          );
 
       _updateStatus('Podcast Ready! 🎧', 100);
       await Future.delayed(const Duration(seconds: 1));

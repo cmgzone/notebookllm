@@ -4,6 +4,7 @@ import 'notebook.dart';
 import '../gamification/gamification_provider.dart';
 import '../../core/auth/custom_auth_service.dart';
 import '../../core/api/api_service.dart';
+import '../../core/services/activity_logger_service.dart';
 
 class NotebookNotifier extends StateNotifier<List<Notebook>> {
   NotebookNotifier(this.ref) : super([]) {
@@ -191,6 +192,9 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
 
       // Track gamification (don't await to avoid blocking)
       ref.read(gamificationProvider.notifier).trackNotebookCreated();
+
+      // Log activity to social feed
+      ref.read(activityLoggerProvider).logNotebookCreated(title, notebook.id);
 
       return notebook.id;
     } catch (e, stackTrace) {

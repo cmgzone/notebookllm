@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'flashcard.dart';
 import 'flashcard_provider.dart';
+import '../../core/services/activity_logger_service.dart';
 
 /// Screen for viewing and studying a flashcard deck
 class FlashcardDeckScreen extends ConsumerStatefulWidget {
@@ -412,6 +413,17 @@ class _FlashcardDeckScreenState extends ConsumerState<FlashcardDeckScreen> {
           wasCorrect,
         );
 
+    final decks = ref.read(flashcardProvider);
+    final deck = decks.firstWhere((d) => d.id == deckId,
+        orElse: () => FlashcardDeck(
+              id: '',
+              title: 'Unknown',
+              notebookId: '',
+              cards: [],
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ));
+
     setState(() {
       if (wasCorrect) {
         _correctCount++;
@@ -420,6 +432,14 @@ class _FlashcardDeckScreenState extends ConsumerState<FlashcardDeckScreen> {
       }
       _showAnswer = false;
       _currentIndex++;
+
+      // Log activity when deck is completed
+      if (_currentIndex >= deck.cards.length) {
+        ref.read(activityLoggerProvider).logFlashcardDeckCompleted(
+              deck.title,
+              deckId,
+            );
+      }
     });
   }
 

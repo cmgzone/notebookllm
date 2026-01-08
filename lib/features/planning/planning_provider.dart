@@ -7,6 +7,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../core/api/api_service.dart';
 import '../../core/auth/custom_auth_service.dart';
+import '../../core/services/activity_logger_service.dart';
 import 'models/plan.dart';
 import 'models/plan_task.dart';
 import 'models/requirement.dart';
@@ -209,6 +210,13 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
       state = state.copyWith(plans: [plan, ...state.plans]);
       developer.log('[PLANNING_PROVIDER] Plan created: ${plan.id}',
           name: 'PlanningProvider');
+
+      // Log activity to social feed
+      ref.read(activityLoggerProvider).logProjectStarted(
+            title,
+            plan.id,
+            'Planning', // Default category for plans
+          );
 
       return plan;
     } catch (e, stack) {

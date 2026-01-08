@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_service.dart';
 import '../../core/utils/app_logger.dart';
+import '../../core/services/activity_logger_service.dart';
 import 'models/friend.dart';
 import 'models/study_group.dart';
 import 'models/activity.dart';
@@ -142,8 +143,9 @@ class LeaderboardState {
 // Friends Provider
 class FriendsNotifier extends StateNotifier<FriendsState> {
   final ApiService _api;
+  final Ref _ref;
 
-  FriendsNotifier(this._api) : super(FriendsState());
+  FriendsNotifier(this._api, this._ref) : super(FriendsState());
 
   Future<void> loadFriends() async {
     state = state.copyWith(isLoading: true, error: null);
@@ -204,8 +206,25 @@ class FriendsNotifier extends StateNotifier<FriendsState> {
   }
 
   Future<void> acceptRequest(String requestId) async {
+    // Find the request to get friend info before accepting
+    final request = state.receivedRequests.firstWhere(
+      (r) => r.id == requestId,
+      orElse: () => FriendRequest(
+        id: requestId,
+        fromUserId: '',
+        fromUsername: 'Friend',
+        createdAt: DateTime.now(),
+      ),
+    );
+
     await _api.post('/social/friends/accept/$requestId', {});
     await Future.wait([loadFriends(), loadRequests()]);
+
+    // Log activity to social feed
+    _ref.read(activityLoggerProvider).logFriendAdded(
+          request.fromUsername,
+          request.fromUserId,
+        );
   }
 
   Future<void> declineRequest(String requestId) async {
@@ -221,14 +240,15 @@ class FriendsNotifier extends StateNotifier<FriendsState> {
 
 final friendsProvider =
     StateNotifierProvider<FriendsNotifier, FriendsState>((ref) {
-  return FriendsNotifier(ref.watch(apiServiceProvider));
+  return FriendsNotifier(ref.watch(apiServiceProvider), ref);
 });
 
 // Study Groups Provider
 class StudyGroupsNotifier extends StateNotifier<StudyGroupsState> {
   final ApiService _api;
+  final Ref _ref;
 
-  StudyGroupsNotifier(this._api) : super(StudyGroupsState());
+  StudyGroupsNotifier(this._api, this._ref) : super(StudyGroupsState());
 
   Future<void> loadGroups() async {
     state = state.copyWith(isLoading: true, error: null);
@@ -307,8 +327,26 @@ class StudyGroupsNotifier extends StateNotifier<StudyGroupsState> {
   }
 
   Future<void> acceptInvitation(String invitationId) async {
+    // Find the invitation to get group info before accepting
+    final invitation = state.invitations.firstWhere(
+      (i) => i.id == invitationId,
+      orElse: () => GroupInvitation(
+        id: invitationId,
+        groupId: '',
+        groupName: 'Study Group',
+        invitedByUsername: '',
+        createdAt: DateTime.now(),
+      ),
+    );
+
     await _api.post('/social/groups/invitations/$invitationId/accept', {});
     await Future.wait([loadGroups(), loadInvitations()]);
+
+    // Log activity to social feed
+    _ref.read(activityLoggerProvider).logJoinedGroup(
+          invitation.groupName,
+          invitation.groupId,
+        );
   }
 
   Future<StudySession> createSession({
@@ -347,12 +385,29 @@ class StudyGroupsNotifier extends StateNotifier<StudyGroupsState> {
   Future<void> joinPublicGroup(String groupId) async {
     await _api.post('/social/groups/$groupId/join', {});
     await loadGroups();
+
+    // Find the group to get its name for activity logging
+    final group = state.groups.firstWhere(
+      (g) => g.id == groupId,
+      orElse: () => StudyGroup(
+        id: groupId,
+        name: 'Study Group',
+        ownerId: '',
+        createdAt: DateTime.now(),
+      ),
+    );
+
+    // Log activity to social feed
+    _ref.read(activityLoggerProvider).logJoinedGroup(
+          group.name,
+          groupId,
+        );
   }
 }
 
 final studyGroupsProvider =
     StateNotifierProvider<StudyGroupsNotifier, StudyGroupsState>((ref) {
-  return StudyGroupsNotifier(ref.watch(apiServiceProvider));
+  return StudyGroupsNotifier(ref.watch(apiServiceProvider), ref);
 });
 
 // Activity Feed Provider

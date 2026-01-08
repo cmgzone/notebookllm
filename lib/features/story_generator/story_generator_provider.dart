@@ -8,6 +8,7 @@ import '../../core/ai/gemini_image_service.dart';
 import '../../core/search/serper_service.dart';
 import '../../core/api/api_service.dart';
 import '../../core/security/global_credentials_service.dart';
+import '../../core/services/activity_logger_service.dart';
 
 class StoryGeneratorState {
   final List<Story> stories;
@@ -210,6 +211,11 @@ class StoryGeneratorNotifier extends StateNotifier<StoryGeneratorState> {
       );
       yield state;
       await _saveStory(newStory);
+
+      // Log activity to social feed
+      ref
+          .read(activityLoggerProvider)
+          .logStoryCreated(newStory.title, newStory.id);
     } catch (e) {
       state = state.copyWith(
         isGenerating: false,
@@ -364,6 +370,11 @@ class StoryGeneratorNotifier extends StateNotifier<StoryGeneratorState> {
       );
       yield state;
       await _saveStory(newStory);
+
+      // Log activity to social feed
+      ref
+          .read(activityLoggerProvider)
+          .logStoryCreated(newStory.title, newStory.id);
     } catch (e) {
       state = state.copyWith(
         isGenerating: false,

@@ -7,6 +7,7 @@ import 'quiz.dart';
 import '../sources/source_provider.dart';
 import '../gamification/gamification_provider.dart';
 import '../../core/api/api_service.dart';
+import '../../core/services/activity_logger_service.dart';
 
 /// Provider for managing quizzes
 class QuizNotifier extends StateNotifier<List<Quiz>> {
@@ -205,6 +206,14 @@ Vary difficulty across questions.
         .read(gamificationProvider.notifier)
         .trackQuizCompleted(isPerfect: isPerfect);
     ref.read(gamificationProvider.notifier).trackFeatureUsed('quiz');
+
+    // Log activity to social feed
+    final scorePercent = total > 0 ? ((score / total) * 100).round() : 0;
+    ref.read(activityLoggerProvider).logQuizCompleted(
+          quiz.title,
+          scorePercent,
+          quizId,
+        );
 
     // Sync to backend
     try {

@@ -7,6 +7,7 @@ import 'mind_map_node.dart';
 import '../sources/source_provider.dart';
 import '../gamification/gamification_provider.dart';
 import '../../core/api/api_service.dart';
+import '../../core/services/activity_logger_service.dart';
 
 /// Provider for managing mind maps
 class MindMapNotifier extends StateNotifier<List<MindMap>> {
@@ -164,6 +165,9 @@ Create 3-5 main branches with 2-4 sub-topics each.
     // Track gamification
     ref.read(gamificationProvider.notifier).trackMindmapCreated();
     ref.read(gamificationProvider.notifier).trackFeatureUsed('mindmap');
+
+    // Log activity to social feed
+    ref.read(activityLoggerProvider).logMindmapCreated(title, savedMindMap.id);
 
     return savedMindMap;
   }

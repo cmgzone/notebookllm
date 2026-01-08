@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_service.dart';
+import '../../core/services/activity_logger_service.dart';
 import 'models/ebook_project.dart';
 import 'models/ebook_chapter.dart';
 
@@ -60,6 +61,12 @@ class EbookNotifier extends StateNotifier<List<EbookProject>> {
           chapters: ebook.chapters.map((c) => c.toBackendJson()).toList(),
         );
       }
+
+      // Log activity to social feed
+      ref.read(activityLoggerProvider).logEbookCreated(
+            ebook.title,
+            savedProject['id'] ?? ebook.id,
+          );
 
       await _loadEbooks();
     } catch (e) {
