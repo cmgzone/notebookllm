@@ -22,7 +22,11 @@ export type ActivityType =
   | 'project_started'
   | 'mindmap_created'
   | 'infographic_created'
-  | 'story_created';
+  | 'story_created'
+  // Social sharing activity types
+  | 'content_shared'
+  | 'content_liked'
+  | 'content_saved';
 
 export interface Activity {
   id: string;

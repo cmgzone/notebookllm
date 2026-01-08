@@ -570,7 +570,10 @@ mixin _$Plan {
       throw _privateConstructorUsedError; // Access control (Requirements 7.1, 7.4)
   bool get isPrivate => throw _privateConstructorUsedError;
   List<AgentAccess> get sharedAgents =>
-      throw _privateConstructorUsedError; // Metadata
+      throw _privateConstructorUsedError; // Social sharing fields
+  bool get isPublic => throw _privateConstructorUsedError;
+  int get viewCount => throw _privateConstructorUsedError;
+  int get shareCount => throw _privateConstructorUsedError; // Metadata
   DateTime get createdAt => throw _privateConstructorUsedError;
   DateTime get updatedAt => throw _privateConstructorUsedError;
   DateTime? get completedAt => throw _privateConstructorUsedError;
@@ -600,6 +603,9 @@ abstract class $PlanCopyWith<$Res> {
       List<PlanTask> tasks,
       bool isPrivate,
       List<AgentAccess> sharedAgents,
+      bool isPublic,
+      int viewCount,
+      int shareCount,
       DateTime createdAt,
       DateTime updatedAt,
       DateTime? completedAt});
@@ -630,6 +636,9 @@ class _$PlanCopyWithImpl<$Res, $Val extends Plan>
     Object? tasks = null,
     Object? isPrivate = null,
     Object? sharedAgents = null,
+    Object? isPublic = null,
+    Object? viewCount = null,
+    Object? shareCount = null,
     Object? createdAt = null,
     Object? updatedAt = null,
     Object? completedAt = freezed,
@@ -675,6 +684,18 @@ class _$PlanCopyWithImpl<$Res, $Val extends Plan>
           ? _value.sharedAgents
           : sharedAgents // ignore: cast_nullable_to_non_nullable
               as List<AgentAccess>,
+      isPublic: null == isPublic
+          ? _value.isPublic
+          : isPublic // ignore: cast_nullable_to_non_nullable
+              as bool,
+      viewCount: null == viewCount
+          ? _value.viewCount
+          : viewCount // ignore: cast_nullable_to_non_nullable
+              as int,
+      shareCount: null == shareCount
+          ? _value.shareCount
+          : shareCount // ignore: cast_nullable_to_non_nullable
+              as int,
       createdAt: null == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -709,6 +730,9 @@ abstract class _$$PlanImplCopyWith<$Res> implements $PlanCopyWith<$Res> {
       List<PlanTask> tasks,
       bool isPrivate,
       List<AgentAccess> sharedAgents,
+      bool isPublic,
+      int viewCount,
+      int shareCount,
       DateTime createdAt,
       DateTime updatedAt,
       DateTime? completedAt});
@@ -736,6 +760,9 @@ class __$$PlanImplCopyWithImpl<$Res>
     Object? tasks = null,
     Object? isPrivate = null,
     Object? sharedAgents = null,
+    Object? isPublic = null,
+    Object? viewCount = null,
+    Object? shareCount = null,
     Object? createdAt = null,
     Object? updatedAt = null,
     Object? completedAt = freezed,
@@ -781,6 +808,18 @@ class __$$PlanImplCopyWithImpl<$Res>
           ? _value._sharedAgents
           : sharedAgents // ignore: cast_nullable_to_non_nullable
               as List<AgentAccess>,
+      isPublic: null == isPublic
+          ? _value.isPublic
+          : isPublic // ignore: cast_nullable_to_non_nullable
+              as bool,
+      viewCount: null == viewCount
+          ? _value.viewCount
+          : viewCount // ignore: cast_nullable_to_non_nullable
+              as int,
+      shareCount: null == shareCount
+          ? _value.shareCount
+          : shareCount // ignore: cast_nullable_to_non_nullable
+              as int,
       createdAt: null == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -811,6 +850,9 @@ class _$PlanImpl extends _Plan {
       final List<PlanTask> tasks = const [],
       this.isPrivate = true,
       final List<AgentAccess> sharedAgents = const [],
+      this.isPublic = false,
+      this.viewCount = 0,
+      this.shareCount = 0,
       required this.createdAt,
       required this.updatedAt,
       this.completedAt})
@@ -877,6 +919,16 @@ class _$PlanImpl extends _Plan {
     return EqualUnmodifiableListView(_sharedAgents);
   }
 
+// Social sharing fields
+  @override
+  @JsonKey()
+  final bool isPublic;
+  @override
+  @JsonKey()
+  final int viewCount;
+  @override
+  @JsonKey()
+  final int shareCount;
 // Metadata
   @override
   final DateTime createdAt;
@@ -887,7 +939,7 @@ class _$PlanImpl extends _Plan {
 
   @override
   String toString() {
-    return 'Plan(id: $id, userId: $userId, title: $title, description: $description, status: $status, requirements: $requirements, designNotes: $designNotes, tasks: $tasks, isPrivate: $isPrivate, sharedAgents: $sharedAgents, createdAt: $createdAt, updatedAt: $updatedAt, completedAt: $completedAt)';
+    return 'Plan(id: $id, userId: $userId, title: $title, description: $description, status: $status, requirements: $requirements, designNotes: $designNotes, tasks: $tasks, isPrivate: $isPrivate, sharedAgents: $sharedAgents, isPublic: $isPublic, viewCount: $viewCount, shareCount: $shareCount, createdAt: $createdAt, updatedAt: $updatedAt, completedAt: $completedAt)';
   }
 
   @override
@@ -910,6 +962,12 @@ class _$PlanImpl extends _Plan {
                 other.isPrivate == isPrivate) &&
             const DeepCollectionEquality()
                 .equals(other._sharedAgents, _sharedAgents) &&
+            (identical(other.isPublic, isPublic) ||
+                other.isPublic == isPublic) &&
+            (identical(other.viewCount, viewCount) ||
+                other.viewCount == viewCount) &&
+            (identical(other.shareCount, shareCount) ||
+                other.shareCount == shareCount) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt) &&
             (identical(other.updatedAt, updatedAt) ||
@@ -932,6 +990,9 @@ class _$PlanImpl extends _Plan {
       const DeepCollectionEquality().hash(_tasks),
       isPrivate,
       const DeepCollectionEquality().hash(_sharedAgents),
+      isPublic,
+      viewCount,
+      shareCount,
       createdAt,
       updatedAt,
       completedAt);
@@ -964,6 +1025,9 @@ abstract class _Plan extends Plan {
       final List<PlanTask> tasks,
       final bool isPrivate,
       final List<AgentAccess> sharedAgents,
+      final bool isPublic,
+      final int viewCount,
+      final int shareCount,
       required final DateTime createdAt,
       required final DateTime updatedAt,
       final DateTime? completedAt}) = _$PlanImpl;
@@ -990,7 +1054,13 @@ abstract class _Plan extends Plan {
   @override
   bool get isPrivate;
   @override
-  List<AgentAccess> get sharedAgents; // Metadata
+  List<AgentAccess> get sharedAgents; // Social sharing fields
+  @override
+  bool get isPublic;
+  @override
+  int get viewCount;
+  @override
+  int get shareCount; // Metadata
   @override
   DateTime get createdAt;
   @override

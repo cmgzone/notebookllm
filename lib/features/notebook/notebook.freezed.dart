@@ -36,7 +36,12 @@ mixin _$Notebook {
   String? get agentIdentifier => throw _privateConstructorUsedError;
   String get agentStatus =>
       throw _privateConstructorUsedError; // 'active', 'expired', 'disconnected'
-  String get category => throw _privateConstructorUsedError;
+  String get category =>
+      throw _privateConstructorUsedError; // Social sharing fields
+  bool get isPublic => throw _privateConstructorUsedError;
+  bool get isLocked => throw _privateConstructorUsedError;
+  int get viewCount => throw _privateConstructorUsedError;
+  int get shareCount => throw _privateConstructorUsedError;
 
   /// Serializes this Notebook to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -67,7 +72,11 @@ abstract class $NotebookCopyWith<$Res> {
       String? agentName,
       String? agentIdentifier,
       String agentStatus,
-      String category});
+      String category,
+      bool isPublic,
+      bool isLocked,
+      int viewCount,
+      int shareCount});
 }
 
 /// @nodoc
@@ -99,6 +108,10 @@ class _$NotebookCopyWithImpl<$Res, $Val extends Notebook>
     Object? agentIdentifier = freezed,
     Object? agentStatus = null,
     Object? category = null,
+    Object? isPublic = null,
+    Object? isLocked = null,
+    Object? viewCount = null,
+    Object? shareCount = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -157,6 +170,22 @@ class _$NotebookCopyWithImpl<$Res, $Val extends Notebook>
           ? _value.category
           : category // ignore: cast_nullable_to_non_nullable
               as String,
+      isPublic: null == isPublic
+          ? _value.isPublic
+          : isPublic // ignore: cast_nullable_to_non_nullable
+              as bool,
+      isLocked: null == isLocked
+          ? _value.isLocked
+          : isLocked // ignore: cast_nullable_to_non_nullable
+              as bool,
+      viewCount: null == viewCount
+          ? _value.viewCount
+          : viewCount // ignore: cast_nullable_to_non_nullable
+              as int,
+      shareCount: null == shareCount
+          ? _value.shareCount
+          : shareCount // ignore: cast_nullable_to_non_nullable
+              as int,
     ) as $Val);
   }
 }
@@ -183,7 +212,11 @@ abstract class _$$NotebookImplCopyWith<$Res>
       String? agentName,
       String? agentIdentifier,
       String agentStatus,
-      String category});
+      String category,
+      bool isPublic,
+      bool isLocked,
+      int viewCount,
+      int shareCount});
 }
 
 /// @nodoc
@@ -213,6 +246,10 @@ class __$$NotebookImplCopyWithImpl<$Res>
     Object? agentIdentifier = freezed,
     Object? agentStatus = null,
     Object? category = null,
+    Object? isPublic = null,
+    Object? isLocked = null,
+    Object? viewCount = null,
+    Object? shareCount = null,
   }) {
     return _then(_$NotebookImpl(
       id: null == id
@@ -271,6 +308,22 @@ class __$$NotebookImplCopyWithImpl<$Res>
           ? _value.category
           : category // ignore: cast_nullable_to_non_nullable
               as String,
+      isPublic: null == isPublic
+          ? _value.isPublic
+          : isPublic // ignore: cast_nullable_to_non_nullable
+              as bool,
+      isLocked: null == isLocked
+          ? _value.isLocked
+          : isLocked // ignore: cast_nullable_to_non_nullable
+              as bool,
+      viewCount: null == viewCount
+          ? _value.viewCount
+          : viewCount // ignore: cast_nullable_to_non_nullable
+              as int,
+      shareCount: null == shareCount
+          ? _value.shareCount
+          : shareCount // ignore: cast_nullable_to_non_nullable
+              as int,
     ));
   }
 }
@@ -292,7 +345,11 @@ class _$NotebookImpl implements _Notebook {
       this.agentName,
       this.agentIdentifier,
       this.agentStatus = 'active',
-      this.category = 'General'});
+      this.category = 'General',
+      this.isPublic = false,
+      this.isLocked = false,
+      this.viewCount = 0,
+      this.shareCount = 0});
 
   factory _$NotebookImpl.fromJson(Map<String, dynamic> json) =>
       _$$NotebookImplFromJson(json);
@@ -332,10 +389,23 @@ class _$NotebookImpl implements _Notebook {
   @override
   @JsonKey()
   final String category;
+// Social sharing fields
+  @override
+  @JsonKey()
+  final bool isPublic;
+  @override
+  @JsonKey()
+  final bool isLocked;
+  @override
+  @JsonKey()
+  final int viewCount;
+  @override
+  @JsonKey()
+  final int shareCount;
 
   @override
   String toString() {
-    return 'Notebook(id: $id, userId: $userId, title: $title, description: $description, coverImage: $coverImage, sourceCount: $sourceCount, createdAt: $createdAt, updatedAt: $updatedAt, isAgentNotebook: $isAgentNotebook, agentSessionId: $agentSessionId, agentName: $agentName, agentIdentifier: $agentIdentifier, agentStatus: $agentStatus, category: $category)';
+    return 'Notebook(id: $id, userId: $userId, title: $title, description: $description, coverImage: $coverImage, sourceCount: $sourceCount, createdAt: $createdAt, updatedAt: $updatedAt, isAgentNotebook: $isAgentNotebook, agentSessionId: $agentSessionId, agentName: $agentName, agentIdentifier: $agentIdentifier, agentStatus: $agentStatus, category: $category, isPublic: $isPublic, isLocked: $isLocked, viewCount: $viewCount, shareCount: $shareCount)';
   }
 
   @override
@@ -367,7 +437,15 @@ class _$NotebookImpl implements _Notebook {
             (identical(other.agentStatus, agentStatus) ||
                 other.agentStatus == agentStatus) &&
             (identical(other.category, category) ||
-                other.category == category));
+                other.category == category) &&
+            (identical(other.isPublic, isPublic) ||
+                other.isPublic == isPublic) &&
+            (identical(other.isLocked, isLocked) ||
+                other.isLocked == isLocked) &&
+            (identical(other.viewCount, viewCount) ||
+                other.viewCount == viewCount) &&
+            (identical(other.shareCount, shareCount) ||
+                other.shareCount == shareCount));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -387,7 +465,11 @@ class _$NotebookImpl implements _Notebook {
       agentName,
       agentIdentifier,
       agentStatus,
-      category);
+      category,
+      isPublic,
+      isLocked,
+      viewCount,
+      shareCount);
 
   /// Create a copy of Notebook
   /// with the given fields replaced by the non-null parameter values.
@@ -420,7 +502,11 @@ abstract class _Notebook implements Notebook {
       final String? agentName,
       final String? agentIdentifier,
       final String agentStatus,
-      final String category}) = _$NotebookImpl;
+      final String category,
+      final bool isPublic,
+      final bool isLocked,
+      final int viewCount,
+      final int shareCount}) = _$NotebookImpl;
 
   factory _Notebook.fromJson(Map<String, dynamic> json) =
       _$NotebookImpl.fromJson;
@@ -452,7 +538,15 @@ abstract class _Notebook implements Notebook {
   @override
   String get agentStatus; // 'active', 'expired', 'disconnected'
   @override
-  String get category;
+  String get category; // Social sharing fields
+  @override
+  bool get isPublic;
+  @override
+  bool get isLocked;
+  @override
+  int get viewCount;
+  @override
+  int get shareCount;
 
   /// Create a copy of Notebook
   /// with the given fields replaced by the non-null parameter values.

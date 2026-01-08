@@ -7,6 +7,7 @@ import 'study_groups_screen.dart';
 import 'activity_feed_screen.dart';
 import 'social_leaderboard_screen.dart';
 import 'conversations_screen.dart';
+import 'discover_screen.dart';
 
 class SocialHubScreen extends ConsumerStatefulWidget {
   const SocialHubScreen({super.key});
@@ -202,6 +203,14 @@ class _SocialHubScreenState extends ConsumerState<SocialHubScreen> {
                     const SizedBox(height: 24),
 
                     // Main navigation cards
+                    _NavigationCard(
+                      icon: Icons.explore,
+                      title: 'Discover',
+                      subtitle: 'Find public notebooks and plans',
+                      color: Colors.indigo,
+                      onTap: () => _navigateTo(const DiscoverScreen()),
+                    ),
+                    const SizedBox(height: 12),
                     _NavigationCard(
                       icon: Icons.dynamic_feed,
                       title: 'Activity Feed',

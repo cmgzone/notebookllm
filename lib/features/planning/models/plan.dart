@@ -109,6 +109,11 @@ class Plan with _$Plan {
     @Default(true) bool isPrivate,
     @Default([]) List<AgentAccess> sharedAgents,
 
+    // Social sharing fields
+    @Default(false) bool isPublic,
+    @Default(0) int viewCount,
+    @Default(0) int shareCount,
+
     // Metadata
     required DateTime createdAt,
     required DateTime updatedAt,
@@ -154,6 +159,9 @@ class Plan with _$Plan {
                   (a) => AgentAccess.fromBackendJson(a as Map<String, dynamic>))
               .toList()
           : <AgentAccess>[],
+      isPublic: (json['isPublic'] ?? json['is_public']) as bool? ?? false,
+      viewCount: (json['viewCount'] ?? json['view_count']) as int? ?? 0,
+      shareCount: (json['shareCount'] ?? json['share_count']) as int? ?? 0,
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String)
           : json['created_at'] != null

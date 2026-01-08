@@ -22,6 +22,10 @@ _$NotebookImpl _$$NotebookImplFromJson(Map<String, dynamic> json) =>
       agentIdentifier: json['agentIdentifier'] as String?,
       agentStatus: json['agentStatus'] as String? ?? 'active',
       category: json['category'] as String? ?? 'General',
+      isPublic: json['isPublic'] as bool? ?? false,
+      isLocked: json['isLocked'] as bool? ?? false,
+      viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
+      shareCount: (json['shareCount'] as num?)?.toInt() ?? 0,
     );
 
 Map<String, dynamic> _$$NotebookImplToJson(_$NotebookImpl instance) =>
@@ -40,4 +44,8 @@ Map<String, dynamic> _$$NotebookImplToJson(_$NotebookImpl instance) =>
       'agentIdentifier': instance.agentIdentifier,
       'agentStatus': instance.agentStatus,
       'category': instance.category,
+      'isPublic': instance.isPublic,
+      'isLocked': instance.isLocked,
+      'viewCount': instance.viewCount,
+      'shareCount': instance.shareCount,
     };

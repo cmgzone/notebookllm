@@ -29,6 +29,7 @@ import mcpDownloadRoutes from './routes/mcpDownload.js';
 import githubRoutes from './routes/github.js';
 import planningRoutes from './routes/planning.js';
 import socialRoutes from './routes/social.js';
+import socialSharingRoutes from './routes/socialSharing.js';
 import messagingRoutes from './routes/messaging.js';
 import notificationsRoutes from './routes/notifications.js';
 
@@ -108,6 +109,7 @@ app.use('/api/mcp', mcpDownloadRoutes);
 app.use('/api/github', githubRoutes);
 app.use('/api/planning', planningRoutes);
 app.use('/api/social', socialRoutes);
+app.use('/api/social-sharing', socialSharingRoutes);
 app.use('/api/messaging', messagingRoutes);
 app.use('/api/notifications', notificationsRoutes);
 

@@ -22,6 +22,11 @@ class Notebook with _$Notebook {
     @Default('active')
     String agentStatus, // 'active', 'expired', 'disconnected'
     @Default('General') String category,
+    // Social sharing fields
+    @Default(false) bool isPublic,
+    @Default(false) bool isLocked,
+    @Default(0) int viewCount,
+    @Default(0) int shareCount,
   }) = _Notebook;
 
   factory Notebook.fromJson(Map<String, dynamic> json) =>

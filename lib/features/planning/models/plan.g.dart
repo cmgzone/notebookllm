@@ -78,6 +78,9 @@ _$PlanImpl _$$PlanImplFromJson(Map<String, dynamic> json) => _$PlanImpl(
               ?.map((e) => AgentAccess.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
+      isPublic: json['isPublic'] as bool? ?? false,
+      viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
+      shareCount: (json['shareCount'] as num?)?.toInt() ?? 0,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       completedAt: json['completedAt'] == null
@@ -97,6 +100,9 @@ Map<String, dynamic> _$$PlanImplToJson(_$PlanImpl instance) =>
       'tasks': instance.tasks,
       'isPrivate': instance.isPrivate,
       'sharedAgents': instance.sharedAgents,
+      'isPublic': instance.isPublic,
+      'viewCount': instance.viewCount,
+      'shareCount': instance.shareCount,
       'createdAt': instance.createdAt.toIso8601String(),
       'updatedAt': instance.updatedAt.toIso8601String(),
       'completedAt': instance.completedAt?.toIso8601String(),
