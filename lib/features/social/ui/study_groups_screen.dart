@@ -11,14 +11,41 @@ class StudyGroupsScreen extends ConsumerStatefulWidget {
   ConsumerState<StudyGroupsScreen> createState() => _StudyGroupsScreenState();
 }
 
-class _StudyGroupsScreenState extends ConsumerState<StudyGroupsScreen> {
+class _StudyGroupsScreenState extends ConsumerState<StudyGroupsScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  List<StudyGroup> _publicGroups = [];
+  bool _isLoadingPublic = false;
+  final _searchController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     Future.microtask(() {
       ref.read(studyGroupsProvider.notifier).loadGroups();
       ref.read(studyGroupsProvider.notifier).loadInvitations();
+      _loadPublicGroups();
     });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPublicGroups({String? search}) async {
+    setState(() => _isLoadingPublic = true);
+    try {
+      final groups = await ref
+          .read(studyGroupsProvider.notifier)
+          .discoverPublicGroups(search: search);
+      setState(() => _publicGroups = groups);
+    } finally {
+      setState(() => _isLoadingPublic = false);
+    }
   }
 
   @override
@@ -38,31 +65,116 @@ class _StudyGroupsScreenState extends ConsumerState<StudyGroupsScreen> {
               ),
             ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'My Groups'),
+            Tab(text: 'Discover'),
+          ],
+        ),
       ),
-      body: state.isLoading && state.groups.isEmpty
-          ? const Center(child: CircularProgressIndicator())
-          : state.groups.isEmpty
-              ? _buildEmptyState()
-              : RefreshIndicator(
-                  onRefresh: () =>
-                      ref.read(studyGroupsProvider.notifier).loadGroups(),
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: state.groups.length,
-                    itemBuilder: (context, index) {
-                      final group = state.groups[index];
-                      return _GroupCard(
-                        group: group,
-                        onTap: () => _openGroup(group),
-                      );
-                    },
-                  ),
-                ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildMyGroupsTab(state),
+          _buildDiscoverTab(),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _createGroup,
         icon: const Icon(Icons.add),
         label: const Text('Create Group'),
       ),
+    );
+  }
+
+  Widget _buildMyGroupsTab(StudyGroupsState state) {
+    if (state.isLoading && state.groups.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (state.groups.isEmpty) {
+      return _buildEmptyState();
+    }
+    return RefreshIndicator(
+      onRefresh: () => ref.read(studyGroupsProvider.notifier).loadGroups(),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: state.groups.length,
+        itemBuilder: (context, index) {
+          final group = state.groups[index];
+          return _GroupCard(
+            group: group,
+            onTap: () => _openGroup(group),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDiscoverTab() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search public groups...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        _loadPublicGroups();
+                      },
+                    )
+                  : null,
+            ),
+            onSubmitted: (value) => _loadPublicGroups(search: value),
+          ),
+        ),
+        Expanded(
+          child: _isLoadingPublic
+              ? const Center(child: CircularProgressIndicator())
+              : _publicGroups.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.public_off,
+                              size: 64, color: Colors.grey[400]),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No public groups found',
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: () => _loadPublicGroups(
+                          search: _searchController.text.isEmpty
+                              ? null
+                              : _searchController.text),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: _publicGroups.length,
+                        itemBuilder: (context, index) {
+                          final group = _publicGroups[index];
+                          return _PublicGroupCard(
+                            group: group,
+                            onJoin: () => _joinGroup(group),
+                            onTap: () => _openGroup(group),
+                          );
+                        },
+                      ),
+                    ),
+        ),
+      ],
     );
   }
 
@@ -79,12 +191,36 @@ class _StudyGroupsScreenState extends ConsumerState<StudyGroupsScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Create a group to study with friends',
+            'Create a group or discover public groups',
             style: TextStyle(color: Colors.grey[500]),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () => _tabController.animateTo(1),
+            icon: const Icon(Icons.public),
+            label: const Text('Discover Groups'),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _joinGroup(StudyGroup group) async {
+    try {
+      await ref.read(studyGroupsProvider.notifier).joinPublicGroup(group.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Joined ${group.name}!')),
+        );
+        _loadPublicGroups();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to join: $e')),
+        );
+      }
+    }
   }
 
   void _openGroup(StudyGroup group) {
@@ -389,6 +525,113 @@ class _InvitationsSheet extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
       ],
+    );
+  }
+}
+
+class _PublicGroupCard extends StatelessWidget {
+  final StudyGroup group;
+  final VoidCallback onJoin;
+  final VoidCallback onTap;
+
+  const _PublicGroupCard({
+    required this.group,
+    required this.onJoin,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isMember =
+        group.role != GroupRole.member || group.isOwner || group.isAdmin;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: isMember ? onTap : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(group.icon, style: const TextStyle(fontSize: 28)),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      group.name,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (group.description != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        group.description!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.people, size: 16, color: Colors.grey[500]),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${group.memberCount} members',
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[500]),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (group.role != GroupRole.member)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.green[100],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    'Joined',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.green[800],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                )
+              else
+                ElevatedButton(
+                  onPressed: onJoin,
+                  style: ElevatedButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                  child: const Text('Join'),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

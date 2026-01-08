@@ -200,6 +200,42 @@ router.get('/groups/invitations/pending', async (req: AuthRequest, res: Response
   }
 });
 
+// Discover public groups
+router.get('/groups/discover', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { limit, offset, search } = req.query;
+    const groups = await studyGroupService.getPublicGroups(userId, {
+      limit: limit ? Math.min(parseInt(limit as string) || 20, 50) : 20,
+      offset: offset ? parseInt(offset as string) || 0 : 0,
+      search: search as string
+    });
+    res.json({ groups });
+  } catch (error: any) {
+    handleError(error, res);
+  }
+});
+
+// Join a public group
+router.post('/groups/:id/join', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID required', code: 'VALIDATION_ERROR' });
+    }
+    
+    await studyGroupService.joinPublicGroup(id, userId);
+    res.json({ success: true });
+  } catch (error: any) {
+    handleError(error, res);
+  }
+});
+
 // Accept group invitation
 router.post('/groups/invitations/:id/accept', async (req: AuthRequest, res: Response) => {
   try {

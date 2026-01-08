@@ -86,6 +86,77 @@ export const studyGroupService = {
     return result.rows;
   },
 
+  async getPublicGroups(userId: string, options?: { limit?: number; offset?: number; search?: string }) {
+    const limit = Math.min(options?.limit || 20, 50);
+    const offset = options?.offset || 0;
+    
+    let query = `
+      SELECT g.*, 
+        (SELECT COUNT(*) FROM study_group_members WHERE group_id = g.id) as member_count,
+        (SELECT role FROM study_group_members WHERE group_id = g.id AND user_id = $1) as user_role,
+        u.display_name as owner_username
+      FROM study_groups g
+      JOIN users u ON u.id = g.owner_id
+      WHERE g.is_public = true
+    `;
+    const params: any[] = [userId];
+    
+    if (options?.search) {
+      params.push(`%${options.search}%`);
+      query += ` AND (g.name ILIKE $${params.length} OR g.description ILIKE $${params.length})`;
+    }
+    
+    query += ` ORDER BY member_count DESC, g.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
+    
+    const result = await pool.query(query, params);
+    return result.rows;
+  },
+
+  async joinPublicGroup(groupId: string, userId: string) {
+    // Check if group is public
+    const groupCheck = await pool.query(
+      'SELECT is_public, max_members FROM study_groups WHERE id = $1',
+      [groupId]
+    );
+    
+    if (groupCheck.rows.length === 0) {
+      throw new Error('Group not found');
+    }
+    
+    if (!groupCheck.rows[0].is_public) {
+      throw new Error('This group is not public');
+    }
+    
+    // Check member count
+    const memberCount = await pool.query(
+      'SELECT COUNT(*) FROM study_group_members WHERE group_id = $1',
+      [groupId]
+    );
+    
+    if (parseInt(memberCount.rows[0].count) >= groupCheck.rows[0].max_members) {
+      throw new Error('Group is full');
+    }
+    
+    // Check if already a member
+    const existingMember = await pool.query(
+      'SELECT id FROM study_group_members WHERE group_id = $1 AND user_id = $2',
+      [groupId, userId]
+    );
+    
+    if (existingMember.rows.length > 0) {
+      throw new Error('Already a member of this group');
+    }
+    
+    // Join the group
+    await pool.query(
+      'INSERT INTO study_group_members (group_id, user_id, role) VALUES ($1, $2, $3)',
+      [groupId, userId, 'member']
+    );
+    
+    return { success: true };
+  },
+
 
   async updateGroup(groupId: string, userId: string, data: Partial<StudyGroup>) {
     // Check if user is owner or admin

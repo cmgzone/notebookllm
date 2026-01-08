@@ -328,6 +328,26 @@ class StudyGroupsNotifier extends StateNotifier<StudyGroupsState> {
     });
     return StudySession.fromJson(response['session']);
   }
+
+  Future<List<StudyGroup>> discoverPublicGroups({
+    int limit = 20,
+    int offset = 0,
+    String? search,
+  }) async {
+    String url = '/social/groups/discover?limit=$limit&offset=$offset';
+    if (search != null && search.isNotEmpty) {
+      url += '&search=${Uri.encodeComponent(search)}';
+    }
+    final response = await _api.get(url);
+    final groupsList = response['groups'];
+    if (groupsList == null) return [];
+    return (groupsList as List).map((g) => StudyGroup.fromJson(g)).toList();
+  }
+
+  Future<void> joinPublicGroup(String groupId) async {
+    await _api.post('/social/groups/$groupId/join', {});
+    await loadGroups();
+  }
 }
 
 final studyGroupsProvider =

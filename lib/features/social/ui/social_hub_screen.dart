@@ -51,6 +51,9 @@ class _SocialHubScreenState extends ConsumerState<SocialHubScreen> {
     final friendsState = ref.watch(friendsProvider);
     final groupsState = ref.watch(studyGroupsProvider);
 
+    // Show loading indicator while data is being fetched
+    final isLoading = friendsState.isLoading || groupsState.isLoading;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Social'),
@@ -59,181 +62,187 @@ class _SocialHubScreenState extends ConsumerState<SocialHubScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: () {
               ref.read(friendsProvider.notifier).loadFriends();
+              ref.read(friendsProvider.notifier).loadRequests();
               ref.read(studyGroupsProvider.notifier).loadGroups();
+              ref.read(studyGroupsProvider.notifier).loadInvitations();
             },
           ),
         ],
       ),
-      body: friendsState.error != null || groupsState.error != null
-          ? Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : friendsState.error != null || groupsState.error != null
+              ? Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline,
+                            size: 64, color: Colors.red[300]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error loading social data',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 18,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (friendsState.error != null)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Friends Error:',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _formatError(friendsState.error!),
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Colors.red),
+                                  textAlign: TextAlign.left,
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (groupsState.error != null)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Groups Error:',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _formatError(groupsState.error!),
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Colors.orange),
+                                  textAlign: TextAlign.left,
+                                ),
+                              ],
+                            ),
+                          ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'This may be a temporary issue. Please try again.',
+                          style:
+                              TextStyle(color: Colors.grey[500], fontSize: 13),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            ref.read(friendsProvider.notifier).loadFriends();
+                            ref.read(friendsProvider.notifier).loadRequests();
+                            ref.read(studyGroupsProvider.notifier).loadGroups();
+                            ref
+                                .read(studyGroupsProvider.notifier)
+                                .loadInvitations();
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(16),
                   children: [
-                    Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Error loading social data',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    // Quick stats
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _QuickStatCard(
+                            icon: Icons.people,
+                            label: 'Friends',
+                            value: '${friendsState.friends.length}',
+                            color: Colors.blue,
+                            onTap: () => _navigateTo(const FriendsScreen()),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _QuickStatCard(
+                            icon: Icons.groups,
+                            label: 'Groups',
+                            value: '${groupsState.groups.length}',
+                            color: Colors.green,
+                            onTap: () => _navigateTo(const StudyGroupsScreen()),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Main navigation cards
+                    _NavigationCard(
+                      icon: Icons.dynamic_feed,
+                      title: 'Activity Feed',
+                      subtitle: 'See what your friends are up to',
+                      color: Colors.purple,
+                      onTap: () => _navigateTo(const ActivityFeedScreen()),
                     ),
                     const SizedBox(height: 12),
-                    if (friendsState.error != null)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Friends Error:',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _formatError(friendsState.error!),
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.red),
-                              textAlign: TextAlign.left,
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (groupsState.error != null)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Groups Error:',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.orange,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _formatError(groupsState.error!),
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.orange),
-                              textAlign: TextAlign.left,
-                            ),
-                          ],
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'This may be a temporary issue. Please try again.',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 13),
-                      textAlign: TextAlign.center,
+                    _NavigationCard(
+                      icon: Icons.leaderboard,
+                      title: 'Leaderboard',
+                      subtitle: 'Compete with friends and globally',
+                      color: Colors.orange,
+                      onTap: () => _navigateTo(const SocialLeaderboardScreen()),
                     ),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        ref.read(friendsProvider.notifier).loadFriends();
-                        ref.read(friendsProvider.notifier).loadRequests();
-                        ref.read(studyGroupsProvider.notifier).loadGroups();
-                        ref
-                            .read(studyGroupsProvider.notifier)
-                            .loadInvitations();
-                      },
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Retry'),
+                    const SizedBox(height: 12),
+                    _NavigationCard(
+                      icon: Icons.people,
+                      title: 'Friends',
+                      subtitle: 'Manage your friends and requests',
+                      color: Colors.blue,
+                      badge: friendsState.receivedRequests.isNotEmpty
+                          ? '${friendsState.receivedRequests.length}'
+                          : null,
+                      onTap: () => _navigateTo(const FriendsScreen()),
+                    ),
+                    const SizedBox(height: 12),
+                    _MessagesCard(),
+                    const SizedBox(height: 12),
+                    _NavigationCard(
+                      icon: Icons.groups,
+                      title: 'Study Groups',
+                      subtitle: 'Join or create study groups',
+                      color: Colors.green,
+                      badge: groupsState.invitations.isNotEmpty
+                          ? '${groupsState.invitations.length}'
+                          : null,
+                      onTap: () => _navigateTo(const StudyGroupsScreen()),
                     ),
                   ],
                 ),
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                // Quick stats
-                Row(
-                  children: [
-                    Expanded(
-                      child: _QuickStatCard(
-                        icon: Icons.people,
-                        label: 'Friends',
-                        value: '${friendsState.friends.length}',
-                        color: Colors.blue,
-                        onTap: () => _navigateTo(const FriendsScreen()),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _QuickStatCard(
-                        icon: Icons.groups,
-                        label: 'Groups',
-                        value: '${groupsState.groups.length}',
-                        color: Colors.green,
-                        onTap: () => _navigateTo(const StudyGroupsScreen()),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // Main navigation cards
-                _NavigationCard(
-                  icon: Icons.dynamic_feed,
-                  title: 'Activity Feed',
-                  subtitle: 'See what your friends are up to',
-                  color: Colors.purple,
-                  onTap: () => _navigateTo(const ActivityFeedScreen()),
-                ),
-                const SizedBox(height: 12),
-                _NavigationCard(
-                  icon: Icons.leaderboard,
-                  title: 'Leaderboard',
-                  subtitle: 'Compete with friends and globally',
-                  color: Colors.orange,
-                  onTap: () => _navigateTo(const SocialLeaderboardScreen()),
-                ),
-                const SizedBox(height: 12),
-                _NavigationCard(
-                  icon: Icons.people,
-                  title: 'Friends',
-                  subtitle: 'Manage your friends and requests',
-                  color: Colors.blue,
-                  badge: friendsState.receivedRequests.isNotEmpty
-                      ? '${friendsState.receivedRequests.length}'
-                      : null,
-                  onTap: () => _navigateTo(const FriendsScreen()),
-                ),
-                const SizedBox(height: 12),
-                _MessagesCard(),
-                const SizedBox(height: 12),
-                _NavigationCard(
-                  icon: Icons.groups,
-                  title: 'Study Groups',
-                  subtitle: 'Join or create study groups',
-                  color: Colors.green,
-                  badge: groupsState.invitations.isNotEmpty
-                      ? '${groupsState.invitations.length}'
-                      : null,
-                  onTap: () => _navigateTo(const StudyGroupsScreen()),
-                ),
-              ],
-            ),
     );
   }
 

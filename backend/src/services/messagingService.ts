@@ -171,6 +171,12 @@ export const messagingService = {
     otherUserId: string,
     options?: { limit?: number; before?: string }
   ): Promise<Message[]> {
+    // First check if users are friends
+    const areFriends = await checkAreFriends(userId, otherUserId);
+    if (!areFriends) {
+      throw new ValidationError('You can only view messages with friends');
+    }
+    
     const limit = Math.min(options?.limit || 50, 100);
     const conversationId = await getOrCreateConversation(userId, otherUserId);
     
