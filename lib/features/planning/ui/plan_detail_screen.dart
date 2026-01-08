@@ -11,6 +11,8 @@ import '../models/requirement.dart';
 import '../planning_provider.dart';
 import 'plan_sharing_sheet.dart';
 import 'task_list_widget.dart';
+import '../../social/ui/share_content_sheet.dart';
+import '../../social/ui/content_privacy_sheet.dart';
 
 /// Plan detail screen showing requirements, design notes, tasks sections.
 /// Implements Requirements: 1.3, 4.1, 8.1
@@ -177,6 +179,27 @@ class _PlanDetailScreenState extends ConsumerState<PlanDetailScreen>
                   icon: const Icon(Icons.more_vert, color: Colors.white),
                   onSelected: (value) => _handleMenuAction(value, plan),
                   itemBuilder: (ctx) => [
+                    const PopupMenuItem(
+                      value: 'social_share',
+                      child: Row(
+                        children: [
+                          Icon(LucideIcons.share, size: 18),
+                          SizedBox(width: 8),
+                          Text('Share to Feed'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'privacy',
+                      child: Row(
+                        children: [
+                          Icon(LucideIcons.lock, size: 18),
+                          SizedBox(width: 8),
+                          Text('Privacy Settings'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
                     const PopupMenuItem(
                       value: 'edit',
                       child: Row(
@@ -388,6 +411,24 @@ class _PlanDetailScreenState extends ConsumerState<PlanDetailScreen>
 
   void _handleMenuAction(String action, Plan plan) {
     switch (action) {
+      case 'social_share':
+        showShareContentSheet(
+          context,
+          contentType: 'plan',
+          contentId: plan.id,
+          contentTitle: plan.title,
+        );
+        break;
+      case 'privacy':
+        showContentPrivacySheet(
+          context,
+          contentType: 'plan',
+          contentId: plan.id,
+          contentTitle: plan.title,
+          isPublic: plan.isPublic,
+          isLocked: false, // Plans don't have lock feature
+        );
+        break;
       case 'edit':
         _showEditPlanDialog(context, plan);
         break;

@@ -16,6 +16,8 @@ import '../mindmap/mind_map_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../core/extensions/color_compat.dart';
 import '../subscription/services/credit_manager.dart';
+import '../social/ui/share_content_sheet.dart';
+import '../social/ui/content_privacy_sheet.dart';
 
 class NotebookDetailScreen extends ConsumerWidget {
   final String notebookId;
@@ -125,6 +127,17 @@ class NotebookDetailScreen extends ConsumerWidget {
               ),
             ),
             actions: [
+              // Share button
+              IconButton(
+                onPressed: () => showShareContentSheet(
+                  context,
+                  contentType: 'notebook',
+                  contentId: notebookId,
+                  contentTitle: notebook.title,
+                ),
+                icon: const Icon(Icons.share, color: Colors.white),
+                tooltip: 'Share notebook',
+              ),
               IconButton(
                 onPressed: () => _showNotebookActions(context, ref, notebook),
                 icon: const Icon(Icons.more_vert, color: Colors.white),
@@ -452,6 +465,44 @@ class NotebookDetailScreen extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ListTile(
+              leading: const Icon(Icons.share),
+              title: const Text('Share Notebook'),
+              subtitle: const Text('Post to discover feed'),
+              onTap: () {
+                Navigator.pop(context);
+                showShareContentSheet(
+                  context,
+                  contentType: 'notebook',
+                  contentId: notebookId,
+                  contentTitle: notebook.title,
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.lock_outline),
+              title: const Text('Privacy Settings'),
+              subtitle: Text(notebook.isPublic ? 'Public' : 'Private'),
+              onTap: () {
+                Navigator.pop(context);
+                showContentPrivacySheet(
+                  context,
+                  contentType: 'notebook',
+                  contentId: notebookId,
+                  contentTitle: notebook.title,
+                  isPublic: notebook.isPublic,
+                  isLocked: notebook.isLocked,
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.visibility),
+              title: const Text('View Stats'),
+              subtitle: Text(
+                  '${notebook.viewCount} views • ${notebook.shareCount} shares'),
+              onTap: () => Navigator.pop(context),
+            ),
+            const Divider(),
             ListTile(
               leading: const Icon(Icons.image),
               title: const Text('Change Cover'),

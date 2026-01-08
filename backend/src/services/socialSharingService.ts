@@ -89,11 +89,18 @@ export const socialSharingService = {
       RETURNING *
     `, [userId, contentType, contentId, caption, isPublic]);
 
-    // Update share count on original content
+    // Update share count AND set is_public on original content
+    // This makes the content discoverable in the discover feed
     if (contentType === 'notebook') {
-      await pool.query('UPDATE notebooks SET share_count = share_count + 1 WHERE id = $1', [contentId]);
+      await pool.query(
+        'UPDATE notebooks SET share_count = share_count + 1, is_public = $2, updated_at = NOW() WHERE id = $1', 
+        [contentId, isPublic]
+      );
     } else {
-      await pool.query('UPDATE plans SET share_count = share_count + 1 WHERE id = $1', [contentId]);
+      await pool.query(
+        'UPDATE plans SET share_count = share_count + 1, is_public = $2, updated_at = NOW() WHERE id = $1', 
+        [contentId, isPublic]
+      );
     }
 
     // Log activity
@@ -127,11 +134,11 @@ export const socialSharingService = {
         u.display_name as username,
         u.avatar_url,
         CASE 
-          WHEN sc.content_type = 'notebook' THEN (SELECT title FROM notebooks WHERE id = sc.content_id)
+          WHEN sc.content_type = 'notebook' THEN (SELECT title FROM notebooks WHERE id = sc.content_id::text)
           WHEN sc.content_type = 'plan' THEN (SELECT title FROM plans WHERE id = sc.content_id)
         END as content_title,
         CASE 
-          WHEN sc.content_type = 'notebook' THEN (SELECT description FROM notebooks WHERE id = sc.content_id)
+          WHEN sc.content_type = 'notebook' THEN (SELECT description FROM notebooks WHERE id = sc.content_id::text)
           WHEN sc.content_type = 'plan' THEN (SELECT description FROM plans WHERE id = sc.content_id)
         END as content_description,
         (SELECT COUNT(*) FROM content_likes WHERE content_type = 'shared_content' AND content_id = sc.id) as like_count,
@@ -190,8 +197,8 @@ export const socialSharingService = {
         u.display_name as username,
         u.avatar_url,
         (SELECT COUNT(*) FROM sources WHERE notebook_id = n.id) as source_count,
-        (SELECT COUNT(*) FROM content_likes WHERE content_type = 'notebook' AND content_id = n.id) as like_count,
-        EXISTS(SELECT 1 FROM content_likes WHERE content_type = 'notebook' AND content_id = n.id AND user_id = $1) as user_liked
+        (SELECT COUNT(*) FROM content_likes WHERE content_type = 'notebook' AND content_id::text = n.id) as like_count,
+        EXISTS(SELECT 1 FROM content_likes WHERE content_type = 'notebook' AND content_id::text = n.id AND user_id = $1) as user_liked
       FROM notebooks n
       JOIN users u ON u.id = n.user_id
       ${whereClause}
@@ -387,12 +394,12 @@ export const socialSharingService = {
       SELECT 
         cs.*,
         CASE 
-          WHEN cs.content_type = 'notebook' THEN (SELECT title FROM notebooks WHERE id = cs.content_id)
+          WHEN cs.content_type = 'notebook' THEN (SELECT title FROM notebooks WHERE id = cs.content_id::text)
           WHEN cs.content_type = 'plan' THEN (SELECT title FROM plans WHERE id = cs.content_id)
           WHEN cs.content_type = 'shared_content' THEN (SELECT caption FROM shared_content WHERE id = cs.content_id)
         END as content_title,
         CASE 
-          WHEN cs.content_type = 'notebook' THEN (SELECT user_id FROM notebooks WHERE id = cs.content_id)
+          WHEN cs.content_type = 'notebook' THEN (SELECT user_id FROM notebooks WHERE id = cs.content_id::text)
           WHEN cs.content_type = 'plan' THEN (SELECT user_id FROM plans WHERE id = cs.content_id)
           WHEN cs.content_type = 'shared_content' THEN (SELECT user_id FROM shared_content WHERE id = cs.content_id)
         END as owner_id
@@ -427,7 +434,7 @@ export const socialSharingService = {
         (SELECT COALESCE(SUM(view_count), 0) FROM notebooks WHERE user_id = $1) +
         (SELECT COALESCE(SUM(view_count), 0) FROM plans WHERE user_id = $1) as total_views,
         (SELECT COUNT(*) FROM content_likes cl 
-         JOIN notebooks n ON cl.content_id = n.id AND cl.content_type = 'notebook' 
+         JOIN notebooks n ON cl.content_id::text = n.id AND cl.content_type = 'notebook' 
          WHERE n.user_id = $1) +
         (SELECT COUNT(*) FROM content_likes cl 
          JOIN plans p ON cl.content_id = p.id AND cl.content_type = 'plan' 
