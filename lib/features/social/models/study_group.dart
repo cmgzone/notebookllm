@@ -2,6 +2,13 @@ import 'package:notebook_llm/core/utils/app_logger.dart';
 
 const _logger = AppLogger('StudyGroup');
 
+// Helper to safely parse int from dynamic (handles String or int)
+int _parseInt(dynamic value) {
+  if (value is int) return value;
+  if (value is String) return int.tryParse(value) ?? 0;
+  return 0;
+}
+
 class StudyGroup {
   final String id;
   final String name;
@@ -44,8 +51,9 @@ class StudyGroup {
         coverImageUrl:
             (json['cover_image_url'] ?? json['coverImageUrl']) as String?,
         isPublic: (json['is_public'] ?? json['isPublic'] ?? false) as bool,
-        maxMembers: (json['max_members'] ?? json['maxMembers'] ?? 50) as int,
-        memberCount: (json['member_count'] ?? json['memberCount'] ?? 1) as int,
+        maxMembers: _parseInt(json['max_members'] ?? json['maxMembers'] ?? 50),
+        memberCount:
+            _parseInt(json['member_count'] ?? json['memberCount'] ?? 1),
         userRole: (json['user_role'] ?? json['userRole']) as String?,
         createdAt:
             DateTime.parse((json['created_at'] ?? json['createdAt']) as String),
@@ -129,7 +137,7 @@ class StudySession {
       description: json['description'],
       scheduledAt: DateTime.parse(json['scheduled_at'] ?? json['scheduledAt']),
       durationMinutes:
-          json['duration_minutes'] ?? json['durationMinutes'] ?? 60,
+          _parseInt(json['duration_minutes'] ?? json['durationMinutes'] ?? 60),
       meetingUrl: json['meeting_url'] ?? json['meetingUrl'],
       createdBy: json['created_by'] ?? json['createdBy'],
       createdByUsername:
