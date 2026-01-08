@@ -148,9 +148,12 @@ class DirectChatNotifier extends StateNotifier<DirectChatState> {
 
   Future<void> loadMessages({bool loadMore = false}) async {
     if (state.otherUserId == null) return;
-    if (state.isLoading && !loadMore) return;
+    if (state.isLoading && loadMore) return; // Only skip if loading more
 
-    state = state.copyWith(isLoading: true, error: null);
+    if (!loadMore) {
+      state = state.copyWith(isLoading: true, error: null);
+    }
+
     try {
       String url = '/messaging/direct/${state.otherUserId}?limit=50';
       if (loadMore && state.messages.isNotEmpty) {
@@ -166,6 +169,7 @@ class DirectChatNotifier extends StateNotifier<DirectChatState> {
         messages: loadMore ? [...messages, ...state.messages] : messages,
         isLoading: false,
         hasMore: messages.length >= 50,
+        error: null,
       );
 
       // Mark as read
@@ -173,7 +177,8 @@ class DirectChatNotifier extends StateNotifier<DirectChatState> {
         await _api.post('/messaging/direct/${state.otherUserId}/read', {});
       }
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      final errorMsg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+      state = state.copyWith(isLoading: false, error: errorMsg);
     }
   }
 

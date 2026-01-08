@@ -91,24 +91,73 @@ class _DirectChatScreenState extends ConsumerState<DirectChatScreen> {
           Expanded(
             child: state.isLoading && state.messages.isEmpty
                 ? const Center(child: CircularProgressIndicator())
-                : state.messages.isEmpty
-                    ? _buildEmptyState(theme)
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: state.messages.length,
-                        itemBuilder: (context, index) {
-                          final message = state.messages[index];
-                          final isMe = message.senderId == currentUserId;
-                          return _MessageBubble(
-                            message: message,
-                            isMe: isMe,
-                          );
-                        },
-                      ),
+                : state.error != null && state.messages.isEmpty
+                    ? _buildErrorState(theme, state.error!)
+                    : state.messages.isEmpty
+                        ? _buildEmptyState(theme)
+                        : ListView.builder(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.all(16),
+                            itemCount: state.messages.length,
+                            itemBuilder: (context, index) {
+                              final message = state.messages[index];
+                              final isMe = message.senderId == currentUserId;
+                              return _MessageBubble(
+                                message: message,
+                                isMe: isMe,
+                              );
+                            },
+                          ),
           ),
           _buildInputBar(theme),
         ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(ThemeData theme, String error) {
+    final isFriendError = error.toLowerCase().contains('friend');
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isFriendError ? Icons.person_add_outlined : Icons.error_outline,
+              size: 64,
+              color: isFriendError
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.error,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isFriendError ? 'Not Friends Yet' : 'Unable to Load Chat',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isFriendError
+                  ? 'You can only message users who are your friends. Send a friend request first!'
+                  : error,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
+            if (isFriendError) ...[
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Go Back'),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
