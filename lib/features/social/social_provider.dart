@@ -7,6 +7,9 @@ import 'models/activity.dart';
 
 const _logger = AppLogger('SocialProvider');
 
+// Sentinel value to distinguish between "not passed" and "passed as null"
+const _sentinel = Object();
+
 // State classes
 class FriendsState {
   final List<Friend> friends;
@@ -28,14 +31,14 @@ class FriendsState {
     List<FriendRequest>? receivedRequests,
     List<FriendRequest>? sentRequests,
     bool? isLoading,
-    String? error,
+    Object? error = _sentinel,
   }) {
     return FriendsState(
       friends: friends ?? this.friends,
       receivedRequests: receivedRequests ?? this.receivedRequests,
       sentRequests: sentRequests ?? this.sentRequests,
       isLoading: isLoading ?? this.isLoading,
-      error: error,
+      error: error == _sentinel ? this.error : error as String?,
     );
   }
 }
@@ -57,13 +60,13 @@ class StudyGroupsState {
     List<StudyGroup>? groups,
     List<GroupInvitation>? invitations,
     bool? isLoading,
-    String? error,
+    Object? error = _sentinel,
   }) {
     return StudyGroupsState(
       groups: groups ?? this.groups,
       invitations: invitations ?? this.invitations,
       isLoading: isLoading ?? this.isLoading,
-      error: error,
+      error: error == _sentinel ? this.error : error as String?,
     );
   }
 }
@@ -85,13 +88,13 @@ class ActivityFeedState {
     List<Activity>? activities,
     bool? isLoading,
     bool? hasMore,
-    String? error,
+    Object? error = _sentinel,
   }) {
     return ActivityFeedState(
       activities: activities ?? this.activities,
       isLoading: isLoading ?? this.isLoading,
       hasMore: hasMore ?? this.hasMore,
-      error: error,
+      error: error == _sentinel ? this.error : error as String?,
     );
   }
 }
@@ -122,7 +125,7 @@ class LeaderboardState {
     String? period,
     String? metric,
     bool? isLoading,
-    String? error,
+    Object? error = _sentinel,
   }) {
     return LeaderboardState(
       entries: entries ?? this.entries,
@@ -131,7 +134,7 @@ class LeaderboardState {
       period: period ?? this.period,
       metric: metric ?? this.metric,
       isLoading: isLoading ?? this.isLoading,
-      error: error,
+      error: error == _sentinel ? this.error : error as String?,
     );
   }
 }
@@ -178,10 +181,13 @@ class FriendsNotifier extends StateNotifier<FriendsState> {
       final sent = sentList != null
           ? (sentList as List).map((r) => FriendRequest.fromJson(r)).toList()
           : <FriendRequest>[];
-      state = state.copyWith(receivedRequests: received, sentRequests: sent);
+      state = state.copyWith(
+          receivedRequests: received, sentRequests: sent, error: null);
     } catch (e) {
-      final errorMsg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
-      state = state.copyWith(error: errorMsg);
+      // Don't set error for requests - it's not critical
+      // Just log it and continue with empty lists
+      _logger.error('Error loading friend requests', e);
+      state = state.copyWith(receivedRequests: [], sentRequests: []);
     }
   }
 
@@ -254,18 +260,19 @@ class StudyGroupsNotifier extends StateNotifier<StudyGroupsState> {
       _logger.debug('Invitations response: $response');
       final invitationsList = response['invitations'];
       if (invitationsList == null) {
-        state = state.copyWith(invitations: []);
+        state = state.copyWith(invitations: [], error: null);
         return;
       }
       final invitations = (invitationsList as List)
           .map((i) => GroupInvitation.fromJson(i))
           .toList();
       _logger.debug('Loaded ${invitations.length} invitations');
-      state = state.copyWith(invitations: invitations);
+      state = state.copyWith(invitations: invitations, error: null);
     } catch (e, stack) {
       _logger.error('Error loading invitations', e, stack);
-      final errorMsg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
-      state = state.copyWith(error: errorMsg);
+      // Don't set error for invitations - it's not critical
+      // Just log it and continue with empty invitations
+      state = state.copyWith(invitations: []);
     }
   }
 
