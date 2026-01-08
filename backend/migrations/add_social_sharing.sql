@@ -21,7 +21,7 @@ ALTER TABLE plans ADD COLUMN IF NOT EXISTS share_count INTEGER DEFAULT 0;
 -- =====================================================
 CREATE TABLE IF NOT EXISTS shared_content (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content_type VARCHAR(50) NOT NULL, -- 'notebook', 'plan'
     content_id UUID NOT NULL,
     caption TEXT,
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS content_views (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     content_type VARCHAR(50) NOT NULL, -- 'notebook', 'plan', 'shared_content'
     content_id UUID NOT NULL,
-    viewer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    viewer_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     viewer_ip VARCHAR(45), -- For anonymous view tracking
     viewed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS content_likes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     content_type VARCHAR(50) NOT NULL, -- 'notebook', 'plan', 'shared_content'
     content_id UUID NOT NULL,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(content_type, content_id, user_id)
 );
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS content_saves (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     content_type VARCHAR(50) NOT NULL,
     content_id UUID NOT NULL,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(content_type, content_id, user_id)
 );
