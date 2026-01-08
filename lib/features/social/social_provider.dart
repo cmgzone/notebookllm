@@ -382,6 +382,150 @@ class ActivityFeedNotifier extends StateNotifier<ActivityFeedState> {
     }
   }
 
+  /// Log a new activity to the feed
+  Future<void> logActivity({
+    required ActivityType activityType,
+    required String title,
+    String? description,
+    String? referenceId,
+    String? referenceType,
+    Map<String, dynamic>? metadata,
+    bool isPublic = true,
+  }) async {
+    try {
+      await _api.post('/social/activities', {
+        'activityType': activityType.value,
+        'title': title,
+        if (description != null) 'description': description,
+        if (referenceId != null) 'referenceId': referenceId,
+        if (referenceType != null) 'referenceType': referenceType,
+        if (metadata != null) 'metadata': metadata,
+        'isPublic': isPublic,
+      });
+      // Optionally refresh feed to show new activity
+      await loadFeed(refresh: true);
+    } catch (e) {
+      _logger.error('Error logging activity', e);
+      // Don't throw - activity logging shouldn't break the app
+    }
+  }
+
+  /// Helper methods for common activity types
+  Future<void> logSourceShared(
+      String sourceTitle, String sourceId, String sourceType) async {
+    await logActivity(
+      activityType: ActivityType.sourceShared,
+      title: 'Shared a $sourceType: $sourceTitle',
+      referenceId: sourceId,
+      referenceType: 'source',
+      metadata: {'sourceTitle': sourceTitle, 'sourceType': sourceType},
+    );
+  }
+
+  Future<void> logPlanShared(String planTitle, String planId,
+      {String? category}) async {
+    await logActivity(
+      activityType: ActivityType.planShared,
+      title: 'Shared project plan: $planTitle',
+      description: category != null ? 'Category: $category' : null,
+      referenceId: planId,
+      referenceType: 'plan',
+      metadata: {
+        'planTitle': planTitle,
+        if (category != null) 'category': category
+      },
+    );
+  }
+
+  Future<void> logPodcastGenerated(String podcastTitle, String podcastId,
+      {int? durationSeconds}) async {
+    await logActivity(
+      activityType: ActivityType.podcastGenerated,
+      title: 'Generated podcast: $podcastTitle',
+      description: durationSeconds != null
+          ? 'Duration: ${(durationSeconds / 60).round()} minutes'
+          : null,
+      referenceId: podcastId,
+      referenceType: 'podcast',
+      metadata: {
+        'podcastTitle': podcastTitle,
+        if (durationSeconds != null) 'duration': durationSeconds
+      },
+    );
+  }
+
+  Future<void> logResearchCompleted(String topic, String researchId) async {
+    await logActivity(
+      activityType: ActivityType.researchCompleted,
+      title: 'Completed deep research: $topic',
+      referenceId: researchId,
+      referenceType: 'research',
+      metadata: {'topic': topic},
+    );
+  }
+
+  Future<void> logImageUploaded(int imageCount, {String? notebookId}) async {
+    await logActivity(
+      activityType: ActivityType.imageUploaded,
+      title: 'Uploaded $imageCount image${imageCount > 1 ? 's' : ''}',
+      referenceId: notebookId,
+      referenceType: 'notebook',
+      metadata: {'imageCount': imageCount},
+    );
+  }
+
+  Future<void> logEbookCreated(String ebookTitle, String ebookId) async {
+    await logActivity(
+      activityType: ActivityType.ebookCreated,
+      title: 'Created ebook: $ebookTitle',
+      referenceId: ebookId,
+      referenceType: 'ebook',
+      metadata: {'ebookTitle': ebookTitle},
+    );
+  }
+
+  Future<void> logProjectStarted(
+      String projectTitle, String projectId, String category) async {
+    await logActivity(
+      activityType: ActivityType.projectStarted,
+      title: 'Started new $category project: $projectTitle',
+      referenceId: projectId,
+      referenceType: 'project',
+      metadata: {'projectTitle': projectTitle, 'category': category},
+    );
+  }
+
+  Future<void> logMindmapCreated(String mindmapTitle, String mindmapId) async {
+    await logActivity(
+      activityType: ActivityType.mindmapCreated,
+      title: 'Created mind map: $mindmapTitle',
+      referenceId: mindmapId,
+      referenceType: 'mindmap',
+      metadata: {'mindmapTitle': mindmapTitle},
+    );
+  }
+
+  Future<void> logInfographicCreated(
+      String infographicTitle, String infographicId) async {
+    await logActivity(
+      activityType: ActivityType.infographicCreated,
+      title: 'Created infographic: $infographicTitle',
+      referenceId: infographicId,
+      referenceType: 'infographic',
+      metadata: {'infographicTitle': infographicTitle},
+    );
+  }
+
+  Future<void> logStoryCreated(String storyTitle, String storyId) async {
+    await logActivity(
+      activityType: ActivityType.storyCreated,
+      title: 'Created story: $storyTitle',
+      referenceId: storyId,
+      referenceType: 'story',
+      metadata: {'storyTitle': storyTitle},
+    );
+  }
+
   Future<void> addReaction(String activityId, String reactionType) async {
     await _api.post(
         '/social/activities/$activityId/react', {'reactionType': reactionType});

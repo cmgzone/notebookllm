@@ -9,6 +9,17 @@ enum ActivityType {
   joinedGroup,
   studySessionCompleted,
   friendAdded,
+  // New content-rich activity types
+  sourceShared,
+  planShared,
+  podcastGenerated,
+  researchCompleted,
+  imageUploaded,
+  ebookCreated,
+  projectStarted,
+  mindmapCreated,
+  infographicCreated,
+  storyCreated,
 }
 
 extension ActivityTypeExtension on ActivityType {
@@ -34,6 +45,26 @@ extension ActivityTypeExtension on ActivityType {
         return 'study_session_completed';
       case ActivityType.friendAdded:
         return 'friend_added';
+      case ActivityType.sourceShared:
+        return 'source_shared';
+      case ActivityType.planShared:
+        return 'plan_shared';
+      case ActivityType.podcastGenerated:
+        return 'podcast_generated';
+      case ActivityType.researchCompleted:
+        return 'research_completed';
+      case ActivityType.imageUploaded:
+        return 'image_uploaded';
+      case ActivityType.ebookCreated:
+        return 'ebook_created';
+      case ActivityType.projectStarted:
+        return 'project_started';
+      case ActivityType.mindmapCreated:
+        return 'mindmap_created';
+      case ActivityType.infographicCreated:
+        return 'infographic_created';
+      case ActivityType.storyCreated:
+        return 'story_created';
     }
   }
 
@@ -59,6 +90,26 @@ extension ActivityTypeExtension on ActivityType {
         return '✅';
       case ActivityType.friendAdded:
         return '👋';
+      case ActivityType.sourceShared:
+        return '📤';
+      case ActivityType.planShared:
+        return '📋';
+      case ActivityType.podcastGenerated:
+        return '🎙️';
+      case ActivityType.researchCompleted:
+        return '🔬';
+      case ActivityType.imageUploaded:
+        return '🖼️';
+      case ActivityType.ebookCreated:
+        return '📚';
+      case ActivityType.projectStarted:
+        return '🚀';
+      case ActivityType.mindmapCreated:
+        return '🧠';
+      case ActivityType.infographicCreated:
+        return '📊';
+      case ActivityType.storyCreated:
+        return '📖';
     }
   }
 
@@ -84,6 +135,26 @@ extension ActivityTypeExtension on ActivityType {
         return ActivityType.studySessionCompleted;
       case 'friend_added':
         return ActivityType.friendAdded;
+      case 'source_shared':
+        return ActivityType.sourceShared;
+      case 'plan_shared':
+        return ActivityType.planShared;
+      case 'podcast_generated':
+        return ActivityType.podcastGenerated;
+      case 'research_completed':
+        return ActivityType.researchCompleted;
+      case 'image_uploaded':
+        return ActivityType.imageUploaded;
+      case 'ebook_created':
+        return ActivityType.ebookCreated;
+      case 'project_started':
+        return ActivityType.projectStarted;
+      case 'mindmap_created':
+        return ActivityType.mindmapCreated;
+      case 'infographic_created':
+        return ActivityType.infographicCreated;
+      case 'story_created':
+        return ActivityType.storyCreated;
       default:
         return ActivityType.notebookCreated;
     }

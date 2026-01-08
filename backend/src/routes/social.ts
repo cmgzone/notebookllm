@@ -597,6 +597,38 @@ router.delete('/activities/:id/react', async (req: AuthRequest, res: Response) =
   }
 });
 
+// Log a new activity
+router.post('/activities', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+    
+    const { activityType, title, description, referenceId, referenceType, metadata, isPublic } = req.body;
+    
+    if (!activityType || typeof activityType !== 'string') {
+      return res.status(400).json({ error: 'Activity type is required', code: 'VALIDATION_ERROR' });
+    }
+    if (!title || typeof title !== 'string') {
+      return res.status(400).json({ error: 'Title is required', code: 'VALIDATION_ERROR' });
+    }
+    
+    const activity = await activityFeedService.createActivity({
+      userId,
+      activityType: activityType as any,
+      title: title.substring(0, 200), // Limit title length
+      description: description?.substring(0, 500),
+      referenceId,
+      referenceType,
+      metadata: metadata || {},
+      isPublic: isPublic !== false // Default to public
+    });
+    
+    res.json({ activity });
+  } catch (error: any) {
+    handleError(error, res);
+  }
+});
+
 // ============================================
 // LEADERBOARD
 // ============================================

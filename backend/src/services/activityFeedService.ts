@@ -11,7 +11,18 @@ export type ActivityType =
   | 'level_up'
   | 'joined_group' 
   | 'study_session_completed' 
-  | 'friend_added';
+  | 'friend_added'
+  // New content-rich activity types
+  | 'source_shared'
+  | 'plan_shared'
+  | 'podcast_generated'
+  | 'research_completed'
+  | 'image_uploaded'
+  | 'ebook_created'
+  | 'project_started'
+  | 'mindmap_created'
+  | 'infographic_created'
+  | 'story_created';
 
 export interface Activity {
   id: string;
@@ -186,6 +197,119 @@ export const activityFeedService = {
       activityType: 'level_up',
       title: `Reached level ${newLevel}! 🎉`,
       metadata: { level: newLevel }
+    });
+  },
+
+  // New content-rich activity helpers
+  async logSourceShared(userId: string, sourceTitle: string, sourceId: string, sourceType: string) {
+    return this.createActivity({
+      userId,
+      activityType: 'source_shared',
+      title: `Shared a ${sourceType}: ${sourceTitle}`,
+      referenceId: sourceId,
+      referenceType: 'source',
+      metadata: { sourceTitle, sourceType }
+    });
+  },
+
+  async logPlanShared(userId: string, planTitle: string, planId: string, category?: string) {
+    return this.createActivity({
+      userId,
+      activityType: 'plan_shared',
+      title: `Shared project plan: ${planTitle}`,
+      description: category ? `Category: ${category}` : undefined,
+      referenceId: planId,
+      referenceType: 'plan',
+      metadata: { planTitle, category }
+    });
+  },
+
+  async logPodcastGenerated(userId: string, podcastTitle: string, podcastId: string, duration?: number) {
+    return this.createActivity({
+      userId,
+      activityType: 'podcast_generated',
+      title: `Generated podcast: ${podcastTitle}`,
+      description: duration ? `Duration: ${Math.round(duration / 60)} minutes` : undefined,
+      referenceId: podcastId,
+      referenceType: 'podcast',
+      metadata: { podcastTitle, duration }
+    });
+  },
+
+  async logResearchCompleted(userId: string, topic: string, researchId: string) {
+    return this.createActivity({
+      userId,
+      activityType: 'research_completed',
+      title: `Completed deep research: ${topic}`,
+      referenceId: researchId,
+      referenceType: 'research',
+      metadata: { topic }
+    });
+  },
+
+  async logImageUploaded(userId: string, imageCount: number, notebookId?: string) {
+    return this.createActivity({
+      userId,
+      activityType: 'image_uploaded',
+      title: `Uploaded ${imageCount} image${imageCount > 1 ? 's' : ''}`,
+      referenceId: notebookId,
+      referenceType: 'notebook',
+      metadata: { imageCount }
+    });
+  },
+
+  async logEbookCreated(userId: string, ebookTitle: string, ebookId: string) {
+    return this.createActivity({
+      userId,
+      activityType: 'ebook_created',
+      title: `Created ebook: ${ebookTitle}`,
+      referenceId: ebookId,
+      referenceType: 'ebook',
+      metadata: { ebookTitle }
+    });
+  },
+
+  async logProjectStarted(userId: string, projectTitle: string, projectId: string, category: string) {
+    return this.createActivity({
+      userId,
+      activityType: 'project_started',
+      title: `Started new ${category} project: ${projectTitle}`,
+      referenceId: projectId,
+      referenceType: 'project',
+      metadata: { projectTitle, category }
+    });
+  },
+
+  async logMindmapCreated(userId: string, mindmapTitle: string, mindmapId: string) {
+    return this.createActivity({
+      userId,
+      activityType: 'mindmap_created',
+      title: `Created mind map: ${mindmapTitle}`,
+      referenceId: mindmapId,
+      referenceType: 'mindmap',
+      metadata: { mindmapTitle }
+    });
+  },
+
+  async logInfographicCreated(userId: string, infographicTitle: string, infographicId: string) {
+    return this.createActivity({
+      userId,
+      activityType: 'infographic_created',
+      title: `Created infographic: ${infographicTitle}`,
+      referenceId: infographicId,
+      referenceType: 'infographic',
+      metadata: { infographicTitle }
+    });
+  },
+
+  async logStoryCreated(userId: string, storyTitle: string, storyId: string) {
+    return this.createActivity({
+      userId,
+      activityType: 'story_created',
+      title: `Created story: ${storyTitle}`,
+      referenceId: storyId,
+      referenceType: 'story',
+      metadata: { storyTitle }
     });
   }
 };
