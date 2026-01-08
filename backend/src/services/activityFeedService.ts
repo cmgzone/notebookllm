@@ -81,7 +81,7 @@ export const activityFeedService = {
         a.*,
         u.display_name as username,
         u.avatar_url,
-        (SELECT COUNT(*) FROM activity_reactions WHERE activity_id = a.id) as reaction_count,
+        (SELECT COUNT(*)::int FROM activity_reactions WHERE activity_id = a.id) as reaction_count,
         (SELECT reaction_type FROM activity_reactions WHERE activity_id = a.id AND user_id = $1) as user_reaction
       FROM activities a
       JOIN users u ON u.id = a.user_id
@@ -94,7 +94,12 @@ export const activityFeedService = {
       ? [userId, allUserIds, limit, offset, filter]
       : [userId, allUserIds, limit, offset]
     );
-    return result.rows;
+    
+    // Ensure reaction_count is a number
+    return result.rows.map(row => ({
+      ...row,
+      reaction_count: parseInt(row.reaction_count) || 0
+    }));
   },
 
 

@@ -422,17 +422,29 @@ class ActivityFeedNotifier extends StateNotifier<ActivityFeedState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final offset = refresh ? 0 : state.activities.length;
+      _logger.debug('Loading feed with offset: $offset');
       final response = await _api.get('/social/feed?limit=20&offset=$offset');
-      final activities = (response['activities'] as List)
-          .map((a) => Activity.fromJson(a))
-          .toList();
+      _logger.debug('Feed response: $response');
+
+      final activitiesList = response['activities'];
+      if (activitiesList == null) {
+        _logger.debug('Activities list is null');
+        state =
+            state.copyWith(activities: [], isLoading: false, hasMore: false);
+        return;
+      }
+
+      final activities =
+          (activitiesList as List).map((a) => Activity.fromJson(a)).toList();
+      _logger.debug('Parsed ${activities.length} activities');
 
       state = state.copyWith(
         activities: refresh ? activities : [...state.activities, ...activities],
         isLoading: false,
         hasMore: activities.length >= 20,
       );
-    } catch (e) {
+    } catch (e, stack) {
+      _logger.error('Error loading feed', e, stack);
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
