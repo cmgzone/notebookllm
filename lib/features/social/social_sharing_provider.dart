@@ -452,6 +452,42 @@ class DiscoverNotifier extends StateNotifier<DiscoverState> {
       _logger.error('Error unliking notebook', e);
     }
   }
+
+  Future<void> likePlan(String planId) async {
+    try {
+      await _api.post('/social-sharing/like', {
+        'contentType': 'plan',
+        'contentId': planId,
+      });
+      // Update local state
+      state = state.copyWith(
+        plans: state.plans.map((p) {
+          if (p.id == planId) {
+            return DiscoverablePlan(
+              id: p.id,
+              userId: p.userId,
+              title: p.title,
+              description: p.description,
+              status: p.status,
+              viewCount: p.viewCount,
+              shareCount: p.shareCount,
+              isPublic: p.isPublic,
+              taskCount: p.taskCount,
+              completionPercentage: p.completionPercentage,
+              createdAt: p.createdAt,
+              username: p.username,
+              avatarUrl: p.avatarUrl,
+              likeCount: p.userLiked ? p.likeCount : p.likeCount + 1,
+              userLiked: true,
+            );
+          }
+          return p;
+        }).toList(),
+      );
+    } catch (e) {
+      _logger.error('Error liking plan', e);
+    }
+  }
 }
 
 class SocialFeedNotifier extends StateNotifier<SocialFeedState> {

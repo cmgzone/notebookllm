@@ -627,5 +627,243 @@ export const socialSharingService = {
     });
 
     return { notebook: newNotebook, sourcesCopied };
+  },
+
+  // =====================================================
+  // Get Public Plan Details with Requirements and Tasks
+  // =====================================================
+  async getPublicPlanDetails(planId: string, viewerId?: string): Promise<{
+    plan: any;
+    requirements: any[];
+    tasks: any[];
+    designNotes: any[];
+    owner: any;
+  } | null> {
+    // Get plan details
+    const planResult = await pool.query(`
+      SELECT 
+        p.*,
+        u.display_name as username,
+        u.avatar_url,
+        (SELECT COUNT(*) FROM plan_tasks WHERE plan_id = p.id) as task_count,
+        (SELECT COUNT(*) FROM plan_tasks WHERE plan_id = p.id AND status = 'completed') as completed_task_count,
+        (SELECT COUNT(*) FROM plan_requirements WHERE plan_id = p.id) as requirement_count,
+        (SELECT COUNT(*) FROM content_likes WHERE content_type = 'plan' AND content_id = p.id) as like_count,
+        ${viewerId ? `EXISTS(SELECT 1 FROM content_likes WHERE content_type = 'plan' AND content_id = p.id AND user_id = $2) as user_liked` : 'false as user_liked'}
+      FROM plans p
+      JOIN users u ON u.id = p.user_id
+      WHERE p.id = $1 AND p.is_public = true
+    `, viewerId ? [planId, viewerId] : [planId]);
+
+    if (planResult.rows.length === 0) {
+      return null;
+    }
+
+    const plan = planResult.rows[0];
+
+    // Get requirements
+    const requirementsResult = await pool.query(`
+      SELECT id, plan_id, title, description, ears_pattern, acceptance_criteria, created_at
+      FROM plan_requirements
+      WHERE plan_id = $1
+      ORDER BY created_at ASC
+    `, [planId]);
+
+    // Get tasks (hierarchical)
+    const tasksResult = await pool.query(`
+      SELECT id, plan_id, parent_task_id, title, description, status, priority, created_at
+      FROM plan_tasks
+      WHERE plan_id = $1
+      ORDER BY created_at ASC
+    `, [planId]);
+
+    // Get design notes (without sensitive implementation details)
+    const designNotesResult = await pool.query(`
+      SELECT id, plan_id, content, requirement_ids, created_at
+      FROM plan_design_notes
+      WHERE plan_id = $1
+      ORDER BY created_at ASC
+    `, [planId]);
+
+    return {
+      plan,
+      requirements: requirementsResult.rows,
+      tasks: tasksResult.rows,
+      designNotes: designNotesResult.rows,
+      owner: {
+        id: plan.user_id,
+        username: plan.username,
+        avatarUrl: plan.avatar_url
+      }
+    };
+  },
+
+  // =====================================================
+  // Fork Plan (Copy to User's Account)
+  // =====================================================
+  async forkPlan(planId: string, userId: string, options: {
+    newTitle?: string;
+    includeRequirements?: boolean;
+    includeTasks?: boolean;
+    includeDesignNotes?: boolean;
+  } = {}): Promise<{ 
+    plan: any; 
+    requirementsCopied: number;
+    tasksCopied: number;
+    designNotesCopied: number;
+  }> {
+    const { 
+      newTitle, 
+      includeRequirements = true, 
+      includeTasks = true,
+      includeDesignNotes = true 
+    } = options;
+
+    // Get original plan
+    const originalResult = await pool.query(`
+      SELECT p.*, u.display_name as original_owner
+      FROM plans p
+      JOIN users u ON u.id = p.user_id
+      WHERE p.id = $1 AND p.is_public = true
+    `, [planId]);
+
+    if (originalResult.rows.length === 0) {
+      throw new Error('Plan not found or not available for forking');
+    }
+
+    const original = originalResult.rows[0];
+
+    // Create new plan
+    const title = newTitle || `${original.title} (Fork)`;
+    const description = `Forked from ${original.original_owner}'s plan: ${original.title}\n\n${original.description || ''}`;
+
+    const newPlanResult = await pool.query(`
+      INSERT INTO plans (user_id, title, description, status, is_public, metadata)
+      VALUES ($1, $2, $3, 'draft', false, $4)
+      RETURNING *
+    `, [
+      userId, 
+      title, 
+      description,
+      JSON.stringify({
+        forkedFrom: planId,
+        originalOwner: original.user_id,
+        originalTitle: original.title,
+        forkedAt: new Date().toISOString()
+      })
+    ]);
+
+    const newPlan = newPlanResult.rows[0];
+    let requirementsCopied = 0;
+    let tasksCopied = 0;
+    let designNotesCopied = 0;
+
+    // Map old requirement IDs to new ones for design notes
+    const requirementIdMap: Record<string, string> = {};
+
+    // Copy requirements if requested
+    if (includeRequirements) {
+      const requirementsResult = await pool.query(`
+        SELECT * FROM plan_requirements WHERE plan_id = $1
+      `, [planId]);
+
+      for (const req of requirementsResult.rows) {
+        const newReqResult = await pool.query(`
+          INSERT INTO plan_requirements (plan_id, title, description, ears_pattern, acceptance_criteria)
+          VALUES ($1, $2, $3, $4, $5)
+          RETURNING id
+        `, [
+          newPlan.id,
+          req.title,
+          req.description,
+          req.ears_pattern,
+          req.acceptance_criteria
+        ]);
+        requirementIdMap[req.id] = newReqResult.rows[0].id;
+        requirementsCopied++;
+      }
+    }
+
+    // Map old task IDs to new ones for parent references
+    const taskIdMap: Record<string, string> = {};
+
+    // Copy tasks if requested (need to handle parent-child relationships)
+    if (includeTasks) {
+      const tasksResult = await pool.query(`
+        SELECT * FROM plan_tasks WHERE plan_id = $1 ORDER BY created_at ASC
+      `, [planId]);
+
+      // First pass: create all tasks without parent references
+      for (const task of tasksResult.rows) {
+        const newTaskResult = await pool.query(`
+          INSERT INTO plan_tasks (plan_id, title, description, status, priority)
+          VALUES ($1, $2, $3, 'not_started', $4)
+          RETURNING id
+        `, [
+          newPlan.id,
+          task.title,
+          task.description,
+          task.priority
+        ]);
+        taskIdMap[task.id] = newTaskResult.rows[0].id;
+        tasksCopied++;
+      }
+
+      // Second pass: update parent references
+      for (const task of tasksResult.rows) {
+        if (task.parent_task_id && taskIdMap[task.parent_task_id]) {
+          await pool.query(`
+            UPDATE plan_tasks SET parent_task_id = $1 WHERE id = $2
+          `, [taskIdMap[task.parent_task_id], taskIdMap[task.id]]);
+        }
+      }
+    }
+
+    // Copy design notes if requested
+    if (includeDesignNotes) {
+      const designNotesResult = await pool.query(`
+        SELECT * FROM plan_design_notes WHERE plan_id = $1
+      `, [planId]);
+
+      for (const note of designNotesResult.rows) {
+        // Map old requirement IDs to new ones
+        let newRequirementIds: string[] = [];
+        if (note.requirement_ids && Array.isArray(note.requirement_ids)) {
+          newRequirementIds = note.requirement_ids
+            .map((oldId: string) => requirementIdMap[oldId])
+            .filter((id: string | undefined) => id !== undefined);
+        }
+
+        await pool.query(`
+          INSERT INTO plan_design_notes (plan_id, content, requirement_ids)
+          VALUES ($1, $2, $3)
+        `, [
+          newPlan.id,
+          note.content,
+          newRequirementIds
+        ]);
+        designNotesCopied++;
+      }
+    }
+
+    // Log activity
+    await activityFeedService.createActivity({
+      userId,
+      activityType: 'plan_forked',
+      title: `Forked plan: ${original.title}`,
+      description: `Created "${title}" from ${original.original_owner}'s plan`,
+      referenceId: newPlan.id,
+      referenceType: 'plan',
+      metadata: { 
+        originalPlanId: planId,
+        originalOwner: original.user_id,
+        requirementsCopied,
+        tasksCopied,
+        designNotesCopied
+      },
+      isPublic: false
+    });
+
+    return { plan: newPlan, requirementsCopied, tasksCopied, designNotesCopied };
   }
 };

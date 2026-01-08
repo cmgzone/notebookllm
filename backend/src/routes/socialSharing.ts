@@ -413,4 +413,57 @@ router.post('/fork/notebook/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// =====================================================
+// Get Public Plan Details with Requirements and Tasks
+// =====================================================
+router.get('/public/plans/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const viewerId = req.userId;
+
+    const details = await socialSharingService.getPublicPlanDetails(id, viewerId);
+    
+    if (!details) {
+      return res.status(404).json({ error: 'Plan not found or not public' });
+    }
+
+    res.json({ success: true, ...details });
+  } catch (error: any) {
+    console.error('Get public plan details error:', error);
+    res.status(500).json({ error: 'Failed to get plan details' });
+  }
+});
+
+// =====================================================
+// Fork Plan (Copy to User's Account)
+// =====================================================
+router.post('/fork/plan/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized - login required to fork' });
+
+    const { id } = req.params;
+    const { newTitle, includeRequirements, includeTasks, includeDesignNotes } = req.body;
+
+    const result = await socialSharingService.forkPlan(id, userId, {
+      newTitle,
+      includeRequirements: includeRequirements !== false,
+      includeTasks: includeTasks !== false,
+      includeDesignNotes: includeDesignNotes !== false
+    });
+
+    res.json({ 
+      success: true, 
+      plan: result.plan,
+      requirementsCopied: result.requirementsCopied,
+      tasksCopied: result.tasksCopied,
+      designNotesCopied: result.designNotesCopied,
+      message: `Plan forked successfully with ${result.requirementsCopied} requirements, ${result.tasksCopied} tasks, and ${result.designNotesCopied} design notes`
+    });
+  } catch (error: any) {
+    console.error('Fork plan error:', error);
+    res.status(500).json({ error: error.message || 'Failed to fork plan' });
+  }
+});
+
 export default router;

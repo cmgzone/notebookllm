@@ -68,6 +68,7 @@ import '../features/social/ui/direct_chat_screen.dart';
 import '../features/social/ui/conversations_screen.dart';
 import '../features/social/ui/group_chat_screen.dart';
 import '../features/social/ui/public_notebook_screen.dart';
+import '../features/social/ui/public_plan_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 
 String getInitialLocation(bool hasSeenOnboarding) {
@@ -513,6 +514,16 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
               final notebookId = state.pathParameters['notebookId']!;
               return buildTransitionPage(
                 child: PublicNotebookScreen(notebookId: notebookId),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/social/plan/:planId',
+            name: 'public-plan',
+            pageBuilder: (context, state) {
+              final planId = state.pathParameters['planId']!;
+              return buildTransitionPage(
+                child: PublicPlanScreen(planId: planId),
               );
             },
           ),
