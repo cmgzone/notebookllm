@@ -424,9 +424,14 @@ class ActivityFeedNotifier extends StateNotifier<ActivityFeedState> {
       final offset = refresh ? 0 : state.activities.length;
       _logger.debug('Loading feed with offset: $offset');
       final response = await _api.get('/social/feed?limit=20&offset=$offset');
+      _logger.debug('Feed response type: ${response.runtimeType}');
+      _logger.debug('Feed response keys: ${response.keys.toList()}');
       _logger.debug('Feed response: $response');
 
       final activitiesList = response['activities'];
+      _logger.debug('Activities list type: ${activitiesList?.runtimeType}');
+      _logger.debug('Activities list: $activitiesList');
+
       if (activitiesList == null) {
         _logger.debug('Activities list is null');
         state =
@@ -434,9 +439,30 @@ class ActivityFeedNotifier extends StateNotifier<ActivityFeedState> {
         return;
       }
 
-      final activities =
-          (activitiesList as List).map((a) => Activity.fromJson(a)).toList();
-      _logger.debug('Parsed ${activities.length} activities');
+      if (activitiesList is! List) {
+        _logger.error(
+            'Activities is not a List! Type: ${activitiesList.runtimeType}');
+        state =
+            state.copyWith(activities: [], isLoading: false, hasMore: false);
+        return;
+      }
+
+      _logger.debug('Parsing ${activitiesList.length} activities...');
+      final activities = <Activity>[];
+      for (int i = 0; i < activitiesList.length; i++) {
+        try {
+          final activityJson = activitiesList[i];
+          _logger.debug('Parsing activity $i: $activityJson');
+          final activity = Activity.fromJson(activityJson);
+          activities.add(activity);
+          _logger.debug('Successfully parsed activity: ${activity.title}');
+        } catch (parseError, parseStack) {
+          _logger.error(
+              'Error parsing activity at index $i', parseError, parseStack);
+          // Continue parsing other activities
+        }
+      }
+      _logger.debug('Successfully parsed ${activities.length} activities');
 
       state = state.copyWith(
         activities: refresh ? activities : [...state.activities, ...activities],

@@ -195,24 +195,41 @@ class Activity {
   });
 
   factory Activity.fromJson(Map<String, dynamic> json) {
+    // Parse reaction count with type safety
+    int parseReactionCount(dynamic value) {
+      if (value == null) return 0;
+      if (value is int) return value;
+      if (value is String) return int.tryParse(value) ?? 0;
+      if (value is double) return value.toInt();
+      return 0;
+    }
+
     return Activity(
-      id: json['id'],
-      userId: json['user_id'] ?? json['userId'],
+      id: json['id']?.toString() ?? '',
+      userId: json['user_id']?.toString() ?? json['userId']?.toString() ?? '',
       activityType: ActivityTypeExtension.fromString(
-          json['activity_type'] ?? json['activityType']),
-      title: json['title'],
-      description: json['description'],
+          json['activity_type'] ?? json['activityType'] ?? 'notebook_created'),
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString(),
       metadata: json['metadata'] is Map
           ? Map<String, dynamic>.from(json['metadata'])
           : {},
-      referenceId: json['reference_id'] ?? json['referenceId'],
-      referenceType: json['reference_type'] ?? json['referenceType'],
+      referenceId:
+          json['reference_id']?.toString() ?? json['referenceId']?.toString(),
+      referenceType: json['reference_type']?.toString() ??
+          json['referenceType']?.toString(),
       isPublic: json['is_public'] ?? json['isPublic'] ?? true,
-      createdAt: DateTime.parse(json['created_at'] ?? json['createdAt']),
-      username: json['username'],
-      avatarUrl: json['avatar_url'] ?? json['avatarUrl'],
-      reactionCount: json['reaction_count'] ?? json['reactionCount'] ?? 0,
-      userReaction: json['user_reaction'] ?? json['userReaction'],
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ??
+              json['createdAt']?.toString() ??
+              '') ??
+          DateTime.now(),
+      username: json['username']?.toString(),
+      avatarUrl:
+          json['avatar_url']?.toString() ?? json['avatarUrl']?.toString(),
+      reactionCount:
+          parseReactionCount(json['reaction_count'] ?? json['reactionCount']),
+      userReaction:
+          json['user_reaction']?.toString() ?? json['userReaction']?.toString(),
     );
   }
 

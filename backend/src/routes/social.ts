@@ -527,13 +527,14 @@ router.get('/feed', async (req: AuthRequest, res: Response) => {
     
     const safeLimit = limit ? Math.min(parseInt(limit as string) || 20, 50) : 20;
     const safeOffset = offset ? Math.max(0, parseInt(offset as string) || 0) : 0;
-    const validFilters = ['all', 'friends', 'groups'];
-    const safeFilter = validFilters.includes(filter as string) ? filter : 'all';
     
+    // Only pass filter if it's a valid ActivityType, not 'all', 'friends', or 'groups'
+    // Those are UI filters, not database activity_type values
     const activities = await activityFeedService.getFeed(userId, {
       limit: safeLimit,
       offset: safeOffset,
-      filter: safeFilter as any
+      // Don't pass filter - let the service return all activities
+      // The filter param was incorrectly being used for activity_type filtering
     });
     res.json({ activities });
   } catch (error: any) {

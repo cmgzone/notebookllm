@@ -17,8 +17,11 @@ class _ActivityFeedScreenState extends ConsumerState<ActivityFeedScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-        () => ref.read(activityFeedProvider.notifier).loadFeed(refresh: true));
+    debugPrint('[ActivityFeedScreen] initState called');
+    Future.microtask(() {
+      debugPrint('[ActivityFeedScreen] Loading feed...');
+      ref.read(activityFeedProvider.notifier).loadFeed(refresh: true);
+    });
     _scrollController.addListener(_onScroll);
   }
 
@@ -41,45 +44,91 @@ class _ActivityFeedScreenState extends ConsumerState<ActivityFeedScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(activityFeedProvider);
+    debugPrint(
+        '[ActivityFeedScreen] build - isLoading: ${state.isLoading}, activities: ${state.activities.length}, error: ${state.error}');
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Activity Feed'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              debugPrint('[ActivityFeedScreen] Manual refresh triggered');
+              ref.read(activityFeedProvider.notifier).loadFeed(refresh: true);
+            },
+          ),
+        ],
       ),
-      body: state.isLoading && state.activities.isEmpty
-          ? const Center(child: CircularProgressIndicator())
-          : state.activities.isEmpty
-              ? _buildEmptyState()
-              : RefreshIndicator(
-                  onRefresh: () => ref
-                      .read(activityFeedProvider.notifier)
-                      .loadFeed(refresh: true),
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount:
-                        state.activities.length + (state.hasMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index >= state.activities.length) {
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(16),
-                            child: CircularProgressIndicator(),
-                          ),
-                        );
-                      }
-                      return _ActivityCard(
-                        activity: state.activities[index],
-                        onReact: (type) => ref
-                            .read(activityFeedProvider.notifier)
-                            .addReaction(state.activities[index].id, type),
-                        onRemoveReaction: () => ref
-                            .read(activityFeedProvider.notifier)
-                            .removeReaction(state.activities[index].id),
-                      );
-                    },
-                  ),
-                ),
+      body: state.error != null
+          ? _buildErrorState(state.error!)
+          : state.isLoading && state.activities.isEmpty
+              ? const Center(child: CircularProgressIndicator())
+              : state.activities.isEmpty
+                  ? _buildEmptyState()
+                  : RefreshIndicator(
+                      onRefresh: () => ref
+                          .read(activityFeedProvider.notifier)
+                          .loadFeed(refresh: true),
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(16),
+                        itemCount:
+                            state.activities.length + (state.hasMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index >= state.activities.length) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child: CircularProgressIndicator(),
+                              ),
+                            );
+                          }
+                          return _ActivityCard(
+                            activity: state.activities[index],
+                            onReact: (type) => ref
+                                .read(activityFeedProvider.notifier)
+                                .addReaction(state.activities[index].id, type),
+                            onRemoveReaction: () => ref
+                                .read(activityFeedProvider.notifier)
+                                .removeReaction(state.activities[index].id),
+                          );
+                        },
+                      ),
+                    ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+            const SizedBox(height: 16),
+            Text(
+              'Error loading feed',
+              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error,
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => ref
+                  .read(activityFeedProvider.notifier)
+                  .loadFeed(refresh: true),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
