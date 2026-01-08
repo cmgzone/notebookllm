@@ -235,6 +235,19 @@ class ApiService {
     async getMcpStats() {
         return this.get('/admin/mcp-stats');
     }
+
+    // ============ ADMIN - NOTIFICATIONS ============
+    async sendBroadcastNotification(title, body, type = 'system', actionUrl) {
+        return this.post('/admin/notifications/broadcast', { title, body, type, actionUrl });
+    }
+
+    async sendNotificationToUsers(userIds, title, body, type = 'system', actionUrl) {
+        return this.post('/admin/notifications/send', { userIds, title, body, type, actionUrl });
+    }
+
+    async getNotificationStats() {
+        return this.get('/admin/notifications/stats');
+    }
 }
 
 export const api = new ApiService();

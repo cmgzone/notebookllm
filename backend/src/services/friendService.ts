@@ -1,15 +1,6 @@
 import pool from '../config/database.js';
-
-// Social Features - Friend Service
-// Custom error classes for better error handling
-export class NotFoundError extends Error {
-  code = 'NOT_FOUND';
-  status = 404;
-  constructor(message: string) {
-    super(message);
-    this.name = 'NotFoundError';
-  }
-}
+import { notificationService } from './notificationService.js';
+import { NotFoundError, ValidationError } from '../types/errors.js';
 
 export class ConflictError extends Error {
   code = 'CONFLICT';
@@ -20,14 +11,8 @@ export class ConflictError extends Error {
   }
 }
 
-export class ValidationError extends Error {
-  code = 'VALIDATION_ERROR';
-  status = 400;
-  constructor(message: string) {
-    super(message);
-    this.name = 'ValidationError';
-  }
-}
+// Re-export error classes for backward compatibility
+export { NotFoundError, ValidationError };
 
 // Response interfaces (no email for privacy)
 export interface FriendResponse {
@@ -126,6 +111,16 @@ export const friendService = {
       `, [userId, friendId]);
       
       await client.query('COMMIT');
+      
+      // Send notification to the recipient (async)
+      pool.query('SELECT display_name FROM users WHERE id = $1', [userId])
+        .then(sender => {
+          const senderName = sender.rows[0]?.display_name || 'Someone';
+          notificationService.notifyFriendRequest(friendId, userId, senderName)
+            .catch(err => console.error('Failed to send friend request notification:', err));
+        })
+        .catch(err => console.error('Failed to get sender name for notification:', err));
+      
       return result.rows[0];
     } catch (error) {
       await client.query('ROLLBACK');

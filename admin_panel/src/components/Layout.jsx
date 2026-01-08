@@ -13,7 +13,8 @@ import {
     Receipt,
     Bot,
     Cloud,
-    Cpu
+    Cpu,
+    Bell
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -24,6 +25,7 @@ export default function Layout() {
     const navigation = [
         { name: 'Dashboard', href: '/', icon: LayoutDashboard },
         { name: 'Users', href: '/users', icon: Users },
+        { name: 'Notifications', href: '/notifications', icon: Bell },
         { name: 'Subscription Plans', href: '/subscription-plans', icon: CreditCard },
         { name: 'Credit Packages', href: '/credit-packages', icon: Package },
         { name: 'Transactions', href: '/transactions', icon: Receipt },

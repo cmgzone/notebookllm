@@ -67,6 +67,7 @@ import '../features/social/ui/social_leaderboard_screen.dart';
 import '../features/social/ui/direct_chat_screen.dart';
 import '../features/social/ui/conversations_screen.dart';
 import '../features/social/ui/group_chat_screen.dart';
+import '../features/notifications/notifications_screen.dart';
 
 String getInitialLocation(bool hasSeenOnboarding) {
   return hasSeenOnboarding ? '/home' : '/onboarding';
@@ -437,6 +438,13 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             name: 'code-review',
             pageBuilder: (context, state) =>
                 buildTransitionPage(child: const CodeReviewScreen()),
+          ),
+          // Notifications route
+          GoRoute(
+            path: '/notifications',
+            name: 'notifications',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const NotificationsScreen()),
           ),
           // Social routes
           GoRoute(

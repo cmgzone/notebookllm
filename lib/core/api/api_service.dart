@@ -196,6 +196,27 @@ class ApiService {
     }
   }
 
+  // Generic PATCH request
+  Future<Map<String, dynamic>> patch(
+    String endpoint,
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('$_baseUrl$endpoint'),
+        headers: await _getHeaders(),
+        body: jsonEncode(body),
+      );
+
+      return _handleResponse(response);
+    } catch (e) {
+      if (e is Exception) {
+        rethrow;
+      }
+      throw Exception('Network error: $e');
+    }
+  }
+
   // Generic PUT request
   Future<Map<String, dynamic>> put(
     String endpoint,

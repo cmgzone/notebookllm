@@ -30,6 +30,7 @@ import githubRoutes from './routes/github.js';
 import planningRoutes from './routes/planning.js';
 import socialRoutes from './routes/social.js';
 import messagingRoutes from './routes/messaging.js';
+import notificationsRoutes from './routes/notifications.js';
 
 // Import services
 import bunnyService from './services/bunnyService.js';
@@ -108,6 +109,7 @@ app.use('/api/github', githubRoutes);
 app.use('/api/planning', planningRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/messaging', messagingRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // 404 handler
 app.use((req, res) => {

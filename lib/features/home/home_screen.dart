@@ -15,6 +15,7 @@ import '../../core/theme/theme_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../core/extensions/color_compat.dart';
 import '../subscription/providers/subscription_provider.dart';
+import '../notifications/notification_provider.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -145,6 +146,28 @@ class HomeScreen extends ConsumerWidget {
                     color: Colors.white,
                   ),
                   tooltip: mode == ThemeMode.dark ? 'Light mode' : 'Dark mode',
+                );
+              }),
+              // Notification Bell
+              Consumer(builder: (context, ref, _) {
+                final unreadCount = ref.watch(unreadNotificationCountProvider);
+                return Container(
+                  margin: const EdgeInsets.only(right: 4),
+                  child: IconButton(
+                    onPressed: () => context.push('/notifications'),
+                    icon: Badge(
+                      isLabelVisible: unreadCount > 0,
+                      label: Text(
+                        unreadCount > 99 ? '99+' : unreadCount.toString(),
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                      child: const Icon(Icons.notifications_outlined,
+                          color: Colors.white),
+                    ),
+                    tooltip: unreadCount > 0
+                        ? '$unreadCount notifications'
+                        : 'Notifications',
+                  ),
                 );
               }),
               Container(

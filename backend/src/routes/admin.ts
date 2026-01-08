@@ -2,6 +2,7 @@ import express, { type Response } from 'express';
 import pool from '../config/database.js';
 import { authenticateToken, requireAdmin, type AuthRequest } from '../middleware/auth.js';
 import { mcpLimitsService } from '../services/mcpLimitsService.js';
+import { notificationService } from '../services/notificationService.js';
 
 const router = express.Router();
 
@@ -752,6 +753,125 @@ router.get('/mcp-stats', async (req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error('Error fetching MCP stats:', error);
         res.status(500).json({ error: 'Failed to fetch MCP stats' });
+    }
+});
+
+// ==================== NOTIFICATIONS ====================
+
+// Send notification to all users
+router.post('/notifications/broadcast', async (req: AuthRequest, res: Response) => {
+    try {
+        const { title, body, type = 'system', actionUrl } = req.body;
+
+        if (!title) {
+            return res.status(400).json({ error: 'Title is required' });
+        }
+
+        // Get all user IDs
+        const users = await pool.query('SELECT id FROM users WHERE is_active = true');
+        
+        let successCount = 0;
+        let failureCount = 0;
+
+        // Send notification to each user
+        for (const user of users.rows) {
+            try {
+                await notificationService.create({
+                    userId: user.id,
+                    type,
+                    title,
+                    body,
+                    actionUrl,
+                });
+                successCount++;
+            } catch (error) {
+                console.error(`Failed to send notification to user ${user.id}:`, error);
+                failureCount++;
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Notification sent to ${successCount} users`,
+            stats: { successCount, failureCount, totalUsers: users.rows.length }
+        });
+    } catch (error) {
+        console.error('Error broadcasting notification:', error);
+        res.status(500).json({ error: 'Failed to send notification' });
+    }
+});
+
+// Send notification to specific users
+router.post('/notifications/send', async (req: AuthRequest, res: Response) => {
+    try {
+        const { userIds, title, body, type = 'system', actionUrl } = req.body;
+
+        if (!title) {
+            return res.status(400).json({ error: 'Title is required' });
+        }
+        if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+            return res.status(400).json({ error: 'User IDs array is required' });
+        }
+
+        let successCount = 0;
+        let failureCount = 0;
+
+        // Send notification to each specified user
+        for (const userId of userIds) {
+            try {
+                await notificationService.create({
+                    userId,
+                    type,
+                    title,
+                    body,
+                    actionUrl,
+                });
+                successCount++;
+            } catch (error) {
+                console.error(`Failed to send notification to user ${userId}:`, error);
+                failureCount++;
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Notification sent to ${successCount} users`,
+            stats: { successCount, failureCount, totalUsers: userIds.length }
+        });
+    } catch (error) {
+        console.error('Error sending notifications:', error);
+        res.status(500).json({ error: 'Failed to send notifications' });
+    }
+});
+
+// Get notification statistics
+router.get('/notifications/stats', async (req: AuthRequest, res: Response) => {
+    try {
+        const stats = await pool.query(`
+            SELECT 
+                COUNT(*) as total_notifications,
+                COUNT(CASE WHEN is_read = false THEN 1 END) as unread_notifications,
+                COUNT(CASE WHEN type = 'system' THEN 1 END) as system_notifications,
+                COUNT(CASE WHEN created_at >= NOW() - INTERVAL '24 hours' THEN 1 END) as notifications_24h,
+                COUNT(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 END) as notifications_7d
+            FROM notifications
+        `);
+
+        const typeStats = await pool.query(`
+            SELECT type, COUNT(*) as count
+            FROM notifications
+            GROUP BY type
+            ORDER BY count DESC
+        `);
+
+        res.json({
+            success: true,
+            stats: stats.rows[0],
+            typeBreakdown: typeStats.rows
+        });
+    } catch (error) {
+        console.error('Error fetching notification stats:', error);
+        res.status(500).json({ error: 'Failed to fetch notification stats' });
     }
 });
 
