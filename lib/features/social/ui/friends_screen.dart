@@ -286,7 +286,7 @@ class _FriendTile extends StatelessWidget {
             : null,
       ),
       title: Text(friend.username),
-      subtitle: Text(friend.email),
+      subtitle: Text(friend.email ?? 'No email'),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -372,7 +372,7 @@ class _UserSearchTile extends StatelessWidget {
             : null,
       ),
       title: Text(user.username),
-      subtitle: Text(user.email),
+      subtitle: Text(user.email ?? 'No email'),
       trailing: IconButton(
         icon: const Icon(Icons.person_add),
         onPressed: onAdd,
