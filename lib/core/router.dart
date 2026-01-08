@@ -64,6 +64,9 @@ import '../features/social/ui/friends_screen.dart';
 import '../features/social/ui/study_groups_screen.dart';
 import '../features/social/ui/activity_feed_screen.dart';
 import '../features/social/ui/social_leaderboard_screen.dart';
+import '../features/social/ui/direct_chat_screen.dart';
+import '../features/social/ui/conversations_screen.dart';
+import '../features/social/ui/group_chat_screen.dart';
 
 String getInitialLocation(bool hasSeenOnboarding) {
   return hasSeenOnboarding ? '/home' : '/onboarding';
@@ -465,6 +468,34 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             name: 'leaderboard',
             pageBuilder: (context, state) =>
                 buildTransitionPage(child: const SocialLeaderboardScreen()),
+          ),
+          GoRoute(
+            path: '/social/messages',
+            name: 'messages',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const ConversationsScreen()),
+          ),
+          GoRoute(
+            path: '/social/chat/:userId',
+            name: 'direct-chat',
+            pageBuilder: (context, state) {
+              final userId = state.pathParameters['userId']!;
+              final username = state.extra as String?;
+              return buildTransitionPage(
+                child: DirectChatScreen(userId: userId, username: username),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/social/group/:groupId/chat',
+            name: 'group-chat',
+            pageBuilder: (context, state) {
+              final groupId = state.pathParameters['groupId']!;
+              final groupName = state.extra as String?;
+              return buildTransitionPage(
+                child: GroupChatScreen(groupId: groupId, groupName: groupName),
+              );
+            },
           ),
         ],
       ),

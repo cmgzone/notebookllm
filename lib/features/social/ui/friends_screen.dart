@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../social_provider.dart';
 import '../models/friend.dart';
 
@@ -108,6 +109,12 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
           return _FriendTile(
             friend: friend,
             onRemove: () => _confirmRemoveFriend(friend),
+            onMessage: () {
+              context.push(
+                '/social/chat/${friend.id}',
+                extra: friend.username,
+              );
+            },
           );
         },
       ),
@@ -260,8 +267,13 @@ class _RequestItem {
 class _FriendTile extends StatelessWidget {
   final Friend friend;
   final VoidCallback onRemove;
+  final VoidCallback onMessage;
 
-  const _FriendTile({required this.friend, required this.onRemove});
+  const _FriendTile({
+    required this.friend,
+    required this.onRemove,
+    required this.onMessage,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -275,13 +287,24 @@ class _FriendTile extends StatelessWidget {
       ),
       title: Text(friend.username),
       subtitle: Text(friend.email),
-      trailing: PopupMenuButton(
-        itemBuilder: (context) => [
-          const PopupMenuItem(value: 'remove', child: Text('Remove friend')),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline),
+            onPressed: onMessage,
+            tooltip: 'Send message',
+          ),
+          PopupMenuButton(
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                  value: 'remove', child: Text('Remove friend')),
+            ],
+            onSelected: (value) {
+              if (value == 'remove') onRemove();
+            },
+          ),
         ],
-        onSelected: (value) {
-          if (value == 'remove') onRemove();
-        },
       ),
     );
   }

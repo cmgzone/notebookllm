@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/api/api_service.dart';
 import '../models/study_group.dart';
 import '../social_provider.dart';
@@ -73,6 +74,16 @@ class _StudyGroupDetailScreenState
       appBar: AppBar(
         title: Text(_group!.name),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.chat),
+            onPressed: () {
+              context.push(
+                '/social/group/${widget.groupId}/chat',
+                extra: _group!.name,
+              );
+            },
+            tooltip: 'Group Chat',
+          ),
           if (_group!.isAdmin)
             IconButton(
               icon: const Icon(Icons.settings),

@@ -18,8 +18,10 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
             // Initialize stats for new user
             const initResult = await pool.query(
                 `INSERT INTO user_stats (user_id, total_xp, level, current_streak, longest_streak, 
-                    notebooks_created, sources_added, quizzes_completed, flashcards_reviewed, study_time_minutes)
-                 VALUES ($1, 0, 1, 0, 0, 0, 0, 0, 0, 0) 
+                    notebooks_created, sources_added, quizzes_completed, flashcards_reviewed, 
+                    study_time_minutes, perfect_quizzes, tutor_sessions_completed, chat_messages_sent,
+                    deep_research_completed, voice_mode_used, mindmaps_created, features_used)
+                 VALUES ($1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '{}') 
                  RETURNING *`,
                 [req.userId]
             );
@@ -42,11 +44,13 @@ router.post('/track', async (req: AuthRequest, res: Response) => {
         const allowedFields = [
             'total_xp', 'level', 'current_streak', 'longest_streak',
             'notebooks_created', 'sources_added', 'quizzes_completed',
-            'flashcards_reviewed', 'study_time_minutes'
+            'flashcards_reviewed', 'study_time_minutes', 'perfect_quizzes',
+            'tutor_sessions_completed', 'chat_messages_sent', 'deep_research_completed',
+            'voice_mode_used', 'mindmaps_created', 'features_used', 'last_active_date'
         ];
 
         if (!allowedFields.includes(field)) {
-            return res.status(400).json({ error: 'Invalid field' });
+            return res.status(400).json({ error: `Invalid field: ${field}` });
         }
 
         // Ensure user has stats record
@@ -59,7 +63,7 @@ router.post('/track', async (req: AuthRequest, res: Response) => {
         let params: any[];
 
         if (increment !== undefined) {
-            query = `UPDATE user_stats SET ${field} = ${field} + $2, updated_at = NOW() WHERE user_id = $1 RETURNING *`;
+            query = `UPDATE user_stats SET ${field} = COALESCE(${field}, 0) + $2, updated_at = NOW() WHERE user_id = $1 RETURNING *`;
             params = [req.userId, increment];
         } else {
             query = `UPDATE user_stats SET ${field} = $2, updated_at = NOW() WHERE user_id = $1 RETURNING *`;

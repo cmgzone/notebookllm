@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../social_provider.dart';
+import '../chat_provider.dart';
 import 'friends_screen.dart';
 import 'study_groups_screen.dart';
 import 'activity_feed_screen.dart';
 import 'social_leaderboard_screen.dart';
+import 'conversations_screen.dart';
 
 class SocialHubScreen extends ConsumerStatefulWidget {
   const SocialHubScreen({super.key});
@@ -131,6 +133,8 @@ class _SocialHubScreenState extends ConsumerState<SocialHubScreen> {
                       : null,
                   onTap: () => _navigateTo(const FriendsScreen()),
                 ),
+                const SizedBox(height: 12),
+                _MessagesCard(),
                 const SizedBox(height: 12),
                 _NavigationCard(
                   icon: Icons.groups,
@@ -263,6 +267,47 @@ class _NavigationCard extends StatelessWidget {
               const Icon(Icons.chevron_right),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MessagesCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unreadAsync = ref.watch(unreadCountsProvider);
+
+    return unreadAsync.when(
+      data: (unread) => _NavigationCard(
+        icon: Icons.chat,
+        title: 'Messages',
+        subtitle: 'Chat with your friends',
+        color: Colors.teal,
+        badge: unread.direct > 0 ? '${unread.direct}' : null,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ConversationsScreen()),
+        ),
+      ),
+      loading: () => _NavigationCard(
+        icon: Icons.chat,
+        title: 'Messages',
+        subtitle: 'Chat with your friends',
+        color: Colors.teal,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ConversationsScreen()),
+        ),
+      ),
+      error: (_, __) => _NavigationCard(
+        icon: Icons.chat,
+        title: 'Messages',
+        subtitle: 'Chat with your friends',
+        color: Colors.teal,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ConversationsScreen()),
         ),
       ),
     );
