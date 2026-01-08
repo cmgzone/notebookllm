@@ -111,7 +111,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen>
             onRemove: () => _confirmRemoveFriend(friend),
             onMessage: () {
               context.push(
-                '/social/chat/${friend.id}',
+                '/social/chat/${friend.friendId}',
                 extra: friend.username,
               );
             },
