@@ -233,8 +233,8 @@ class _StudyGroupDetailScreenState
                       : null,
                 ),
                 title: Text(member.username),
-                subtitle: Text(member.role),
-                trailing: member.role == 'owner'
+                subtitle: Text(member.role.name),
+                trailing: member.isOwner
                     ? Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 4),
