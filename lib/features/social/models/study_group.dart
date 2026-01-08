@@ -53,7 +53,7 @@ class GroupMember {
   final String groupId;
   final String userId;
   final String username;
-  final String email;
+  final String? email; // Made optional for privacy
   final String? avatarUrl;
   final String role;
   final DateTime joinedAt;
@@ -63,7 +63,7 @@ class GroupMember {
     required this.groupId,
     required this.userId,
     required this.username,
-    required this.email,
+    this.email,
     this.avatarUrl,
     required this.role,
     required this.joinedAt,
@@ -75,7 +75,7 @@ class GroupMember {
       groupId: json['group_id'] ?? json['groupId'],
       userId: json['user_id'] ?? json['userId'],
       username: json['username'],
-      email: json['email'],
+      email: json['email'], // Optional
       avatarUrl: json['avatar_url'] ?? json['avatarUrl'],
       role: json['role'] ?? 'member',
       joinedAt: DateTime.parse(json['joined_at'] ?? json['joinedAt']),

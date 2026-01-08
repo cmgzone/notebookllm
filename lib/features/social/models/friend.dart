@@ -2,7 +2,8 @@ class Friend {
   final String id;
   final String friendId;
   final String username;
-  final String email;
+  final String?
+      email; // Made optional since backend doesn't return it for privacy
   final String? avatarUrl;
   final String status;
   final DateTime createdAt;
@@ -12,7 +13,7 @@ class Friend {
     required this.id,
     required this.friendId,
     required this.username,
-    required this.email,
+    this.email,
     this.avatarUrl,
     required this.status,
     required this.createdAt,
@@ -24,7 +25,7 @@ class Friend {
       id: json['id'],
       friendId: json['friend_id'] ?? json['friendId'],
       username: json['username'],
-      email: json['email'],
+      email: json['email'], // Optional
       avatarUrl: json['avatar_url'] ?? json['avatarUrl'],
       status: json['status'] ?? 'accepted',
       createdAt: DateTime.parse(json['created_at'] ?? json['createdAt']),
@@ -39,7 +40,7 @@ class FriendRequest {
   final String id;
   final String fromUserId;
   final String fromUsername;
-  final String fromEmail;
+  final String? fromEmail; // Made optional
   final String? fromAvatarUrl;
   final DateTime createdAt;
 
@@ -47,7 +48,7 @@ class FriendRequest {
     required this.id,
     required this.fromUserId,
     required this.fromUsername,
-    required this.fromEmail,
+    this.fromEmail,
     this.fromAvatarUrl,
     required this.createdAt,
   });
@@ -57,7 +58,7 @@ class FriendRequest {
       id: json['id'],
       fromUserId: json['from_user_id'] ?? json['fromUserId'],
       fromUsername: json['from_username'] ?? json['fromUsername'],
-      fromEmail: json['from_email'] ?? json['fromEmail'],
+      fromEmail: json['from_email'] ?? json['fromEmail'], // Optional
       fromAvatarUrl: json['from_avatar_url'] ?? json['fromAvatarUrl'],
       createdAt: DateTime.parse(json['created_at'] ?? json['createdAt']),
     );
@@ -67,13 +68,13 @@ class FriendRequest {
 class UserSearchResult {
   final String id;
   final String username;
-  final String email;
+  final String? email; // Made optional
   final String? avatarUrl;
 
   UserSearchResult({
     required this.id,
     required this.username,
-    required this.email,
+    this.email,
     this.avatarUrl,
   });
 
@@ -81,7 +82,7 @@ class UserSearchResult {
     return UserSearchResult(
       id: json['id'],
       username: json['username'],
-      email: json['email'],
+      email: json['email'], // Optional
       avatarUrl: json['avatar_url'] ?? json['avatarUrl'],
     );
   }
