@@ -562,21 +562,14 @@ export const socialSharingService = {
     const description = `Forked from ${original.original_owner}'s notebook: ${original.title}`;
 
     const newNotebookResult = await pool.query(`
-      INSERT INTO notebooks (user_id, title, description, category, icon, is_public, metadata)
-      VALUES ($1, $2, $3, $4, $5, false, $6)
+      INSERT INTO notebooks (user_id, title, description, category, is_public)
+      VALUES ($1, $2, $3, $4, false)
       RETURNING *
     `, [
       userId, 
       title, 
       description, 
-      original.category,
-      original.icon,
-      JSON.stringify({
-        forkedFrom: notebookId,
-        originalOwner: original.user_id,
-        originalTitle: original.title,
-        forkedAt: new Date().toISOString()
-      })
+      original.category
     ]);
 
     const newNotebook = newNotebookResult.rows[0];
@@ -589,21 +582,36 @@ export const socialSharingService = {
       `, [notebookId]);
 
       for (const source of sourcesResult.rows) {
+        // Handle metadata - it might be null, a string, or an object
+        let sourceMetadata = {};
+        if (source.metadata) {
+          if (typeof source.metadata === 'string') {
+            try {
+              sourceMetadata = JSON.parse(source.metadata);
+            } catch {
+              sourceMetadata = {};
+            }
+          } else if (typeof source.metadata === 'object') {
+            sourceMetadata = source.metadata;
+          }
+        }
+
         await pool.query(`
-          INSERT INTO sources (notebook_id, title, type, content, summary, thumbnail_url, metadata)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          INSERT INTO sources (notebook_id, title, type, content, summary, url, metadata, user_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         `, [
           newNotebook.id,
           source.title,
           source.type,
           source.content,
           source.summary,
-          source.thumbnail_url,
+          source.url,
           JSON.stringify({
-            ...source.metadata,
+            ...sourceMetadata,
             forkedFrom: source.id,
             originalNotebookId: notebookId
-          })
+          }),
+          userId
         ]);
         sourcesCopied++;
       }
