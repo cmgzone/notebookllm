@@ -72,7 +72,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         const { id } = req.params;
         const includeRelations = req.query.includeRelations !== 'false';
 
-        const plan = await planService.getPlan(id, req.userId!, includeRelations);
+        const plan = await planService.getPlan(id, req.userId!, includeRelations, true);
 
         if (!plan) {
             return res.status(404).json({ error: 'Plan not found' });
@@ -155,11 +155,11 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
         res.json({ success: true, plan });
     } catch (error: any) {
         console.error('Update plan error:', error);
-        
+
         if (error.message === 'Cannot modify archived plan') {
             return res.status(400).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to update plan', message: error.message });
     }
 });
@@ -277,8 +277,8 @@ router.get('/:id/tasks', async (req: AuthRequest, res: Response) => {
         const { id } = req.params;
         const { status, parentTaskId, includeSubTasks, limit, offset } = req.query;
 
-        // Verify user has access to the plan
-        const plan = await planService.getPlan(id, req.userId!);
+        // Verify user has access to the plan (allow public)
+        const plan = await planService.getPlan(id, req.userId!, false, true);
         if (!plan) {
             return res.status(404).json({ error: 'Plan not found' });
         }
@@ -316,8 +316,8 @@ router.get('/:id/tasks/:taskId', async (req: AuthRequest, res: Response) => {
         const { id, taskId } = req.params;
         const includeRelations = req.query.includeRelations !== 'false';
 
-        // Verify user has access to the plan
-        const plan = await planService.getPlan(id, req.userId!);
+        // Verify user has access to the plan (allow public)
+        const plan = await planService.getPlan(id, req.userId!, false, true);
         if (!plan) {
             return res.status(404).json({ error: 'Plan not found' });
         }
@@ -543,11 +543,11 @@ router.post('/:id/tasks/:taskId/status', async (req: AuthRequest, res: Response)
         res.json({ success: true, task });
     } catch (error: any) {
         console.error('Update task status error:', error);
-        
+
         if (error.message.includes('Blocking reason is required')) {
             return res.status(400).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to update task status', message: error.message });
     }
 });
@@ -587,11 +587,11 @@ router.post('/:id/tasks/:taskId/pause', async (req: AuthRequest, res: Response) 
         res.json({ success: true, task });
     } catch (error: any) {
         console.error('Pause task error:', error);
-        
+
         if (error.message.includes('Cannot pause task')) {
             return res.status(400).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to pause task', message: error.message });
     }
 });
@@ -627,11 +627,11 @@ router.post('/:id/tasks/:taskId/resume', async (req: AuthRequest, res: Response)
         res.json({ success: true, task });
     } catch (error: any) {
         console.error('Resume task error:', error);
-        
+
         if (error.message.includes('Cannot resume task')) {
             return res.status(400).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to resume task', message: error.message });
     }
 });
@@ -709,11 +709,11 @@ router.post('/:id/tasks/:taskId/start', async (req: AuthRequest, res: Response) 
         res.json({ success: true, task });
     } catch (error: any) {
         console.error('Start task error:', error);
-        
+
         if (error.message.includes('Cannot start task')) {
             return res.status(400).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to start task', message: error.message });
     }
 });
@@ -755,8 +755,8 @@ router.post('/:id/tasks/:taskId/complete', async (req: AuthRequest, res: Respons
             allSubTasksCompleted = await planTaskService.areAllSubTasksCompleted(existingTask.parentTaskId);
         }
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             task,
             allSubTasksCompleted,
             parentTaskId: existingTask.parentTaskId,
@@ -887,14 +887,14 @@ router.post('/:id/requirements', async (req: AuthRequest, res: Response) => {
         res.status(201).json({ success: true, requirement });
     } catch (error: any) {
         console.error('Create requirement error:', error);
-        
+
         if (error.message === 'Plan not found') {
             return res.status(404).json({ error: error.message });
         }
         if (error.message.includes('archived')) {
             return res.status(400).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to create requirement', message: error.message });
     }
 });
@@ -928,14 +928,14 @@ router.post('/:id/requirements/batch', async (req: AuthRequest, res: Response) =
         res.status(201).json({ success: true, requirements: createdRequirements, count: createdRequirements.length });
     } catch (error: any) {
         console.error('Create requirements batch error:', error);
-        
+
         if (error.message === 'Plan not found') {
             return res.status(404).json({ error: error.message });
         }
         if (error.message.includes('archived')) {
             return res.status(400).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to create requirements', message: error.message });
     }
 });
@@ -957,11 +957,11 @@ router.delete('/:id/requirements/:requirementId', async (req: AuthRequest, res: 
         res.json({ success: true, message: 'Requirement deleted' });
     } catch (error: any) {
         console.error('Delete requirement error:', error);
-        
+
         if (error.message.includes('Access denied')) {
             return res.status(403).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to delete requirement', message: error.message });
     }
 });
@@ -984,9 +984,9 @@ router.get('/:id/design-notes', async (req: AuthRequest, res: Response) => {
 
         let filteredNotes = designNotes;
         if (filterUiDesigns) {
-            filteredNotes = designNotes.filter((note: any) => 
+            filteredNotes = designNotes.filter((note: any) =>
                 note.content && (
-                    note.content.includes('```html') || 
+                    note.content.includes('```html') ||
                     note.content.includes('## UI Design:') ||
                     note.content.includes('<!DOCTYPE html') ||
                     note.content.includes('<html')
@@ -994,19 +994,19 @@ router.get('/:id/design-notes', async (req: AuthRequest, res: Response) => {
             );
         }
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             designNotes: filteredNotes,
             count: filteredNotes.length,
             filteredForUiDesigns: filterUiDesigns,
         });
     } catch (error: any) {
         console.error('Get design notes error:', error);
-        
+
         if (error.message === 'Plan not found') {
             return res.status(404).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to get design notes', message: error.message });
     }
 });
@@ -1036,14 +1036,14 @@ router.post('/:id/design-notes', async (req: AuthRequest, res: Response) => {
         res.status(201).json({ success: true, designNote });
     } catch (error: any) {
         console.error('Create design note error:', error);
-        
+
         if (error.message === 'Plan not found') {
             return res.status(404).json({ error: error.message });
         }
         if (error.message.includes('archived')) {
             return res.status(400).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to create design note', message: error.message });
     }
 });
@@ -1065,11 +1065,11 @@ router.delete('/:id/design-notes/:noteId', async (req: AuthRequest, res: Respons
         res.json({ success: true, message: 'Design note deleted' });
     } catch (error: any) {
         console.error('Delete design note error:', error);
-        
+
         if (error.message.includes('Access denied')) {
             return res.status(403).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to delete design note', message: error.message });
     }
 });
@@ -1090,14 +1090,14 @@ router.get('/:id/access', async (req: AuthRequest, res: Response) => {
         res.json({ success: true, agents });
     } catch (error: any) {
         console.error('Get plan access error:', error);
-        
+
         if (error.message === 'Plan not found') {
             return res.status(404).json({ error: error.message });
         }
         if (error.message.includes('Access denied')) {
             return res.status(403).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to get plan access', message: error.message });
     }
 });
@@ -1126,8 +1126,8 @@ router.post('/:id/access', async (req: AuthRequest, res: Response) => {
             const validPermissions: Permission[] = ['read', 'update', 'create_task'];
             const invalidPermissions = permissions.filter((p: string) => !validPermissions.includes(p as Permission));
             if (invalidPermissions.length > 0) {
-                return res.status(400).json({ 
-                    error: `Invalid permissions: ${invalidPermissions.join(', ')}. Valid permissions are: ${validPermissions.join(', ')}` 
+                return res.status(400).json({
+                    error: `Invalid permissions: ${invalidPermissions.join(', ')}. Valid permissions are: ${validPermissions.join(', ')}`
                 });
             }
         }
@@ -1144,14 +1144,14 @@ router.post('/:id/access', async (req: AuthRequest, res: Response) => {
         res.status(201).json({ success: true, access });
     } catch (error: any) {
         console.error('Grant plan access error:', error);
-        
+
         if (error.message === 'Plan not found') {
             return res.status(404).json({ error: error.message });
         }
         if (error.message.includes('Access denied')) {
             return res.status(403).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to grant plan access', message: error.message });
     }
 });
@@ -1174,14 +1174,14 @@ router.delete('/:id/access/:agentSessionId', async (req: AuthRequest, res: Respo
         res.json({ success: true, message: 'Access revoked' });
     } catch (error: any) {
         console.error('Revoke plan access error:', error);
-        
+
         if (error.message === 'Plan not found') {
             return res.status(404).json({ error: error.message });
         }
         if (error.message.includes('Access denied')) {
             return res.status(403).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to revoke plan access', message: error.message });
     }
 });
@@ -1199,14 +1199,14 @@ router.get('/:id/access/history', async (req: AuthRequest, res: Response) => {
         res.json({ success: true, history });
     } catch (error: any) {
         console.error('Get plan access history error:', error);
-        
+
         if (error.message === 'Plan not found') {
             return res.status(404).json({ error: error.message });
         }
         if (error.message.includes('Access denied')) {
             return res.status(403).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to get plan access history', message: error.message });
     }
 });
@@ -1224,14 +1224,14 @@ router.delete('/:id/access', async (req: AuthRequest, res: Response) => {
         res.json({ success: true, message: `Revoked access for ${count} agent(s)`, count });
     } catch (error: any) {
         console.error('Revoke all plan access error:', error);
-        
+
         if (error.message === 'Plan not found') {
             return res.status(404).json({ error: error.message });
         }
         if (error.message.includes('Access denied')) {
             return res.status(403).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to revoke all plan access', message: error.message });
     }
 });

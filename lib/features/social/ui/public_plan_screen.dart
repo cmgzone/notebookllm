@@ -31,7 +31,7 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadPlanDetails();
   }
 
@@ -194,6 +194,7 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
             Tab(text: 'Overview', icon: Icon(Icons.info_outline)),
             Tab(text: 'Requirements', icon: Icon(Icons.checklist)),
             Tab(text: 'Tasks', icon: Icon(Icons.task_alt)),
+            Tab(text: 'Design Notes', icon: Icon(Icons.description_outlined)),
           ],
         ),
       ),
@@ -218,6 +219,8 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
           _buildRequirementsTab(theme),
           // Tasks Tab
           _buildTasksTab(theme),
+          // Design Notes Tab
+          _buildDesignNotesTab(theme),
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -438,10 +441,8 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
                   return ListTile(
                     leading: const Icon(Icons.description_outlined),
                     title: Text(
-                      content.length > 100
-                          ? '${content.substring(0, 100)}...'
-                          : content,
-                      maxLines: 2,
+                      content,
+                      maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
@@ -451,13 +452,103 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
                           : '',
                       style: const TextStyle(fontSize: 11),
                     ),
+                    onTap: () => _tabController.animateTo(3),
                   );
                 },
               ),
             ),
+            if (_designNotes.length > 3)
+              TextButton(
+                onPressed: () => _tabController.animateTo(3),
+                child: const Text('View all design notes'),
+              ),
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildDesignNotesTab(ThemeData theme) {
+    if (_designNotes.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.description_outlined, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text('No design notes provided',
+                style: TextStyle(color: Colors.grey[600])),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _designNotes.length,
+      itemBuilder: (context, index) {
+        final note = _designNotes[index];
+        final content = note['content'] ?? '';
+        final reqIds = note['requirement_ids'] as List?;
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Note #${index + 1}',
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      note['created_at'] != null
+                          ? timeago.format(
+                              DateTime.parse(note['created_at'].toString()))
+                          : '',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(content),
+                if (reqIds != null && reqIds.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: reqIds.map((id) {
+                      // Attempt to find requirement title
+                      final req = _requirements.firstWhere((r) => r['id'] == id,
+                          orElse: () => null);
+                      final label = req != null ? req['title'] : 'Req ID: $id';
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          label,
+                          style:
+                              const TextStyle(fontSize: 10, color: Colors.blue),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

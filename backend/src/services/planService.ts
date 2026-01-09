@@ -132,14 +132,16 @@ class PlanService {
    * @returns The Plan or null if not found
    */
   async getPlan(
-    planId: string, 
-    userId: string, 
-    includeRelations: boolean = true
+    planId: string,
+    userId: string,
+    includeRelations: boolean = true,
+    allowPublic: boolean = false
   ): Promise<Plan | null> {
-    const result = await pool.query(
-      `SELECT * FROM plans WHERE id = $1 AND user_id = $2`,
-      [planId, userId]
-    );
+    const query = allowPublic
+      ? `SELECT * FROM plans WHERE id = $1 AND (user_id = $2 OR is_public = true)`
+      : `SELECT * FROM plans WHERE id = $1 AND user_id = $2`;
+
+    const result = await pool.query(query, [planId, userId]);
 
     if (result.rows.length === 0) {
       return null;
@@ -149,7 +151,7 @@ class PlanService {
 
     if (includeRelations) {
       plan.requirements = await this.getRequirements(planId);
-      plan.designNotes = await this.getDesignNotes(planId);
+      plan.designNotes = await this.getDesignNotes(planId); // getDesignNotes doesn't need userId here as it's for internal use after access check
       plan.taskSummary = await this.getTaskSummary(planId);
       // Also include the actual tasks array for the Flutter app
       plan.tasks = await this.getTasks(planId);
@@ -226,8 +228,8 @@ class PlanService {
    * @returns The updated Plan or null if not found
    */
   async updatePlan(
-    planId: string, 
-    userId: string, 
+    planId: string,
+    userId: string,
     input: UpdatePlanInput
   ): Promise<Plan | null> {
     // First check if plan exists and belongs to user
@@ -373,8 +375,8 @@ class PlanService {
    * @returns Plan analytics or null if not found
    */
   async getPlanAnalytics(planId: string, userId: string): Promise<PlanAnalytics | null> {
-    // Verify access
-    const plan = await this.getPlan(planId, userId);
+    // Verify access (allow public plans)
+    const plan = await this.getPlan(planId, userId, true, true);
     if (!plan) {
       return null;
     }
@@ -624,14 +626,14 @@ class PlanService {
    * Public method for API access with user verification.
    */
   async getDesignNotes(planId: string, userId?: string): Promise<DesignNote[]> {
-    // If userId provided, verify access
+    // If userId provided, verify access (allow public plans)
     if (userId) {
-      const plan = await this.getPlan(planId, userId, false);
+      const plan = await this.getPlan(planId, userId, false, true);
       if (!plan) {
         throw new Error('Plan not found');
       }
     }
-    
+
     const result = await pool.query(
       `SELECT * FROM plan_design_notes WHERE plan_id = $1 ORDER BY created_at`,
       [planId]
@@ -660,7 +662,7 @@ class PlanService {
     const row = result.rows[0];
     const total = parseInt(row.total) || 0;
     const completed = parseInt(row.completed) || 0;
-    
+
     // Calculate completion percentage (Requirement 8.1)
     const completionPercentage = total > 0 ? Math.round((completed / total) * 100) : 0;
 
