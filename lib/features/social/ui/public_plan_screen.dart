@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../social_sharing_provider.dart';
 import '../../../core/api/api_service.dart';
+import '../../../theme/app_theme.dart';
 
 /// Screen to view a public plan with its requirements, tasks, and design notes
 /// Users can view plan details and fork the plan to their account
@@ -289,139 +292,241 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Owner info card
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  CircleAvatar(
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.cardTheme.color,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: theme.colorScheme.outline.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: const BoxDecoration(
+                    gradient: AppTheme.premiumGradient,
+                    shape: BoxShape.circle,
+                  ),
+                  child: CircleAvatar(
                     radius: 28,
+                    backgroundColor: theme.colorScheme.surface,
                     backgroundImage: _owner?['avatarUrl'] != null
                         ? NetworkImage(_owner!['avatarUrl'])
                         : null,
                     child: _owner?['avatarUrl'] == null
-                        ? Text((_owner?['username'] ?? '?')[0].toUpperCase())
+                        ? Text(
+                            (_owner?['username'] ?? '?')[0].toUpperCase(),
+                            style: TextStyle(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.bold),
+                          )
                         : null,
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _owner?['username'] ?? 'Unknown',
-                          style: theme.textTheme.titleMedium,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _owner?['username'] ?? 'Architect',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
                         ),
-                        Text(
-                          'Created ${plan['created_at'] != null ? timeago.format(DateTime.parse(plan['created_at'].toString())) : 'recently'}',
-                          style:
-                              TextStyle(color: Colors.grey[600], fontSize: 12),
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(Icons.calendar_today_outlined,
+                              size: 10,
+                              color: theme.colorScheme.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Published ${plan['created_at'] != null ? timeago.format(DateTime.parse(plan['created_at'].toString())) : 'recently'}',
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  _StatusChip(status: status),
-                ],
-              ),
+                ),
+                _TaskStatusBadge(status: status),
+              ],
             ),
-          ),
-          const SizedBox(height: 16),
+          ).animate().fadeIn().slideY(begin: 0.1),
+          const SizedBox(height: 24),
 
           // Description
           if (description != null && description.isNotEmpty) ...[
-            Text('Description',
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(description),
+            Text('ARCHITECTURE OVERVIEW',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.5,
+                  color: theme.colorScheme.primary,
+                )),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color:
+                    theme.colorScheme.surfaceContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Text(
+                description,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  height: 1.6,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
           ],
 
           // Progress
-          Text('Progress',
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('$completedTaskCount of $taskCount tasks completed'),
-                      Text('$completionPercentage%',
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: completionPercentage / 100,
-                    backgroundColor: Colors.grey[200],
-                    minHeight: 8,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ],
+          Text('PROJECT PROGRESS',
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.5,
+                color: theme.colorScheme.primary,
+              )),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: theme.cardTheme.color,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: theme.colorScheme.outline.withValues(alpha: 0.3),
               ),
             ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '$completedTaskCount of $taskCount Tasks',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        gradient: AppTheme.neonGradient,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '$completionPercentage%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Stack(
+                  children: [
+                    Container(
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainer,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    AnimatedContainer(
+                      duration: 1.seconds,
+                      curve: Curves.easeOutCubic,
+                      height: 10,
+                      width: MediaQuery.of(context).size.width *
+                          (completionPercentage / 100),
+                      decoration: BoxDecoration(
+                        gradient: AppTheme.neonGradient,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: theme.colorScheme.primary
+                                .withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
 
           // Stats
-          Text('Statistics',
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
+          Text('INTEL & ENGAGEMENT',
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.5,
+                color: theme.colorScheme.primary,
+              )),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: _StatCard(
-                  icon: Icons.checklist,
+                  icon: Icons.checklist_rtl_rounded,
                   value: requirementCount.toString(),
-                  label: 'Requirements',
-                  color: Colors.blue,
+                  label: 'Specs',
+                  color: theme.colorScheme.primary,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(
                 child: _StatCard(
-                  icon: Icons.task_alt,
+                  icon: Icons.task_alt_rounded,
                   value: taskCount.toString(),
                   label: 'Tasks',
-                  color: Colors.green,
+                  color: theme.colorScheme.secondary,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: _StatCard(
-                  icon: Icons.visibility,
+                  icon: Icons.visibility_rounded,
                   value: viewCount.toString(),
                   label: 'Views',
-                  color: Colors.orange,
+                  color: Colors.amber,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(
                 child: _StatCard(
-                  icon: Icons.favorite,
+                  icon: Icons.favorite_rounded,
                   value: likeCount.toString(),
                   label: 'Likes',
-                  color: Colors.red,
+                  color: Colors.pinkAccent,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
 
           // Design Notes preview
           if (_designNotes.isNotEmpty) ...[
@@ -429,33 +534,59 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
                 style: theme.textTheme.titleSmall
                     ?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Card(
-              child: ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _designNotes.length > 3 ? 3 : _designNotes.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final note = _designNotes[index];
+            Column(
+              children: [
+                ..._designNotes.take(3).map((note) {
                   final content = note['content'] ?? '';
-                  return ListTile(
-                    leading: const Icon(Icons.description_outlined),
-                    title: Text(
-                      content,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
+                  final createdAt = note['created_at'] != null
+                      ? DateTime.parse(note['created_at'].toString())
+                      : null;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                      ),
                     ),
-                    subtitle: Text(
-                      note['created_at'] != null
-                          ? timeago.format(
-                              DateTime.parse(note['created_at'].toString()))
-                          : '',
-                      style: const TextStyle(fontSize: 11),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color:
+                              theme.colorScheme.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.architecture_rounded,
+                            size: 18, color: theme.colorScheme.primary),
+                      ),
+                      title: Text(
+                        content,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      subtitle: createdAt != null
+                          ? Text(
+                              timeago.format(createdAt),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            )
+                          : null,
+                      trailing: Icon(Icons.chevron_right_rounded,
+                          color: theme.colorScheme.onSurfaceVariant),
+                      onTap: () => _tabController.animateTo(3),
                     ),
-                    onTap: () => _tabController.animateTo(3),
                   );
-                },
-              ),
+                }),
+              ],
             ),
             if (_designNotes.length > 3)
               TextButton(
@@ -474,80 +605,35 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.description_outlined, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text('No design notes provided',
-                style: TextStyle(color: Colors.grey[600])),
+            Icon(Icons.auto_awesome_outlined,
+                size: 80,
+                color: theme.colorScheme.primary.withValues(alpha: 0.2)),
+            const SizedBox(height: 24),
+            Text('Exclusive Design Insights',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text('No architectural notes have been shared for this plan.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
           ],
-        ),
+        )
+            .animate()
+            .fadeIn(duration: 400.ms)
+            .scale(begin: const Offset(0.9, 0.9)),
       );
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       itemCount: _designNotes.length,
       itemBuilder: (context, index) {
         final note = _designNotes[index];
-        final content = note['content'] ?? '';
-        final reqIds = note['requirement_ids'] as List?;
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 16),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Note #${index + 1}',
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      note['created_at'] != null
-                          ? timeago.format(
-                              DateTime.parse(note['created_at'].toString()))
-                          : '',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(content),
-                if (reqIds != null && reqIds.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: reqIds.map((id) {
-                      // Attempt to find requirement title
-                      final req = _requirements.firstWhere((r) => r['id'] == id,
-                          orElse: () => null);
-                      final label = req != null ? req['title'] : 'Req ID: $id';
-
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          label,
-                          style:
-                              const TextStyle(fontSize: 10, color: Colors.blue),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
+        return _DesignNoteCard(
+          note: note,
+          index: index,
+          requirements: _requirements,
+        ).animate().fadeIn(delay: (index * 100).ms).slideX(begin: 0.1);
       },
     );
   }
@@ -607,56 +693,6 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
   }
 }
 
-class _StatusChip extends StatelessWidget {
-  final String status;
-
-  const _StatusChip({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    Color color;
-    IconData icon;
-    switch (status) {
-      case 'active':
-        color = Colors.blue;
-        icon = Icons.play_circle_outline;
-        break;
-      case 'completed':
-        color = Colors.green;
-        icon = Icons.check_circle_outline;
-        break;
-      case 'archived':
-        color = Colors.grey;
-        icon = Icons.archive_outlined;
-        break;
-      default:
-        color = Colors.orange;
-        icon = Icons.edit_outlined;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 4),
-          Text(
-            status.toUpperCase(),
-            style: TextStyle(
-                fontSize: 11, color: color, fontWeight: FontWeight.bold),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _StatCard extends StatelessWidget {
   final IconData icon;
   final String value;
@@ -672,27 +708,45 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Icon(icon, size: 32, color: color),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            Text(
-              label,
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-          ],
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.3),
         ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 24, color: color),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color,
+              letterSpacing: -0.5,
+            ),
+          ),
+          Text(
+            label.toUpperCase(),
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.0,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -706,81 +760,131 @@ class _RequirementCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final title = requirement['title'] ?? 'Untitled';
+    final title = requirement['title'] ?? 'Untitled Specification';
     final description = requirement['description'];
-    final earsPattern = requirement['ears_pattern'];
+    final earsPattern = requirement['ears_pattern']?.toString().toUpperCase();
     final acceptanceCriteria = requirement['acceptance_criteria'] as List?;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    earsPattern?.toUpperCase() ?? 'REQ',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Colors.purple,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-            if (description != null && description.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(description, style: TextStyle(color: Colors.grey[700])),
-            ],
-            if (acceptanceCriteria != null &&
-                acceptanceCriteria.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text('Acceptance Criteria:',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[600])),
-              const SizedBox(height: 4),
-              ...acceptanceCriteria.map((criteria) => Padding(
-                    padding: const EdgeInsets.only(left: 8, top: 4),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.check_circle_outline,
-                            size: 16, color: Colors.green),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            criteria.toString(),
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )),
-            ],
-          ],
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.3),
         ),
       ),
-    );
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (earsPattern != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color:
+                              theme.colorScheme.tertiary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: theme.colorScheme.tertiary
+                                .withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Text(
+                          earsPattern,
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: theme.colorScheme.tertiary,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                    const Spacer(),
+                    Icon(Icons.verified_user_outlined,
+                        size: 16,
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                if (description != null && description.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      height: 1.5,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (acceptanceCriteria != null && acceptanceCriteria.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color:
+                    theme.colorScheme.surfaceContainer.withValues(alpha: 0.3),
+                borderRadius:
+                    const BorderRadius.vertical(bottom: Radius.circular(20)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'ACCEPTANCE CRITERIA',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ...acceptanceCriteria.map((criterion) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.check_circle_outline,
+                                size: 14, color: theme.colorScheme.primary),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                criterion.toString(),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1);
   }
 }
 
@@ -793,121 +897,180 @@ class _TaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final title = task['title'] ?? 'Untitled';
+    final title = task['title'] ?? 'Untitled Task';
     final description = task['description'];
     final status = task['status'] ?? 'not_started';
     final priority = task['priority'] ?? 'medium';
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    _TaskStatusIcon(status: status),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          decoration: status == 'completed'
-                              ? TextDecoration.lineThrough
-                              : null,
-                        ),
-                      ),
-                    ),
-                    _PriorityBadge(priority: priority),
-                  ],
-                ),
-                if (description != null && description.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    description,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ],
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.3),
+        ),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Side status bar
+            Container(
+              width: 6,
+              decoration: BoxDecoration(
+                color: _getStatusColor(status),
+                borderRadius:
+                    const BorderRadius.horizontal(left: Radius.circular(20)),
+              ),
             ),
-          ),
-          if (subtasks.isNotEmpty) ...[
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(32, 8, 16, 8),
-              child: Column(
-                children: subtasks.map((subtask) {
-                  final subStatus = subtask['status'] ?? 'not_started';
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        _TaskStatusIcon(status: subStatus, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            subtask['title'] ?? 'Subtask',
-                            style: TextStyle(
-                              fontSize: 13,
-                              decoration: subStatus == 'completed'
-                                  ? TextDecoration.lineThrough
-                                  : null,
-                            ),
-                          ),
-                        ),
+                        _PriorityBadge(priority: priority),
+                        const Spacer(),
+                        _TaskStatusBadge(status: status),
                       ],
                     ),
-                  );
-                }).toList(),
+                    const SizedBox(height: 12),
+                    Text(
+                      title,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        decoration: status == 'completed'
+                            ? TextDecoration.lineThrough
+                            : null,
+                      ),
+                    ),
+                    if (description != null && description.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        description,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurfaceVariant,
+                          height: 1.4,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    if (subtasks.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainer
+                              .withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.account_tree_outlined,
+                                    size: 14,
+                                    color: theme.colorScheme.onSurfaceVariant),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${subtasks.length} SUBTASKS',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ],
-        ],
+        ),
       ),
-    );
+    ).animate().fadeIn();
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'completed':
+        return Colors.green;
+      case 'in_progress':
+        return Colors.blue;
+      case 'blocked':
+        return Colors.red;
+      case 'paused':
+        return Colors.orange;
+      default:
+        return Colors.blueGrey;
+    }
   }
 }
 
-class _TaskStatusIcon extends StatelessWidget {
+class _TaskStatusBadge extends StatelessWidget {
   final String status;
-  final double size;
 
-  const _TaskStatusIcon({required this.status, this.size = 24});
+  const _TaskStatusBadge({required this.status});
 
   @override
   Widget build(BuildContext context) {
-    IconData icon;
     Color color;
+    IconData icon;
 
     switch (status) {
       case 'completed':
-        icon = Icons.check_circle;
         color = Colors.green;
+        icon = Icons.check_circle_rounded;
         break;
       case 'in_progress':
-        icon = Icons.play_circle_filled;
         color = Colors.blue;
+        icon = Icons.play_circle_filled_rounded;
         break;
       case 'blocked':
-        icon = Icons.block;
         color = Colors.red;
+        icon = Icons.block_rounded;
         break;
       case 'paused':
-        icon = Icons.pause_circle_filled;
         color = Colors.orange;
+        icon = Icons.pause_circle_filled_rounded;
         break;
       default:
-        icon = Icons.radio_button_unchecked;
-        color = Colors.grey;
+        color = Colors.blueGrey;
+        icon = Icons.circle_outlined;
     }
 
-    return Icon(icon, size: size, color: color);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            status.replaceAll('_', ' ').toUpperCase(),
+            style: TextStyle(
+              fontSize: 9,
+              color: color,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -934,18 +1097,238 @@ class _PriorityBadge extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
       ),
       child: Text(
         priority.toUpperCase(),
         style: TextStyle(
-          fontSize: 10,
+          fontSize: 9,
           color: color,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
         ),
+      ),
+    );
+  }
+}
+
+class _DesignNoteCard extends StatelessWidget {
+  final Map<String, dynamic> note;
+  final int index;
+  final List<dynamic> requirements;
+
+  const _DesignNoteCard({
+    required this.note,
+    required this.index,
+    required this.requirements,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final content = note['content'] ?? '';
+    final reqIds = note['requirement_ids'] as List?;
+    final createdAt = note['created_at'] != null
+        ? DateTime.parse(note['created_at'].toString())
+        : null;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.4),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: theme.shadowColor.withValues(alpha: 0.05),
+            blurRadius: 30,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainer.withValues(alpha: 0.5),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.premiumGradient,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.architecture_rounded,
+                      color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'DESIGN SPECIFICATION #${index + 1}',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      if (createdAt != null)
+                        Text(
+                          timeago.format(createdAt),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Content
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: MarkdownBody(
+              data: content,
+              styleSheet: MarkdownStyleSheet(
+                p: theme.textTheme.bodyLarge?.copyWith(
+                  height: 1.6,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.9),
+                ),
+                h1: theme.textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.bold),
+                h2: theme.textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
+                h3: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
+                code: TextStyle(
+                  backgroundColor: theme.colorScheme.surfaceContainer,
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                  color: theme.colorScheme.secondary,
+                ),
+                codeblockDecoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainer,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.5),
+                  ),
+                ),
+                blockquotePadding: const EdgeInsets.all(16),
+                blockquoteDecoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border(
+                    left:
+                        BorderSide(color: theme.colorScheme.primary, width: 4),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Footer / Relations
+          if (reqIds != null && reqIds.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Divider(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.5)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.link_rounded,
+                          size: 16, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        'CONTEXTUAL REQUIREMENTS',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: reqIds.map((id) {
+                      final req = requirements.firstWhere((r) => r['id'] == id,
+                          orElse: () => null);
+                      final label = req != null ? req['title'] : 'REQ-SPEC-$id';
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainer
+                              .withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: theme.colorScheme.outline
+                                .withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.checklist_rtl_rounded,
+                                size: 14,
+                                color: theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.6)),
+                            const SizedBox(width: 10),
+                            Flexible(
+                              child: Text(
+                                label,
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

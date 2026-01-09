@@ -390,10 +390,12 @@ class ApiService {
     await post('/auth/verify-email', {'token': token});
   }
 
-  Future<void> updateProfile({String? displayName, String? avatarUrl}) async {
+  Future<void> updateProfile(
+      {String? displayName, String? avatarUrl, String? coverUrl}) async {
     await put('/auth/profile', {
       if (displayName != null) 'displayName': displayName,
       if (avatarUrl != null) 'avatarUrl': avatarUrl,
+      if (coverUrl != null) 'coverUrl': coverUrl,
     });
   }
 
@@ -694,6 +696,18 @@ class ApiService {
   Future<int> getMediaSizeStats() async {
     final response = await get('/media/stats/size');
     return response['size'] as int? ?? 0;
+  }
+
+  Future<Map<String, dynamic>> uploadMediaDirect({
+    required String base64Data,
+    required String filename,
+    String? type,
+  }) async {
+    return await post('/media/upload-direct', {
+      'mediaData': base64Data,
+      'filename': filename,
+      if (type != null) 'type': type,
+    });
   }
 
   // ============ SHARING ============

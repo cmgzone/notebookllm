@@ -107,6 +107,7 @@ router.post('/signup', async (req: Request, res: Response) => {
                 emailVerified: false,
                 twoFactorEnabled: false,
                 avatarUrl: null,
+                coverUrl: null,
                 role: 'user'
             },
         });
@@ -129,7 +130,7 @@ router.post('/login', async (req: Request, res: Response) => {
         console.log(`[AUTH] Login attempt for: ${normalizedEmail} (rememberMe: ${rememberMe})`);
 
         const result = await pool.query(
-            'SELECT id, email, display_name, password_hash, email_verified, two_factor_enabled, avatar_url, role FROM users WHERE email = $1',
+            'SELECT id, email, display_name, password_hash, email_verified, two_factor_enabled, avatar_url, cover_url, role FROM users WHERE email = $1',
             [normalizedEmail]
         );
 
@@ -148,7 +149,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
         // Use longer expiry if rememberMe is true
         const tokenExpiry = rememberMe ? JWT_EXPIRES_LONG : JWT_EXPIRES_SHORT;
-        
+
         const token = jwt.sign(
             { userId: user.id, email: user.email, role: user.role },
             JWT_SECRET,
@@ -167,6 +168,7 @@ router.post('/login', async (req: Request, res: Response) => {
                 emailVerified: user.email_verified,
                 twoFactorEnabled: user.two_factor_enabled,
                 avatarUrl: user.avatar_url,
+                coverUrl: user.cover_url,
                 role: user.role || 'user'
             },
         });
@@ -185,7 +187,7 @@ router.get('/me', async (req: Request, res: Response) => {
         }
 
         const result = await pool.query(
-            'SELECT id, email, display_name, created_at, email_verified, two_factor_enabled, avatar_url, role FROM users WHERE id = $1',
+            'SELECT id, email, display_name, created_at, email_verified, two_factor_enabled, avatar_url, cover_url, role FROM users WHERE id = $1',
             [userId]
         );
 
@@ -204,6 +206,7 @@ router.get('/me', async (req: Request, res: Response) => {
                 emailVerified: u.email_verified,
                 twoFactorEnabled: u.two_factor_enabled,
                 avatarUrl: u.avatar_url,
+                coverUrl: u.cover_url,
                 role: u.role || 'user'
             }
         });
@@ -388,7 +391,7 @@ router.put('/profile', async (req: Request, res: Response) => {
         const userId = getUserFromToken(req);
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-        const { displayName, avatarUrl } = req.body;
+        const { displayName, avatarUrl, coverUrl } = req.body;
 
         const updates: string[] = [];
         const params: any[] = [];
@@ -401,6 +404,10 @@ router.put('/profile', async (req: Request, res: Response) => {
         if (avatarUrl !== undefined) {
             updates.push(`avatar_url = $${i++}`);
             params.push(avatarUrl);
+        }
+        if (coverUrl !== undefined) {
+            updates.push(`cover_url = $${i++}`);
+            params.push(coverUrl);
         }
 
         if (updates.length === 0) {
@@ -542,11 +549,11 @@ router.post('/tokens', authenticateToken, async (req: AuthRequest, res: Response
         });
     } catch (error: any) {
         console.error('Token generation error:', error);
-        
+
         if (error.message?.includes('Maximum tokens reached')) {
             return res.status(400).json({ error: error.message });
         }
-        
+
         res.status(500).json({ error: 'Failed to generate token' });
     }
 });

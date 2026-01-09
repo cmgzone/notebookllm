@@ -39,6 +39,7 @@ class AppUser {
   final bool emailVerified;
   final bool twoFactorEnabled;
   final String? avatarUrl;
+  final String? coverUrl;
 
   const AppUser({
     required this.uid,
@@ -48,6 +49,7 @@ class AppUser {
     this.emailVerified = false,
     this.twoFactorEnabled = false,
     this.avatarUrl,
+    this.coverUrl,
   });
 
   factory AppUser.fromMap(Map<String, dynamic> map) {
@@ -59,6 +61,7 @@ class AppUser {
       emailVerified: map['email_verified'] as bool? ?? false,
       twoFactorEnabled: map['two_factor_enabled'] as bool? ?? false,
       avatarUrl: map['avatar_url'] as String?,
+      coverUrl: map['cover_url'] as String?,
     );
   }
 
@@ -76,6 +79,7 @@ class AppUser {
         'email_verified': emailVerified,
         'two_factor_enabled': twoFactorEnabled,
         'avatar_url': avatarUrl,
+        'cover_url': coverUrl,
       };
 
   AppUser copyWith({
@@ -83,6 +87,7 @@ class AppUser {
     bool? emailVerified,
     bool? twoFactorEnabled,
     String? avatarUrl,
+    String? coverUrl,
   }) {
     return AppUser(
       uid: uid,
@@ -92,6 +97,7 @@ class AppUser {
       emailVerified: emailVerified ?? this.emailVerified,
       twoFactorEnabled: twoFactorEnabled ?? this.twoFactorEnabled,
       avatarUrl: avatarUrl ?? this.avatarUrl,
+      coverUrl: coverUrl ?? this.coverUrl,
     );
   }
 }
@@ -684,11 +690,13 @@ class CustomAuthService {
     required String userId,
     String? displayName,
     String? avatarUrl,
+    String? coverUrl,
   }) async {
     try {
       await _api.updateProfile(
         displayName: displayName,
         avatarUrl: avatarUrl,
+        coverUrl: coverUrl,
       );
       // Update local state
       final user = await getCurrentUser();
@@ -696,6 +704,7 @@ class CustomAuthService {
         await _cacheUser(user.copyWith(
           displayName: displayName,
           avatarUrl: avatarUrl,
+          coverUrl: coverUrl,
         ));
       }
     } catch (e) {

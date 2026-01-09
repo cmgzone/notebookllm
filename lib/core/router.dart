@@ -69,6 +69,8 @@ import '../features/social/ui/conversations_screen.dart';
 import '../features/social/ui/group_chat_screen.dart';
 import '../features/social/ui/public_notebook_screen.dart';
 import '../features/social/ui/public_plan_screen.dart';
+import '../features/social/ui/profile_screen.dart';
+import '../features/social/ui/edit_profile_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 
 String getInitialLocation(bool hasSeenOnboarding) {
@@ -526,6 +528,18 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
                 child: PublicPlanScreen(planId: planId),
               );
             },
+          ),
+          GoRoute(
+            path: '/social/profile',
+            name: 'profile',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const ProfileScreen()),
+          ),
+          GoRoute(
+            path: '/social/profile/edit',
+            name: 'edit-profile',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const EditProfileScreen()),
           ),
         ],
       ),

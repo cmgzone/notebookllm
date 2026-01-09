@@ -8,6 +8,8 @@ import 'activity_feed_screen.dart';
 import 'social_leaderboard_screen.dart';
 import 'conversations_screen.dart';
 import 'discover_screen.dart';
+import 'profile_screen.dart';
+import '../../../core/auth/custom_auth_service.dart';
 
 class SocialHubScreen extends ConsumerStatefulWidget {
   const SocialHubScreen({super.key});
@@ -176,6 +178,57 @@ class _SocialHubScreenState extends ConsumerState<SocialHubScreen> {
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    // Profile Header Card
+                    Consumer(builder: (context, ref, _) {
+                      final user = ref.watch(customAuthStateProvider).user;
+                      return Card(
+                        child: InkWell(
+                          onTap: () => _navigateTo(const ProfileScreen()),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 24,
+                                  backgroundImage: user?.avatarUrl != null
+                                      ? NetworkImage(user!.avatarUrl!)
+                                      : null,
+                                  child: user?.avatarUrl == null
+                                      ? const Icon(Icons.person)
+                                      : null,
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        user?.displayName ?? 'Anonymous',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      const Text(
+                                        'View and edit your profile',
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(Icons.chevron_right),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 16),
                     // Quick stats
                     Row(
                       children: [

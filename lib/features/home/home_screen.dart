@@ -618,6 +618,14 @@ class _AppDrawer extends ConsumerWidget {
                         },
                       ),
                       _DrawerItem(
+                        icon: LucideIcons.user,
+                        label: 'My Profile',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/social/profile');
+                        },
+                      ),
+                      _DrawerItem(
                         icon: LucideIcons.userPlus,
                         label: 'Friends',
                         onTap: () {
