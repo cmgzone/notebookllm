@@ -1,4 +1,5 @@
 import pool from '../config/database.js';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface StudyGroup {
   id: string;
@@ -35,21 +36,23 @@ export const studyGroupService = {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
+      const groupId = uuidv4();
       const result = await client.query(`
-        INSERT INTO study_groups (name, description, owner_id, icon, is_public)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO study_groups (id, name, description, owner_id, icon, is_public)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
-      `, [data.name, data.description, data.ownerId, data.icon || '📚', data.isPublic || false]);
-      
+      `, [groupId, data.name, data.description, data.ownerId, data.icon || '📚', data.isPublic || false]);
+
       const group = result.rows[0];
-      
+
       // Add owner as member with owner role
+      const memberId = uuidv4();
       await client.query(`
-        INSERT INTO study_group_members (group_id, user_id, role)
-        VALUES ($1, $2, 'owner')
-      `, [group.id, data.ownerId]);
-      
+        INSERT INTO study_group_members (id, group_id, user_id, role)
+        VALUES ($1, $2, $3, 'owner')
+      `, [memberId, group.id, data.ownerId]);
+
       await client.query('COMMIT');
       return group;
     } catch (error) {
@@ -89,7 +92,7 @@ export const studyGroupService = {
   async getPublicGroups(userId: string, options?: { limit?: number; offset?: number; search?: string }) {
     const limit = Math.min(options?.limit || 20, 50);
     const offset = options?.offset || 0;
-    
+
     let query = `
       SELECT g.*, 
         (SELECT COUNT(*) FROM study_group_members WHERE group_id = g.id) as member_count,
@@ -100,15 +103,15 @@ export const studyGroupService = {
       WHERE g.is_public = true
     `;
     const params: any[] = [userId];
-    
+
     if (options?.search) {
       params.push(`%${options.search}%`);
       query += ` AND (g.name ILIKE $${params.length} OR g.description ILIKE $${params.length})`;
     }
-    
+
     query += ` ORDER BY member_count DESC, g.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
-    
+
     const result = await pool.query(query, params);
     return result.rows;
   },
@@ -119,41 +122,41 @@ export const studyGroupService = {
       'SELECT is_public, max_members FROM study_groups WHERE id = $1',
       [groupId]
     );
-    
+
     if (groupCheck.rows.length === 0) {
       throw new Error('Group not found');
     }
-    
+
     if (!groupCheck.rows[0].is_public) {
       throw new Error('This group is not public');
     }
-    
+
     // Check member count
     const memberCount = await pool.query(
       'SELECT COUNT(*) FROM study_group_members WHERE group_id = $1',
       [groupId]
     );
-    
+
     if (parseInt(memberCount.rows[0].count) >= groupCheck.rows[0].max_members) {
       throw new Error('Group is full');
     }
-    
+
     // Check if already a member
     const existingMember = await pool.query(
       'SELECT id FROM study_group_members WHERE group_id = $1 AND user_id = $2',
       [groupId, userId]
     );
-    
+
     if (existingMember.rows.length > 0) {
       throw new Error('Already a member of this group');
     }
-    
+
     // Join the group
     await pool.query(
       'INSERT INTO study_group_members (group_id, user_id, role) VALUES ($1, $2, $3)',
       [groupId, userId, 'member']
     );
-    
+
     return { success: true };
   },
 
@@ -164,7 +167,7 @@ export const studyGroupService = {
       SELECT role FROM study_group_members 
       WHERE group_id = $1 AND user_id = $2 AND role IN ('owner', 'admin')
     `, [groupId, userId]);
-    
+
     if (memberCheck.rows.length === 0) {
       throw new Error('Not authorized to update this group');
     }
@@ -188,7 +191,7 @@ export const studyGroupService = {
       WHERE id = $1 AND owner_id = $2
       RETURNING *
     `, [groupId, userId]);
-    
+
     if (result.rows.length === 0) {
       throw new Error('Not authorized to delete this group');
     }
@@ -200,17 +203,18 @@ export const studyGroupService = {
     const memberCheck = await pool.query(`
       SELECT role FROM study_group_members WHERE group_id = $1 AND user_id = $2
     `, [groupId, invitedBy]);
-    
+
     if (memberCheck.rows.length === 0) {
       throw new Error('Not a member of this group');
     }
 
+    const id = uuidv4();
     const result = await pool.query(`
-      INSERT INTO group_invitations (group_id, invited_user_id, invited_by)
-      VALUES ($1, $2, $3)
+      INSERT INTO group_invitations (id, group_id, invited_user_id, invited_by)
+      VALUES ($1, $2, $3, $4)
       ON CONFLICT (group_id, invited_user_id) DO NOTHING
       RETURNING *
-    `, [groupId, invitedUserId, invitedBy]);
+    `, [id, groupId, invitedUserId, invitedBy]);
     return result.rows[0];
   },
 
@@ -218,23 +222,24 @@ export const studyGroupService = {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       const invitation = await client.query(`
         UPDATE group_invitations
         SET status = 'accepted', responded_at = NOW()
         WHERE id = $1 AND invited_user_id = $2 AND status = 'pending'
         RETURNING *
       `, [invitationId, userId]);
-      
+
       if (invitation.rows.length === 0) {
         throw new Error('Invitation not found');
       }
 
+      const memberId = uuidv4();
       await client.query(`
-        INSERT INTO study_group_members (group_id, user_id, invited_by)
-        VALUES ($1, $2, $3)
-      `, [invitation.rows[0].group_id, userId, invitation.rows[0].invited_by]);
-      
+        INSERT INTO study_group_members (id, group_id, user_id, invited_by)
+        VALUES ($1, $2, $3, $4)
+      `, [memberId, invitation.rows[0].group_id, userId, invitation.rows[0].invited_by]);
+
       await client.query('COMMIT');
       return { success: true };
     } catch (error) {
@@ -250,7 +255,7 @@ export const studyGroupService = {
     const ownerCheck = await pool.query(`
       SELECT owner_id FROM study_groups WHERE id = $1
     `, [groupId]);
-    
+
     if (ownerCheck.rows[0]?.owner_id === userId) {
       throw new Error('Owner cannot leave the group. Transfer ownership or delete the group.');
     }
@@ -283,11 +288,12 @@ export const studyGroupService = {
     meetingUrl?: string;
     createdBy: string;
   }) {
+    const id = uuidv4();
     const result = await pool.query(`
-      INSERT INTO study_sessions (group_id, title, description, scheduled_at, duration_minutes, meeting_url, created_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO study_sessions (id, group_id, title, description, scheduled_at, duration_minutes, meeting_url, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
-    `, [data.groupId, data.title, data.description, data.scheduledAt, data.durationMinutes || 60, data.meetingUrl, data.createdBy]);
+    `, [id, data.groupId, data.title, data.description, data.scheduledAt, data.durationMinutes || 60, data.meetingUrl, data.createdBy]);
     return result.rows[0];
   },
 
@@ -316,12 +322,13 @@ export const studyGroupService = {
   },
 
   async shareNotebookWithGroup(notebookId: string, groupId: string, sharedBy: string, permission = 'viewer') {
+    const id = uuidv4();
     const result = await pool.query(`
-      INSERT INTO notebook_shares (notebook_id, shared_with_group_id, shared_by, permission)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO notebook_shares (id, notebook_id, shared_with_group_id, shared_by, permission)
+      VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT DO NOTHING
       RETURNING *
-    `, [notebookId, groupId, sharedBy, permission]);
+    `, [id, notebookId, groupId, sharedBy, permission]);
     return result.rows[0];
   },
 

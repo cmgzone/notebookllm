@@ -1,4 +1,5 @@
 import pool from '../config/database.js';
+import { v4 as uuidv4 } from 'uuid';
 import { notificationService } from './notificationService.js';
 import { ValidationError } from '../types/errors.js';
 
@@ -43,19 +44,20 @@ async function checkAreFriends(userId1: string, userId2: string): Promise<boolea
 // Helper to get or create conversation between two users
 async function getOrCreateConversation(userId1: string, userId2: string): Promise<string> {
   const [user1, user2] = userId1 < userId2 ? [userId1, userId2] : [userId2, userId1];
-  
+
   const existing = await pool.query(
     'SELECT id FROM conversations WHERE user1_id = $1 AND user2_id = $2',
     [user1, user2]
   );
-  
+
   if (existing.rows.length > 0) {
     return existing.rows[0].id;
   }
-  
+
+  const id = uuidv4();
   const result = await pool.query(
-    'INSERT INTO conversations (user1_id, user2_id) VALUES ($1, $2) RETURNING id',
-    [user1, user2]
+    'INSERT INTO conversations (id, user1_id, user2_id) VALUES ($1, $2, $3) RETURNING id',
+    [id, user1, user2]
   );
   return result.rows[0].id;
 }
@@ -77,48 +79,49 @@ export const messagingService = {
     if (senderId === recipientId) {
       throw new ValidationError('Cannot send message to yourself');
     }
-    
+
     const areFriends = await checkAreFriends(senderId, recipientId);
     if (!areFriends) {
       throw new ValidationError('You can only message friends');
     }
-    
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       const conversationId = await getOrCreateConversation(senderId, recipientId);
-      
+
+      const messageId = uuidv4();
       const result = await client.query(`
-        INSERT INTO direct_messages (conversation_id, sender_id, recipient_id, content, message_type, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO direct_messages (id, conversation_id, sender_id, recipient_id, content, message_type, metadata)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
-      `, [conversationId, senderId, recipientId, content.trim(), messageType, metadata || {}]);
-      
+      `, [messageId, conversationId, senderId, recipientId, content.trim(), messageType, metadata || {}]);
+
       const message = result.rows[0];
-      
+
       const [user1] = senderId < recipientId ? [senderId] : [recipientId];
       const unreadColumn = senderId === user1 ? 'user2_unread_count' : 'user1_unread_count';
-      
+
       await client.query(`
         UPDATE conversations 
         SET last_message_id = $1, last_message_at = NOW(), ${unreadColumn} = ${unreadColumn} + 1, updated_at = NOW()
         WHERE id = $2
       `, [message.id, conversationId]);
-      
+
       await client.query('COMMIT');
-      
+
       const sender = await pool.query(
         'SELECT display_name, avatar_url FROM users WHERE id = $1',
         [senderId]
       );
-      
+
       const senderName = sender.rows[0]?.display_name || 'Unknown';
-      
+
       notificationService.notifyNewMessage(recipientId, senderId, senderName).catch(err => {
         console.error('Failed to send message notification:', err);
       });
-      
+
       return {
         id: message.id,
         senderId: message.sender_id,
@@ -154,7 +157,7 @@ export const messagingService = {
       WHERE c.user1_id = $1 OR c.user2_id = $1
       ORDER BY c.last_message_at DESC NULLS LAST
     `, [userId]);
-    
+
     return result.rows.map(r => ({
       id: r.id,
       otherUserId: r.other_user_id,
@@ -176,10 +179,10 @@ export const messagingService = {
     if (!areFriends) {
       throw new ValidationError('You can only view messages with friends');
     }
-    
+
     const limit = Math.min(options?.limit || 50, 100);
     const conversationId = await getOrCreateConversation(userId, otherUserId);
-    
+
     let query = `
       SELECT dm.*, u.display_name as sender_username, u.avatar_url as sender_avatar_url
       FROM direct_messages dm
@@ -187,17 +190,17 @@ export const messagingService = {
       WHERE dm.conversation_id = $1
     `;
     const params: any[] = [conversationId];
-    
+
     if (options?.before) {
       query += ` AND dm.created_at < (SELECT created_at FROM direct_messages WHERE id = $${params.length + 1})`;
       params.push(options.before);
     }
-    
+
     query += ` ORDER BY dm.created_at DESC LIMIT $${params.length + 1}`;
     params.push(limit);
-    
+
     const result = await pool.query(query, params);
-    
+
     return result.rows.map(r => ({
       id: r.id,
       senderId: r.sender_id,
@@ -214,28 +217,28 @@ export const messagingService = {
   async markConversationRead(userId: string, otherUserId: string): Promise<void> {
     const [user1, user2] = userId < otherUserId ? [userId, otherUserId] : [otherUserId, userId];
     const unreadColumn = userId === user1 ? 'user1_unread_count' : 'user2_unread_count';
-    
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       const conv = await client.query(
         'SELECT id FROM conversations WHERE user1_id = $1 AND user2_id = $2',
         [user1, user2]
       );
-      
+
       if (conv.rows.length > 0) {
         await client.query(`
           UPDATE direct_messages 
           SET is_read = TRUE, read_at = NOW()
           WHERE conversation_id = $1 AND recipient_id = $2 AND is_read = FALSE
         `, [conv.rows[0].id, userId]);
-        
+
         await client.query(`
           UPDATE conversations SET ${unreadColumn} = 0 WHERE id = $1
         `, [conv.rows[0].id]);
       }
-      
+
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -259,33 +262,34 @@ export const messagingService = {
     if (content.length > 5000) {
       throw new ValidationError('Message too long (max 5000 characters)');
     }
-    
+
     const membership = await pool.query(
       'SELECT id FROM study_group_members WHERE group_id = $1 AND user_id = $2',
       [groupId, senderId]
     );
-    
+
     if (membership.rows.length === 0) {
       throw new ValidationError('You are not a member of this group');
     }
-    
+
+    const messageId = uuidv4();
     const result = await pool.query(`
-      INSERT INTO group_messages (group_id, sender_id, content, message_type, metadata, reply_to_id)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO group_messages (id, group_id, sender_id, content, message_type, metadata, reply_to_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
-    `, [groupId, senderId, content.trim(), messageType, metadata || {}, replyToId]);
-    
+    `, [messageId, groupId, senderId, content.trim(), messageType, metadata || {}, replyToId]);
+
     const message = result.rows[0];
-    
+
     const [sender, reply, group] = await Promise.all([
       pool.query('SELECT display_name, avatar_url FROM users WHERE id = $1', [senderId]),
       replyToId ? pool.query('SELECT content FROM group_messages WHERE id = $1', [replyToId]) : null,
       pool.query('SELECT name FROM study_groups WHERE id = $1', [groupId])
     ]);
-    
+
     const senderName = sender.rows[0]?.display_name || 'Unknown';
     const groupName = group.rows[0]?.name || 'Group';
-    
+
     pool.query(
       'SELECT user_id FROM study_group_members WHERE group_id = $1 AND user_id != $2',
       [groupId, senderId]
@@ -296,7 +300,7 @@ export const messagingService = {
         ).catch(err => console.error('Failed to send group notification:', err));
       }
     }).catch(err => console.error('Failed to get group members for notification:', err));
-    
+
     return {
       id: message.id,
       groupId: message.group_id,
@@ -321,13 +325,13 @@ export const messagingService = {
       'SELECT id FROM study_group_members WHERE group_id = $1 AND user_id = $2',
       [groupId, userId]
     );
-    
+
     if (membership.rows.length === 0) {
       throw new ValidationError('You are not a member of this group');
     }
-    
+
     const limit = Math.min(options?.limit || 50, 100);
-    
+
     let query = `
       SELECT gm.*, 
         u.display_name as sender_username, 
@@ -339,17 +343,17 @@ export const messagingService = {
       WHERE gm.group_id = $1
     `;
     const params: any[] = [groupId];
-    
+
     if (options?.before) {
       query += ` AND gm.created_at < (SELECT created_at FROM group_messages WHERE id = $${params.length + 1})`;
       params.push(options.before);
     }
-    
+
     query += ` ORDER BY gm.created_at DESC LIMIT $${params.length + 1}`;
     params.push(limit);
-    
+
     const result = await pool.query(query, params);
-    
+
     return result.rows.map(r => ({
       id: r.id,
       groupId: r.group_id,
@@ -366,12 +370,13 @@ export const messagingService = {
   },
 
   async markGroupMessagesRead(groupId: string, userId: string, lastMessageId: string): Promise<void> {
+    const id = uuidv4();
     await pool.query(`
-      INSERT INTO group_message_reads (group_id, user_id, last_read_message_id, last_read_at)
-      VALUES ($1, $2, $3, NOW())
+      INSERT INTO group_message_reads (id, group_id, user_id, last_read_message_id, last_read_at)
+      VALUES ($1, $2, $3, $4, NOW())
       ON CONFLICT (group_id, user_id) 
-      DO UPDATE SET last_read_message_id = $3, last_read_at = NOW()
-    `, [groupId, userId, lastMessageId]);
+      DO UPDATE SET last_read_message_id = $4, last_read_at = NOW()
+    `, [id, groupId, userId, lastMessageId]);
   },
 
   async getGroupUnreadCount(groupId: string, userId: string): Promise<number> {
@@ -379,7 +384,7 @@ export const messagingService = {
       'SELECT last_read_message_id FROM group_message_reads WHERE group_id = $1 AND user_id = $2',
       [groupId, userId]
     );
-    
+
     if (lastRead.rows.length === 0) {
       const count = await pool.query(
         'SELECT COUNT(*) FROM group_messages WHERE group_id = $1',
@@ -387,13 +392,13 @@ export const messagingService = {
       );
       return parseInt(count.rows[0].count);
     }
-    
+
     const count = await pool.query(`
       SELECT COUNT(*) FROM group_messages 
       WHERE group_id = $1 
       AND created_at > (SELECT created_at FROM group_messages WHERE id = $2)
     `, [groupId, lastRead.rows[0].last_read_message_id]);
-    
+
     return parseInt(count.rows[0].count);
   },
 
@@ -405,7 +410,7 @@ export const messagingService = {
       FROM conversations
       WHERE user1_id = $1 OR user2_id = $1
     `, [userId]);
-    
+
     const groupResult = await pool.query(`
       SELECT COUNT(DISTINCT gm.group_id) as count
       FROM group_messages gm
@@ -414,7 +419,7 @@ export const messagingService = {
       WHERE gmr.last_read_message_id IS NULL 
         OR gm.created_at > (SELECT created_at FROM group_messages WHERE id = gmr.last_read_message_id)
     `, [userId]);
-    
+
     return {
       direct: parseInt(directResult.rows[0].count) || 0,
       groups: parseInt(groupResult.rows[0].count) || 0

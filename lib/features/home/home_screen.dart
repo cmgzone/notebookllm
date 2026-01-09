@@ -565,19 +565,21 @@ class _AppDrawer extends ConsumerWidget {
                         },
                       ),
                       _DrawerItem(
-                        icon: LucideIcons.utensils,
-                        label: 'Meal Planner',
-                        onTap: () {
-                          Navigator.pop(context);
-                          context.push('/meal-planner');
-                        },
-                      ),
-                      _DrawerItem(
                         icon: LucideIcons.languages,
                         label: 'Language Learning',
                         onTap: () {
                           Navigator.pop(context);
                           context.push('/language-learning');
+                        },
+                      ),
+                      // Bloat features hidden for UI discipline
+                      /*
+                      _DrawerItem(
+                        icon: LucideIcons.utensils,
+                        label: 'Meal Planner',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/meal-planner');
                         },
                       ),
                       _DrawerItem(
@@ -604,6 +606,7 @@ class _AppDrawer extends ConsumerWidget {
                           context.push('/wellness');
                         },
                       ),
+                      */
                       const Divider(height: 32),
                       const _DrawerSection(title: 'Social'),
                       _DrawerItem(

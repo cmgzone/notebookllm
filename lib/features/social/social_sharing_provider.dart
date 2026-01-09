@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_service.dart';
 import '../../core/utils/app_logger.dart';
+import 'models/study_group.dart';
 
 const _logger = AppLogger('SocialSharingProvider');
 
 // =====================================================
 // Models
+
 // =====================================================
 
 class SharedContent {
@@ -262,38 +264,50 @@ class ContentStats {
 class DiscoverState {
   final List<DiscoverableNotebook> notebooks;
   final List<DiscoverablePlan> plans;
+  final List<StudyGroup> groups;
   final bool isLoadingNotebooks;
   final bool isLoadingPlans;
+  final bool isLoadingGroups;
   final bool hasMoreNotebooks;
   final bool hasMorePlans;
+  final bool hasMoreGroups;
   final String? error;
 
   DiscoverState({
     this.notebooks = const [],
     this.plans = const [],
+    this.groups = const [],
     this.isLoadingNotebooks = false,
     this.isLoadingPlans = false,
+    this.isLoadingGroups = false,
     this.hasMoreNotebooks = true,
     this.hasMorePlans = true,
+    this.hasMoreGroups = true,
     this.error,
   });
 
   DiscoverState copyWith({
     List<DiscoverableNotebook>? notebooks,
     List<DiscoverablePlan>? plans,
+    List<StudyGroup>? groups,
     bool? isLoadingNotebooks,
     bool? isLoadingPlans,
+    bool? isLoadingGroups,
     bool? hasMoreNotebooks,
     bool? hasMorePlans,
+    bool? hasMoreGroups,
     String? error,
   }) {
     return DiscoverState(
       notebooks: notebooks ?? this.notebooks,
       plans: plans ?? this.plans,
+      groups: groups ?? this.groups,
       isLoadingNotebooks: isLoadingNotebooks ?? this.isLoadingNotebooks,
       isLoadingPlans: isLoadingPlans ?? this.isLoadingPlans,
+      isLoadingGroups: isLoadingGroups ?? this.isLoadingGroups,
       hasMoreNotebooks: hasMoreNotebooks ?? this.hasMoreNotebooks,
       hasMorePlans: hasMorePlans ?? this.hasMorePlans,
+      hasMoreGroups: hasMoreGroups ?? this.hasMoreGroups,
       error: error,
     );
   }
@@ -404,6 +418,35 @@ class DiscoverNotifier extends StateNotifier<DiscoverState> {
     } catch (e, stack) {
       _logger.error('Error loading discoverable plans', e, stack);
       state = state.copyWith(isLoadingPlans: false, error: e.toString());
+    }
+  }
+
+  Future<void> loadGroups({
+    bool refresh = false,
+    String? search,
+  }) async {
+    if (state.isLoadingGroups) return;
+
+    state = state.copyWith(isLoadingGroups: true, error: null);
+    try {
+      final offset = refresh ? 0 : state.groups.length;
+      String url = '/social/groups/discover?limit=20&offset=$offset';
+      if (search != null && search.isNotEmpty) {
+        url += '&search=${Uri.encodeComponent(search)}';
+      }
+
+      final response = await _api.get(url);
+      final groupsList = response['groups'] as List? ?? [];
+      final groups = groupsList.map((g) => StudyGroup.fromJson(g)).toList();
+
+      state = state.copyWith(
+        groups: refresh ? groups : [...state.groups, ...groups],
+        isLoadingGroups: false,
+        hasMoreGroups: groups.length >= 20,
+      );
+    } catch (e, stack) {
+      _logger.error('Error loading discoverable groups', e, stack);
+      state = state.copyWith(isLoadingGroups: false, error: e.toString());
     }
   }
 

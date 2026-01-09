@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:google_fonts/google_fonts.dart';
 import '../social_sharing_provider.dart';
 import '../../../core/api/api_service.dart';
 import '../../../core/sources/source_icon_helper.dart';
+import '../../../theme/app_theme.dart';
 
 /// Screen to view a public notebook with its sources
 /// Users can view source details and fork the notebook to their account
@@ -33,6 +35,7 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
   }
 
   Future<void> _loadNotebookDetails() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -40,8 +43,15 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
 
     try {
       final api = ref.read(apiServiceProvider);
+      // Ensure notebookId is valid
+      if (widget.notebookId.isEmpty) {
+        throw Exception('Invalid notebook ID');
+      }
+
       final response = await api
           .get('/social-sharing/public/notebooks/${widget.notebookId}');
+
+      if (!mounted) return;
 
       if (response['success'] == true) {
         setState(() {
@@ -51,10 +61,15 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
           _isLoading = false;
         });
 
-        // Record view
-        ref
-            .read(socialSharingServiceProvider)
-            .recordView('notebook', widget.notebookId);
+        // Record view - intentionally fire and forget, but catch errors
+        try {
+          ref
+              .read(socialSharingServiceProvider)
+              .recordView('notebook', widget.notebookId)
+              .ignore();
+        } catch (_) {
+          // Ignore stats recording errors
+        }
       } else {
         setState(() {
           _error = 'Notebook not found or not public';
@@ -62,6 +77,7 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -79,33 +95,36 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
         {'includeSources': true},
       );
 
+      if (!mounted) return;
+
       if (response['success'] == true) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                  'Notebook forked! ${response['sourcesCopied']} sources copied.'),
-              backgroundColor: Colors.green,
-              action: SnackBarAction(
-                label: 'View',
-                textColor: Colors.white,
-                onPressed: () {
-                  context.push('/notebook/${response['notebook']['id']}');
-                },
-              ),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to fork: $e'),
-            backgroundColor: Colors.red,
+            content: Text(
+                'Notebook forked! ${response['sourcesCopied']} sources copied.'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'View',
+              textColor: Colors.white,
+              onPressed: () {
+                if (mounted) {
+                  context.push('/notebook/${response['notebook']['id']}');
+                }
+              },
+            ),
           ),
         );
       }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to fork: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _isForking = false);
@@ -117,9 +136,7 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      // Use theme's bottom sheet style implicitly or override here for extra fancy
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.7,
         minChildSize: 0.5,
@@ -146,19 +163,23 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
 
     if (_error != null || _notebook == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Not Found')),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+              Icon(Icons.error_outline,
+                  size: 64, color: theme.colorScheme.error),
               const SizedBox(height: 16),
               Text(_error ?? 'Notebook not found',
-                  style: TextStyle(color: Colors.grey[600])),
-              const SizedBox(height: 16),
-              FilledButton(
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              FilledButton.icon(
                 onPressed: () => context.pop(),
-                child: const Text('Go Back'),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Go Back'),
               ),
             ],
           ),
@@ -172,88 +193,176 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
     final sourceCount = _sources.length;
     final viewCount = notebook['view_count'] ?? 0;
     final likeCount = notebook['like_count'] ?? 0;
+    final avatarUrl = _owner?['avatarUrl'];
+    final username = _owner?['username'] ?? 'Unknown';
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text(title),
+        backgroundColor: Colors.transparent,
+        leading: BackButton(
+          color: Colors.white, // Always white on top of gradient
+          onPressed: () => context.pop(),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share),
+            icon: const Icon(Icons.share, color: Colors.white),
             onPressed: () {
-              // Share link functionality
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text('Share functionality coming soon!')),
+              );
             },
           ),
         ],
       ),
       body: CustomScrollView(
         slivers: [
-          // Header with owner info
+          // Premium Header with Gradient
           SliverToBoxAdapter(
             child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
+              decoration: const BoxDecoration(
+                gradient: AppTheme.premiumGradient,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Owner info
-                  Row(
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+                  child: Column(
                     children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundImage: _owner?['avatarUrl'] != null
-                            ? NetworkImage(_owner!['avatarUrl'])
-                            : null,
-                        child: _owner?['avatarUrl'] == null
-                            ? Text(
-                                (_owner?['username'] ?? '?')[0].toUpperCase())
-                            : null,
+                      // Large Icon / Avatar for Notebook
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.4),
+                            width: 2,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.book, // Or category icon
+                          size: 40,
+                          color: Colors.white,
+                        ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: 16),
+                      Text(
+                        title.toString(),
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          height: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Owner pill
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              _owner?['username'] ?? 'Unknown',
-                              style: theme.textTheme.titleMedium,
+                            CircleAvatar(
+                              radius: 10,
+                              backgroundColor: Colors.white24,
+                              backgroundImage: (avatarUrl != null &&
+                                      avatarUrl.toString().isNotEmpty)
+                                  ? NetworkImage(avatarUrl)
+                                  : null,
+                              child: (avatarUrl == null ||
+                                      avatarUrl.toString().isEmpty)
+                                  ? Text(
+                                      username.isNotEmpty
+                                          ? username[0].toUpperCase()
+                                          : '?',
+                                      style: const TextStyle(
+                                          fontSize: 10, color: Colors.white),
+                                    )
+                                  : null,
                             ),
+                            const SizedBox(width: 8),
                             Text(
-                              'Created ${notebook['created_at'] != null ? timeago.format(DateTime.parse(notebook['created_at'].toString())) : 'recently'}',
-                              style: TextStyle(
-                                  color: Colors.grey[600], fontSize: 12),
+                              'by $username',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      if (description != null &&
+                          description.toString().isNotEmpty) ...[
+                        Text(
+                          description.toString(),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontSize: 15,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                      // Glass Stats Row
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 12, horizontal: 24),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _StatVertical(
+                              icon: Icons.filter_none,
+                              value: sourceCount.toString(),
+                              label: 'Sources',
+                            ),
+                            Container(
+                                width: 1,
+                                height: 24,
+                                color: Colors.white24,
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 24)),
+                            _StatVertical(
+                              icon: Icons.visibility,
+                              value: viewCount.toString(),
+                              label: 'Views',
+                            ),
+                            Container(
+                                width: 1,
+                                height: 24,
+                                color: Colors.white24,
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 24)),
+                            _StatVertical(
+                              icon: Icons.favorite,
+                              value: likeCount.toString(),
+                              label: 'Likes',
                             ),
                           ],
                         ),
                       ),
                     ],
                   ),
-                  if (description != null && description.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(description, style: theme.textTheme.bodyMedium),
-                  ],
-                  const SizedBox(height: 16),
-                  // Stats row
-                  Row(
-                    children: [
-                      _StatBadge(
-                          icon: Icons.source,
-                          value: sourceCount,
-                          label: 'sources'),
-                      const SizedBox(width: 16),
-                      _StatBadge(
-                          icon: Icons.visibility,
-                          value: viewCount,
-                          label: 'views'),
-                      const SizedBox(width: 16),
-                      _StatBadge(
-                          icon: Icons.favorite,
-                          value: likeCount,
-                          label: 'likes'),
-                    ],
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -261,25 +370,32 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
           // Sources header
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
               child: Row(
                 children: [
                   Text(
-                    'Sources ($sourceCount)',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    'Sources',
+                    style: theme.textTheme.titleLarge,
                   ),
                   const Spacer(),
                   if (_sources.isNotEmpty)
-                    TextButton.icon(
+                    FilledButton.icon(
                       onPressed: _isForking ? null : _forkNotebook,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primaryContainer,
+                        foregroundColor: theme.colorScheme.onPrimaryContainer,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                      ),
                       icon: _isForking
                           ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
                             )
-                          : const Icon(Icons.fork_right),
+                          : const Icon(Icons.fork_right, size: 18),
                       label: Text(_isForking ? 'Forking...' : 'Fork All'),
                     ),
                 ],
@@ -291,15 +407,16 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
           if (_sources.isEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.all(32),
+                padding: const EdgeInsets.all(48),
                 child: Center(
                   child: Column(
                     children: [
-                      Icon(Icons.source_outlined,
-                          size: 48, color: Colors.grey[400]),
-                      const SizedBox(height: 8),
+                      Icon(Icons.auto_stories_outlined,
+                          size: 64, color: theme.colorScheme.outlineVariant),
+                      const SizedBox(height: 16),
                       Text('No sources in this notebook',
-                          style: TextStyle(color: Colors.grey[600])),
+                          style: TextStyle(
+                              color: theme.colorScheme.onSurfaceVariant)),
                     ],
                   ),
                 ),
@@ -312,9 +429,15 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final source = _sources[index];
-                    return _SourceCard(
-                      source: source,
-                      onTap: () => _showSourceDetail(source),
+                    if (source is! Map<String, dynamic>) {
+                      return const SizedBox.shrink(); // Skip invalid data
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _SourceCard(
+                        source: source,
+                        onTap: () => _showSourceDetail(source),
+                      ),
                     );
                   },
                   childCount: _sources.length,
@@ -325,9 +448,19 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.scaffoldBackgroundColor,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: SafeArea(
           child: Row(
             children: [
               Expanded(
@@ -337,7 +470,10 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
                         .read(discoverProvider.notifier)
                         .likeNotebook(widget.notebookId);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Liked!')),
+                      const SnackBar(
+                        content: Text('Liked!'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
                     );
                   },
                   icon: Icon(
@@ -349,23 +485,44 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
                   label: const Text('Like'),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
                 flex: 2,
-                child: FilledButton.icon(
-                  onPressed: _isForking ? null : _forkNotebook,
-                  icon: _isForking
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.fork_right),
-                  label:
-                      Text(_isForking ? 'Forking...' : 'Fork to My Notebooks'),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.premiumGradient,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: _isForking ? null : _forkNotebook,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    icon: _isForking
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.fork_right),
+                    label: Text(
+                        _isForking ? 'Forking...' : 'Fork to My Notebooks'),
+                  ),
                 ),
               ),
             ],
@@ -376,12 +533,12 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
   }
 }
 
-class _StatBadge extends StatelessWidget {
+class _StatVertical extends StatelessWidget {
   final IconData icon;
-  final int value;
+  final String value;
   final String label;
 
-  const _StatBadge({
+  const _StatVertical({
     required this.icon,
     required this.value,
     required this.label,
@@ -389,14 +546,25 @@ class _StatBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: Colors.grey[600]),
-        const SizedBox(width: 4),
+        Icon(icon, size: 20, color: Colors.white),
+        const SizedBox(height: 4),
         Text(
-          '$value $label',
-          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+          value,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.white.withValues(alpha: 0.8),
+          ),
         ),
       ],
     );
@@ -412,86 +580,128 @@ class _SourceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     final title = source['title'] ?? 'Untitled';
     final type = source['type'] ?? 'text';
     final summary = source['summary'];
     final contentPreview = source['content_preview'];
-    final addedAt = source['created_at'] != null
-        ? DateTime.parse(source['created_at'])
-        : DateTime.now();
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: _getTypeColor(type).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  SourceIconHelper.getIconForType(type),
-                  color: _getTypeColor(type),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+    // Safely parse date
+    final createdAtStr = source['created_at'];
+    DateTime? addedAt;
+    if (createdAtStr != null) {
+      addedAt = DateTime.tryParse(createdAtStr.toString());
+    }
+    addedAt ??= DateTime.now();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.3),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: _getTypeColor(type)
+                        .withValues(alpha: isDark ? 0.2 : 0.1),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: _getTypeColor(type).withValues(alpha: 0.3),
+                      width: 1,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      summary ?? contentPreview ?? 'No preview available',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _getTypeColor(type).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            type.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: _getTypeColor(type),
-                              fontWeight: FontWeight.bold,
+                  ),
+                  child: Icon(
+                    SourceIconHelper.getIconForType(type),
+                    color: _getTypeColor(type),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title.toString(),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        summary?.toString() ??
+                            contentPreview?.toString() ??
+                            'No preview available',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 13,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              type.toString().toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: theme.colorScheme.onSurface,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          timeago.format(addedAt),
-                          style:
-                              TextStyle(fontSize: 11, color: Colors.grey[500]),
-                        ),
-                      ],
-                    ),
-                  ],
+                          const SizedBox(width: 8),
+                          Icon(Icons.access_time,
+                              size: 12,
+                              color: theme.colorScheme.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                          Text(
+                            timeago.format(addedAt),
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const Icon(Icons.chevron_right, color: Colors.grey),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -501,28 +711,28 @@ class _SourceCard extends StatelessWidget {
   Color _getTypeColor(String type) {
     switch (type) {
       case 'youtube':
-        return Colors.red;
+        return const Color(0xFFFF0000); // Youtube Red
       case 'url':
-        return Colors.blue;
+        return const Color(0xFF3B82F6); // Blue 500
       case 'drive':
-        return Colors.green;
+        return const Color(0xFF22C55E); // Green 500
       case 'text':
-        return Colors.orange;
+        return const Color(0xFFF97316); // Orange 500
       case 'audio':
-        return Colors.purple;
+        return const Color(0xFFA855F7); // Purple 500
       case 'image':
-        return Colors.pink;
+        return const Color(0xFFEC4899); // Pink 500
       case 'github':
-        return Colors.grey.shade800;
+        return const Color(0xFF1F2937); // Gray 800
       case 'code':
-        return Colors.teal;
+        return const Color(0xFF14B8A6); // Teal 500
       default:
         return Colors.grey;
     }
   }
 }
 
-class _SourceDetailSheet extends StatelessWidget {
+class _SourceDetailSheet extends ConsumerStatefulWidget {
   final Map<String, dynamic> source;
   final ScrollController scrollController;
 
@@ -532,149 +742,244 @@ class _SourceDetailSheet extends StatelessWidget {
   });
 
   @override
+  ConsumerState<_SourceDetailSheet> createState() => _SourceDetailSheetState();
+}
+
+class _SourceDetailSheetState extends ConsumerState<_SourceDetailSheet> {
+  bool _isLoading = true;
+  String? _fullContent;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFullContent();
+  }
+
+  Future<void> _loadFullContent() async {
+    if (!mounted) return;
+
+    // If we already have full content in the source map, use it
+    if (widget.source['content'] != null &&
+        widget.source['content'].toString().length > 500) {
+      setState(() {
+        _fullContent = widget.source['content'];
+        _isLoading = false;
+      });
+      return;
+    }
+
+    try {
+      final api = ref.read(apiServiceProvider);
+      final id = widget.source['id'];
+
+      final response = await api.get('/social-sharing/public/sources/$id');
+
+      if (!mounted) return;
+
+      if (response['success'] == true && response['source'] != null) {
+        setState(() {
+          _fullContent = response['source']['content'];
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _error = 'Failed to load full content';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final title = source['title'] ?? 'Untitled';
-    final type = source['type'] ?? 'text';
-    final summary = source['summary'];
-    final contentPreview = source['content_preview'];
-    final content = source['content'];
+    final title = widget.source['title'] ?? 'Untitled';
+    final type = widget.source['type'] ?? 'text';
+    final summary = widget.source['summary'];
+    final contentPreview = widget.source['content_preview'];
+
+    // Use full content if loaded, otherwise fallback to preview
+    final displayContent =
+        _fullContent ?? widget.source['content'] ?? contentPreview;
 
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        color: theme.scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, -5),
+          ),
+        ],
       ),
       child: Column(
         children: [
           // Handle
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
+          Center(
+            child: Container(
+              width: 48,
+              height: 5,
+              margin: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2.5),
+              ),
             ),
           ),
           // Header
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
               children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: _getTypeColor(type).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    SourceIconHelper.getIconForType(type),
-                    color: _getTypeColor(type),
-                  ),
-                ),
-                const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _getTypeColor(type).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          type.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: _getTypeColor(type),
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
+                    child: Text(
+                  title.toString(),
+                  style: GoogleFonts.outfit(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
                   ),
-                ),
+                )),
                 IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.pop(context),
+                  style: IconButton.styleFrom(
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                  ),
                 ),
               ],
             ),
           ),
-          const Divider(),
+          const SizedBox(height: 8),
+          Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                children: [
+                  Icon(SourceIconHelper.getIconForType(type),
+                      size: 16, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    type.toString().toUpperCase(),
+                    style: TextStyle(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              )),
+          const Divider(height: 32),
           // Content
           Expanded(
             child: ListView(
-              controller: scrollController,
-              padding: const EdgeInsets.all(16),
+              controller: widget.scrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
               children: [
-                if (summary != null && summary.isNotEmpty) ...[
+                if (summary != null && summary.toString().isNotEmpty) ...[
                   Text('Summary',
-                      style: theme.textTheme.titleSmall
+                      style: theme.textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(8),
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: theme.colorScheme.outline.withValues(alpha: 0.1),
+                      ),
                     ),
-                    child: Text(summary),
+                    child: Text(
+                      summary.toString(),
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: theme.colorScheme.onSurface,
+                        height: 1.6,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 24),
                 ],
-                Text('Content Preview',
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
+                // Display error if present
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline,
+                            size: 16, color: theme.colorScheme.error),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: theme.colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Row(
+                  children: [
+                    Text(_isLoading ? 'Content Preview' : 'Content',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold)),
+                    if (_isLoading) ...[
+                      const SizedBox(width: 8),
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 4),
+                      Text('Loading full content...',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
+                          )),
+                    ]
+                  ],
+                ),
+                const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
+                    color: theme.colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withValues(alpha: 0.1),
+                    ),
                   ),
                   child: Text(
-                    content ?? contentPreview ?? 'No content available',
-                    style: const TextStyle(fontFamily: 'monospace'),
+                    displayContent?.toString() ?? 'No content available',
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurfaceVariant,
+                      height: 1.5,
+                    ),
                   ),
                 ),
+                const SizedBox(height: 32),
               ],
             ),
           ),
         ],
       ),
     );
-  }
-
-  Color _getTypeColor(String type) {
-    switch (type) {
-      case 'youtube':
-        return Colors.red;
-      case 'url':
-        return Colors.blue;
-      case 'drive':
-        return Colors.green;
-      case 'text':
-        return Colors.orange;
-      case 'audio':
-        return Colors.purple;
-      case 'image':
-        return Colors.pink;
-      case 'github':
-        return Colors.grey.shade800;
-      case 'code':
-        return Colors.teal;
-      default:
-        return Colors.grey;
-    }
   }
 }

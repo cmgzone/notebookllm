@@ -42,7 +42,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
             search: query.isEmpty ? null : query,
             sortBy: _sortBy,
           );
-    } else {
+    } else if (_tabController.index == 1) {
       ref.read(discoverProvider.notifier).loadPlans(
             refresh: true,
             search: query.isEmpty ? null : query,

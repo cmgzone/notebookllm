@@ -1,4 +1,5 @@
 import pool from '../config/database.js';
+import { v4 as uuidv4 } from 'uuid';
 import { notificationService } from './notificationService.js';
 import { NotFoundError, ValidationError } from '../types/errors.js';
 
@@ -55,7 +56,7 @@ export const friendService = {
     // Sanitize and limit
     const sanitizedQuery = query.replace(/[%_]/g, '\\$&'); // Escape SQL wildcards
     const safeLimit = Math.min(Math.max(1, limit), 50); // Clamp between 1-50
-    
+
     const result = await pool.query(`
       SELECT id, display_name as username, avatar_url
       FROM users
@@ -80,11 +81,11 @@ export const friendService = {
     if (userId === friendId) {
       throw new ValidationError('Cannot send friend request to yourself');
     }
-    
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       // Check if request already exists (with lock)
       const existing = await client.query(`
         SELECT id, status FROM friendships 
@@ -104,14 +105,15 @@ export const friendService = {
         throw new NotFoundError('User not found');
       }
 
+      const id = uuidv4();
       const result = await client.query(`
-        INSERT INTO friendships (user_id, friend_id, status)
-        VALUES ($1, $2, 'pending')
+        INSERT INTO friendships (id, user_id, friend_id, status)
+        VALUES ($1, $2, $3, 'pending')
         RETURNING *
-      `, [userId, friendId]);
-      
+      `, [id, userId, friendId]);
+
       await client.query('COMMIT');
-      
+
       // Send notification to the recipient (async)
       pool.query('SELECT display_name FROM users WHERE id = $1', [userId])
         .then(sender => {
@@ -120,7 +122,7 @@ export const friendService = {
             .catch(err => console.error('Failed to send friend request notification:', err));
         })
         .catch(err => console.error('Failed to get sender name for notification:', err));
-      
+
       return result.rows[0];
     } catch (error) {
       await client.query('ROLLBACK');
@@ -139,24 +141,24 @@ export const friendService = {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       // First verify the request exists and user is the recipient
       const check = await client.query(`
         SELECT id, user_id, friend_id, status FROM friendships 
         WHERE id = $1 FOR UPDATE
       `, [requestId]);
-      
+
       if (check.rows.length === 0) {
         await client.query('ROLLBACK');
         throw new NotFoundError('Friend request not found');
       }
-      
+
       const request = check.rows[0];
       if (request.friend_id !== userId) {
         await client.query('ROLLBACK');
         throw new ValidationError('You can only accept requests sent to you');
       }
-      
+
       if (request.status !== 'pending') {
         await client.query('ROLLBACK');
         throw new ConflictError('Friend request is not pending');
@@ -168,7 +170,7 @@ export const friendService = {
         WHERE id = $1
         RETURNING *
       `, [requestId]);
-      
+
       await client.query('COMMIT');
       return result.rows[0];
     } catch (error) {
@@ -219,7 +221,7 @@ export const friendService = {
   async getFriends(userId: string, options?: { limit?: number; offset?: number }): Promise<FriendResponse[]> {
     const limit = Math.min(options?.limit || 50, 100);
     const offset = options?.offset || 0;
-    
+
     // Using UNION ALL for better performance instead of CASE in JOIN
     const result = await pool.query(`
       SELECT f.id, f.friend_id, u.display_name as username, u.avatar_url, f.status, f.created_at, f.accepted_at

@@ -5,6 +5,7 @@
 
 import { Octokit } from '@octokit/rest';
 import crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database.js';
 
 // Encryption key from environment
@@ -140,7 +141,7 @@ class GitHubService {
       error?: string;
       error_description?: string;
     };
-    
+
     if (data.error) {
       throw new Error(`GitHub OAuth error: ${data.error_description || data.error}`);
     }
@@ -157,16 +158,16 @@ class GitHubService {
    */
   async connectWithPAT(userId: string, token: string): Promise<GitHubConnection> {
     // Validate token by fetching user info with timeout and retry
-    const octokit = new Octokit({ 
+    const octokit = new Octokit({
       auth: token,
       request: {
         timeout: 30000, // 30 second timeout
       },
     });
-    
+
     let user;
     let lastError: Error | null = null;
-    
+
     // Retry up to 3 times for transient network issues
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
@@ -175,22 +176,22 @@ class GitHubService {
         break; // Success, exit retry loop
       } catch (error: any) {
         lastError = error;
-        
+
         // Don't retry auth errors
         if (error.name === 'HttpError' && error.status === 401) {
           throw new Error('Invalid GitHub token. Please check your Personal Access Token.');
         }
-        
+
         // Log retry attempt
         console.log(`GitHub connect attempt ${attempt}/3 failed:`, error.message);
-        
+
         // If not last attempt, wait before retry
         if (attempt < 3) {
           await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
         }
       }
     }
-    
+
     if (!user) {
       const errorMsg = lastError?.message || 'Unknown error';
       if (errorMsg.includes('timeout') || errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ECONNRESET')) {
@@ -231,13 +232,15 @@ class GitHubService {
     }
 
     // Create new connection
+    const id = uuidv4();
     const result = await pool.query(
       `INSERT INTO github_connections 
-       (user_id, github_user_id, github_username, github_email, github_avatar_url, 
+       (id, user_id, github_user_id, github_username, github_email, github_avatar_url, 
         access_token_encrypted, scopes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
+        id,
         userId,
         user.id.toString(),
         user.login,
@@ -288,14 +291,14 @@ class GitHubService {
     }
 
     const token = this.decrypt(result.rows[0].access_token_encrypted);
-    
+
     // Update last used
     await pool.query(
       'UPDATE github_connections SET last_used_at = NOW() WHERE user_id = $1',
       [userId]
     );
 
-    return new Octokit({ 
+    return new Octokit({
       auth: token,
       request: {
         timeout: 30000, // 30 second timeout
@@ -316,7 +319,7 @@ class GitHubService {
   } = {}): Promise<GitHubRepo[]> {
     const octokit = await this.getOctokit(userId);
     const connection = await this.getConnection(userId);
-    
+
     if (!connection) throw new Error('GitHub not connected');
 
     const { data: repos } = await octokit.repos.listForAuthenticatedUser({
@@ -416,9 +419,9 @@ class GitHubService {
    * Get file contents
    */
   async getFileContent(
-    userId: string, 
-    owner: string, 
-    repo: string, 
+    userId: string,
+    owner: string,
+    repo: string,
     path: string,
     branch?: string
   ): Promise<FileContent> {
@@ -520,7 +523,7 @@ class GitHubService {
     try {
       const octokit = await this.getOctokit(userId);
       const { data } = await octokit.repos.getReadme({ owner, repo });
-      
+
       if ('content' in data && data.content) {
         return Buffer.from(data.content, 'base64').toString('utf-8');
       }

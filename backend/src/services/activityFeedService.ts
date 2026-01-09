@@ -1,17 +1,18 @@
 import pool from '../config/database.js';
+import { v4 as uuidv4 } from 'uuid';
 import { friendService } from './friendService.js';
 
-export type ActivityType = 
-  | 'achievement_unlocked' 
-  | 'quiz_completed' 
+export type ActivityType =
+  | 'achievement_unlocked'
+  | 'quiz_completed'
   | 'flashcard_deck_completed'
-  | 'notebook_created' 
-  | 'notebook_shared' 
+  | 'notebook_created'
+  | 'notebook_shared'
   | 'notebook_forked'
-  | 'study_streak' 
+  | 'study_streak'
   | 'level_up'
-  | 'joined_group' 
-  | 'study_session_completed' 
+  | 'joined_group'
+  | 'study_session_completed'
   | 'friend_added'
   // New content-rich activity types
   | 'source_shared'
@@ -58,14 +59,16 @@ export const activityFeedService = {
     referenceType?: string;
     isPublic?: boolean;
   }) {
+    const id = uuidv4();
     const result = await pool.query(`
-      INSERT INTO activities (user_id, activity_type, title, description, metadata, reference_id, reference_type, is_public)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO activities (id, user_id, activity_type, title, description, metadata, reference_id, reference_type, is_public)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
     `, [
-      data.userId, 
-      data.activityType, 
-      data.title, 
+      id,
+      data.userId,
+      data.activityType,
+      data.title,
       data.description,
       JSON.stringify(data.metadata || {}),
       data.referenceId,
@@ -77,7 +80,7 @@ export const activityFeedService = {
 
   async getFeed(userId: string, options: { limit?: number; offset?: number; filter?: ActivityType } = {}) {
     const { limit = 50, offset = 0, filter } = options;
-    
+
     // Get friend IDs
     const friendIds = await friendService.getFriendIds(userId);
     const allUserIds = [userId, ...friendIds];
@@ -96,11 +99,11 @@ export const activityFeedService = {
         ${filter ? 'AND a.activity_type = $5' : ''}
       ORDER BY a.created_at DESC
       LIMIT $3 OFFSET $4
-    `, filter 
+    `, filter
       ? [userId, allUserIds, limit, offset, filter]
       : [userId, allUserIds, limit, offset]
     );
-    
+
     // Ensure reaction_count is a number
     return result.rows.map(row => ({
       ...row,
@@ -111,7 +114,7 @@ export const activityFeedService = {
 
   async getUserActivities(userId: string, viewerId: string, limit = 20) {
     const areFriends = await friendService.areFriends(userId, viewerId);
-    
+
     const result = await pool.query(`
       SELECT 
         a.*,
@@ -130,13 +133,14 @@ export const activityFeedService = {
   },
 
   async addReaction(activityId: string, userId: string, reactionType: string) {
+    const id = uuidv4();
     const result = await pool.query(`
-      INSERT INTO activity_reactions (activity_id, user_id, reaction_type)
-      VALUES ($1, $2, $3)
+      INSERT INTO activity_reactions (id, activity_id, user_id, reaction_type)
+      VALUES ($1, $2, $3, $4)
       ON CONFLICT (activity_id, user_id) 
-      DO UPDATE SET reaction_type = $3
+      DO UPDATE SET reaction_type = $4
       RETURNING *
-    `, [activityId, userId, reactionType]);
+    `, [id, activityId, userId, reactionType]);
     return result.rows[0];
   },
 

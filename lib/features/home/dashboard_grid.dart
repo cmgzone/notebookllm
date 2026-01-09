@@ -86,6 +86,17 @@ class DashboardGrid extends StatelessWidget {
                         const SizedBox(width: 12),
                         Expanded(
                           child: _BentoCard(
+                            title: 'Social Hub',
+                            icon: LucideIcons.users,
+                            color: const Color(0xFF10B981), // Emerald
+                            onTap: () => context.push('/social'),
+                            height: 120,
+                            compact: true,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _BentoCard(
                             title: 'Stats',
                             icon: LucideIcons.trophy,
                             color: const Color(0xFFFBBF24), // Amber

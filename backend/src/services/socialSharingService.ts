@@ -1,4 +1,5 @@
 import pool from '../config/database.js';
+import { v4 as uuidv4 } from 'uuid';
 import { activityFeedService } from './activityFeedService.js';
 
 export interface SharedContent {
@@ -83,11 +84,12 @@ export const socialSharingService = {
     const contentTitle = ownershipCheck.rows[0].title;
 
     // Create shared content entry
+    const id = uuidv4();
     const result = await pool.query(`
-      INSERT INTO shared_content (user_id, content_type, content_id, caption, is_public)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO shared_content (id, user_id, content_type, content_id, caption, is_public)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
-    `, [userId, contentType, contentId, caption, isPublic]);
+    `, [id, userId, contentType, contentId, caption, isPublic]);
 
     // Update share count AND set is_public on original content
     // This makes the content discoverable in the discover feed
@@ -342,11 +344,12 @@ export const socialSharingService = {
   // Like Content
   // =====================================================
   async likeContent(contentType: string, contentId: string, userId: string): Promise<void> {
+    const id = uuidv4();
     await pool.query(`
-      INSERT INTO content_likes (content_type, content_id, user_id)
-      VALUES ($1, $2, $3)
+      INSERT INTO content_likes (id, content_type, content_id, user_id)
+      VALUES ($1, $2, $3, $4)
       ON CONFLICT (content_type, content_id, user_id) DO NOTHING
-    `, [contentType, contentId, userId]);
+    `, [id, contentType, contentId, userId]);
   },
 
   // =====================================================
@@ -363,11 +366,12 @@ export const socialSharingService = {
   // Save Content (Bookmark)
   // =====================================================
   async saveContent(contentType: string, contentId: string, userId: string): Promise<void> {
+    const id = uuidv4();
     await pool.query(`
-      INSERT INTO content_saves (content_type, content_id, user_id)
-      VALUES ($1, $2, $3)
+      INSERT INTO content_saves (id, content_type, content_id, user_id)
+      VALUES ($1, $2, $3, $4)
       ON CONFLICT (content_type, content_id, user_id) DO NOTHING
-    `, [contentType, contentId, userId]);
+    `, [id, contentType, contentId, userId]);
   },
 
   // =====================================================
@@ -561,11 +565,13 @@ export const socialSharingService = {
     const title = newTitle || `${original.title} (Fork)`;
     const description = `Forked from ${original.original_owner}'s notebook: ${original.title}`;
 
+    const newNotebookId = uuidv4();
     const newNotebookResult = await pool.query(`
-      INSERT INTO notebooks (user_id, title, description, category, is_public)
-      VALUES ($1, $2, $3, $4, false)
+      INSERT INTO notebooks (id, user_id, title, description, category, is_public)
+      VALUES ($1, $2, $3, $4, $5, false)
       RETURNING *
     `, [
+      newNotebookId,
       userId,
       title,
       description,
@@ -596,10 +602,12 @@ export const socialSharingService = {
           }
         }
 
+        const newSourceId = uuidv4();
         await pool.query(`
-          INSERT INTO sources (notebook_id, title, type, content, summary, url, metadata, user_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          INSERT INTO sources (id, notebook_id, title, type, content, summary, url, metadata, user_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `, [
+          newSourceId,
           newNotebook.id,
           source.title,
           source.type,
@@ -744,11 +752,13 @@ export const socialSharingService = {
     const title = newTitle || `${original.title} (Fork)`;
     const description = `Forked from ${original.original_owner}'s plan: ${original.title}\n\n${original.description || ''}`;
 
+    const newPlanId = uuidv4();
     const newPlanResult = await pool.query(`
-      INSERT INTO plans (user_id, title, description, status, is_public, metadata)
-      VALUES ($1, $2, $3, 'draft', false, $4)
+      INSERT INTO plans (id, user_id, title, description, status, is_public, metadata)
+      VALUES ($1, $2, $3, $4, 'draft', false, $5)
       RETURNING *
     `, [
+      newPlanId,
       userId,
       title,
       description,
@@ -792,11 +802,13 @@ export const socialSharingService = {
           acceptanceCriteria = [];
         }
 
+        const newReqId = uuidv4();
         const newReqResult = await pool.query(`
-          INSERT INTO plan_requirements (plan_id, title, description, ears_pattern, acceptance_criteria)
-          VALUES ($1, $2, $3, $4, $5)
+          INSERT INTO plan_requirements (id, plan_id, title, description, ears_pattern, acceptance_criteria)
+          VALUES ($1, $2, $3, $4, $5, $6)
           RETURNING id
         `, [
+          newReqId,
           newPlan.id,
           req.title,
           req.description,
@@ -819,11 +831,13 @@ export const socialSharingService = {
 
       // First pass: create all tasks without parent references
       for (const task of tasksResult.rows) {
+        const newTaskId = uuidv4();
         const newTaskResult = await pool.query(`
-          INSERT INTO plan_tasks (plan_id, title, description, status, priority)
-          VALUES ($1, $2, $3, 'not_started', $4)
+          INSERT INTO plan_tasks (id, plan_id, title, description, status, priority)
+          VALUES ($1, $2, $3, $4, 'not_started', $5)
           RETURNING id
         `, [
+          newTaskId,
           newPlan.id,
           task.title,
           task.description,
@@ -863,10 +877,12 @@ export const socialSharingService = {
           ? `{${newRequirementIds.join(',')}}`
           : '{}';
 
+        const newNoteId = uuidv4();
         await pool.query(`
-          INSERT INTO plan_design_notes (plan_id, content, requirement_ids)
-          VALUES ($1, $2, $3::uuid[])
+          INSERT INTO plan_design_notes (id, plan_id, content, requirement_ids)
+          VALUES ($1, $2, $3, $4::uuid[])
         `, [
+          newNoteId,
           newPlan.id,
           note.content,
           pgArrayLiteral

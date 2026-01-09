@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'code_review_provider.dart';
 import '../github/github_provider.dart';
 
@@ -686,8 +687,7 @@ class _CodeReviewScreenState extends ConsumerState<CodeReviewScreen>
               ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
-                onPressed: () =>
-                    Navigator.pushNamed(context, '/github/connect'),
+                onPressed: () => context.push('/github'),
                 icon: const Icon(Icons.link, size: 16),
                 label: const Text('Connect GitHub'),
               ),
