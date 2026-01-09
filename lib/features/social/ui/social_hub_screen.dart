@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../social_provider.dart';
+import '../../notebook/notebook_provider.dart';
 import '../chat_provider.dart';
 import 'friends_screen.dart';
 import 'study_groups_screen.dart';
@@ -28,6 +30,8 @@ class _SocialHubScreenState extends ConsumerState<SocialHubScreen> {
       ref.read(friendsProvider.notifier).loadRequests();
       ref.read(studyGroupsProvider.notifier).loadGroups();
       ref.read(studyGroupsProvider.notifier).loadInvitations();
+      ref.read(activityFeedProvider.notifier).loadFeed();
+      ref.read(notebookProvider.notifier).loadNotebooks();
     });
   }
 
@@ -234,6 +238,16 @@ class _SocialHubScreenState extends ConsumerState<SocialHubScreen> {
                       children: [
                         Expanded(
                           child: _QuickStatCard(
+                            icon: Icons.book,
+                            label: 'Notebooks',
+                            value: '${ref.watch(notebookProvider).length}',
+                            color: Colors.orange,
+                            onTap: () => context.go('/home'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _QuickStatCard(
                             icon: Icons.people,
                             label: 'Friends',
                             value: '${friendsState.friends.length}',
@@ -241,7 +255,7 @@ class _SocialHubScreenState extends ConsumerState<SocialHubScreen> {
                             onTap: () => _navigateTo(const FriendsScreen()),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: _QuickStatCard(
                             icon: Icons.groups,

@@ -7,16 +7,18 @@ const getApiBase = () => {
     if (process.env.NEXT_PUBLIC_API_URL) {
         return process.env.NEXT_PUBLIC_API_URL;
     }
-    
+
     // In browser, check if we're on localhost for development
     if (typeof window !== 'undefined') {
         const hostname = window.location.hostname;
+        console.log('[API] Hostname:', hostname);
         if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            console.log('[API] Using local backend');
             // Local development - try local backend first
             return 'http://localhost:3005/api';
         }
     }
-    
+    console.log('[API] Using production backend:', PRODUCTION_API_URL);
     // Default to production backend
     return PRODUCTION_API_URL;
 };
@@ -56,6 +58,32 @@ export interface CreditTransaction {
     description: string;
     balance_after: number;
     created_at: string;
+}
+
+// Research Interfaces
+export interface ResearchConfig {
+    depth: 'quick' | 'standard' | 'deep';
+    template: 'general' | 'academic' | 'productComparison' | 'marketAnalysis' | 'howToGuide' | 'prosAndCons';
+    notebookId?: string;
+}
+
+export interface ResearchSource {
+    title: string;
+    url: string;
+    content: string;
+    snippet?: string;
+    credibility: string;
+    credibilityScore: number;
+}
+
+export interface ResearchProgress {
+    status: string;
+    progress: number;
+    sources?: ResearchSource[];
+    images?: string[];
+    videos?: string[];
+    result?: string;
+    isComplete: boolean;
 }
 
 export interface ApiToken {
@@ -158,6 +186,32 @@ export interface AIModelOption {
     isPremium: boolean;
 }
 
+export interface Notebook {
+    id: string;
+    userId: string;
+    title: string;
+    description: string | null;
+    coverImage: string | null;
+    category: string | null;
+    createdAt: string;
+    updatedAt: string;
+    sourceCount?: number;
+    isShared?: boolean;
+}
+
+export interface Source {
+    id: string;
+    notebookId: string;
+    type: 'pdf' | 'url' | 'youtube' | 'text' | 'image';
+    title: string;
+    content?: string;
+    url?: string;
+    imageUrl?: string;
+    createdAt: string;
+    credibility?: string;
+    credibilityScore?: number;
+}
+
 class ApiService {
     private token: string | null = null;
 
@@ -231,6 +285,156 @@ class ApiService {
 
     logout() {
         this.clearToken();
+    }
+
+    // Notebooks
+    async getNotebooks(): Promise<Notebook[]> {
+        const data = await this.fetch<{ notebooks: Notebook[] }>('/notebooks');
+        return data.notebooks || [];
+    }
+
+    async getNotebook(id: string): Promise<Notebook> {
+        const data = await this.fetch<{ notebook: Notebook }>(`/notebooks/${id}`);
+        return data.notebook;
+    }
+
+    async createNotebook(data: { title: string; description?: string; coverImage?: string; category?: string }): Promise<Notebook> {
+        const response = await this.fetch<{ notebook: Notebook }>('/notebooks', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+        return response.notebook;
+    }
+
+    async updateNotebook(id: string, data: { title?: string; description?: string; coverImage?: string; category?: string }): Promise<Notebook> {
+        const response = await this.fetch<{ notebook: Notebook }>(`/notebooks/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+        return response.notebook;
+    }
+
+    async deleteNotebook(id: string): Promise<void> {
+        await this.fetch(`/notebooks/${id}`, {
+            method: 'DELETE',
+        });
+    }
+
+    // Sources
+    async getSources(notebookId: string): Promise<Source[]> {
+        const data = await this.fetch<{ sources: Source[] }>(`/sources/notebook/${notebookId}`);
+        return data.sources || [];
+    }
+
+    async createSource(data: { notebookId: string; type: string; title: string; content?: string; url?: string; imageUrl?: string }): Promise<Source> {
+        const response = await this.fetch<{ source: Source }>('/sources', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+        return response.source;
+    }
+
+    async deleteSource(id: string): Promise<void> {
+        await this.fetch(`/sources/${id}`, {
+            method: 'DELETE',
+        });
+    }
+
+
+
+    // AI Chat
+    async chatWithAI(messages: { role: string; content: string }[], provider = 'gemini', model?: string): Promise<string> {
+        const response = await this.fetch<{ response: string }>('/ai/chat', {
+            method: 'POST',
+            body: JSON.stringify({
+                messages,
+                provider,
+                model
+            }),
+        });
+        return response.response;
+    }
+
+    // Helper for streaming chat
+    async chatWithAIStream(
+        messages: { role: string; content: string }[],
+        onChunk: (chunk: string) => void,
+        provider = 'gemini',
+        model?: string
+    ): Promise<void> {
+        if (!this.token) throw new Error("Not authenticated");
+
+        const response = await fetch(`${API_BASE}/ai/chat/stream`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.token}`,
+            },
+            body: JSON.stringify({
+                messages,
+                provider,
+                model
+            }),
+        });
+
+        if (!response.body) throw new Error("ReadableStream not supported");
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value);
+            onChunk(chunk);
+        }
+    }
+
+    // Research
+    async performResearchStream(
+        query: string,
+        config: ResearchConfig,
+        onProgress: (progress: ResearchProgress) => void
+    ): Promise<void> {
+        if (!this.token) throw new Error("Not authenticated");
+
+        const response = await fetch(`${API_BASE}/research/stream`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.token}`,
+            },
+            body: JSON.stringify({ query, ...config }),
+        });
+
+        if (!response.body) throw new Error("ReadableStream not supported");
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const jsonStr = line.substring(6);
+                    try {
+                        const data = JSON.parse(jsonStr);
+                        onProgress(data);
+                    } catch (e) {
+                        console.error('Error parsing SSE data:', e);
+                    }
+                }
+            }
+        }
     }
 
     // Subscriptions
@@ -322,7 +526,7 @@ class ApiService {
         if (notebookId) params.append('notebookId', notebookId);
         if (language) params.append('language', language);
         if (params.toString()) url += `?${params.toString()}`;
-        
+
         const data = await this.fetch<{ sources: VerifiedSource[] }>(url);
         return data.sources;
     }

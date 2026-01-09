@@ -16,13 +16,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
-import api, { Subscription, CreditTransaction } from "@/lib/api";
+import api, { Subscription, CreditTransaction, Notebook } from "@/lib/api";
 
 export default function DashboardPage() {
     const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
     const router = useRouter();
     const [subscription, setSubscription] = useState<Subscription | null>(null);
     const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
+    const [notebooks, setNotebooks] = useState<Notebook[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -39,12 +40,14 @@ export default function DashboardPage() {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [sub, txs] = await Promise.all([
+            const [sub, txs, nbs] = await Promise.all([
                 api.getSubscription(),
                 api.getTransactions(10),
+                api.getNotebooks(),
             ]);
             setSubscription(sub);
             setTransactions(txs);
+            setNotebooks(nbs);
         } catch (error) {
             console.error("Failed to load dashboard data:", error);
         } finally {
@@ -55,6 +58,20 @@ export default function DashboardPage() {
     const handleLogout = () => {
         logout();
         router.push("/");
+    };
+
+    const handleCreateNotebook = async () => {
+        if (!confirm("Create a new notebook?")) return;
+        try {
+            const newNotebook = await api.createNotebook({
+                title: "Untitled Notebook",
+                description: "Created via Web Dashboard",
+                category: "General"
+            });
+            setNotebooks([newNotebook, ...notebooks]);
+        } catch (error) {
+            alert("Failed to create notebook");
+        }
     };
 
     if (authLoading || (!isAuthenticated && !authLoading)) {
@@ -70,9 +87,18 @@ export default function DashboardPage() {
             <DashboardNav user={user} onLogout={handleLogout} />
 
             <main className="container mx-auto px-6 py-8">
-                <header className="mb-8">
-                    <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
-                    <p className="text-neutral-400">Welcome back, {user?.displayName || user?.email?.split("@")[0]}.</p>
+                <header className="mb-8 flex justify-between items-center">
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
+                        <p className="text-neutral-400">Welcome back, {user?.displayName || user?.email?.split("@")[0]}.</p>
+                    </div>
+                    <button
+                        onClick={handleCreateNotebook}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                    >
+                        <BrainCircuit size={18} />
+                        New Notebook
+                    </button>
                 </header>
 
                 {isLoading ? (
@@ -81,6 +107,67 @@ export default function DashboardPage() {
                     </div>
                 ) : (
                     <>
+                        {/* Notebooks Section */}
+                        <section className="mb-12">
+                            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+                                <Database size={20} className="text-blue-400" />
+                                Your Notebooks
+                            </h2>
+                            {notebooks.length === 0 ? (
+                                <div className="rounded-xl border border-white/5 bg-neutral-900/30 p-12 text-center">
+                                    <div className="mx-auto w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center mb-4 text-neutral-500">
+                                        <BrainCircuit size={24} />
+                                    </div>
+                                    <h3 className="text-lg font-medium text-white mb-2">No notebooks yet</h3>
+                                    <p className="text-neutral-400 mb-6">Create your first notebook to start organizing your ideas.</p>
+                                    <button
+                                        onClick={handleCreateNotebook}
+                                        className="text-blue-400 hover:text-blue-300 font-medium text-sm"
+                                    >
+                                        Create one now &rarr;
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                                    {notebooks.map((notebook) => (
+                                        <Link key={notebook.id} href={`/notebook/${notebook.id}`}>
+                                            <motion.div
+                                                whileHover={{ scale: 1.02 }}
+                                                className="group relative overflow-hidden rounded-xl border border-white/5 bg-neutral-900/50 p-6 hover:bg-neutral-900/80 transition-all cursor-pointer h-full"
+                                            >
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div className="p-3 rounded-lg bg-blue-500/10 text-blue-400 group-hover:bg-blue-500/20 transition-colors">
+                                                        <BrainCircuit size={24} />
+                                                    </div>
+                                                    {notebook.category && (
+                                                        <span className="text-xs font-mono bg-white/5 px-2 py-1 rounded text-neutral-400 border border-white/5">
+                                                            {notebook.category}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <h3 className="text-lg font-semibold mb-2 group-hover:text-blue-400 transition-colors">
+                                                    {notebook.title}
+                                                </h3>
+                                                <p className="text-sm text-neutral-400 line-clamp-2 mb-4">
+                                                    {notebook.description || "No description"}
+                                                </p>
+                                                <div className="flex items-center gap-4 text-xs text-neutral-500 mt-auto pt-4 border-t border-white/5">
+                                                    <div className="flex items-center gap-1">
+                                                        <Clock size={12} />
+                                                        {new Date(notebook.updatedAt).toLocaleDateString()}
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <Database size={12} />
+                                                        {notebook.sourceCount || 0} sources
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        </Link>
+                                    ))}
+                                </div>
+                            )}
+                        </section>
+
                         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
                             <StatCard
                                 title="Credits Remaining"

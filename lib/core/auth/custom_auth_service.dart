@@ -54,14 +54,17 @@ class AppUser {
 
   factory AppUser.fromMap(Map<String, dynamic> map) {
     return AppUser(
-      uid: map['id'] as String,
+      uid: (map['id'] ?? map['uid']) as String,
       email: map['email'] as String,
-      displayName: map['display_name'] as String?,
-      createdAt: _parseDateTime(map['created_at']),
-      emailVerified: map['email_verified'] as bool? ?? false,
-      twoFactorEnabled: map['two_factor_enabled'] as bool? ?? false,
-      avatarUrl: map['avatar_url'] as String?,
-      coverUrl: map['cover_url'] as String?,
+      displayName: (map['displayName'] ?? map['display_name']) as String?,
+      createdAt: _parseDateTime(map['createdAt'] ?? map['created_at']),
+      emailVerified:
+          (map['emailVerified'] ?? map['email_verified']) as bool? ?? false,
+      twoFactorEnabled:
+          (map['twoFactorEnabled'] ?? map['two_factor_enabled']) as bool? ??
+              false,
+      avatarUrl: (map['avatarUrl'] ?? map['avatar_url']) as String?,
+      coverUrl: (map['coverUrl'] ?? map['cover_url']) as String?,
     );
   }
 

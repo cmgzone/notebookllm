@@ -2,9 +2,9 @@ import express, { type Response } from 'express';
 import pool from '../config/database.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 import { v4 as uuidv4 } from 'uuid';
-import { 
-    performCloudResearch, 
-    startBackgroundResearch, 
+import {
+    performCloudResearch,
+    startBackgroundResearch,
     getResearchJobStatus,
     type ResearchConfig,
     type ResearchDepth,
@@ -43,6 +43,46 @@ router.post('/cloud', async (req: AuthRequest, res: Response) => {
     } catch (error: any) {
         console.error('Cloud research error:', error);
         res.status(500).json({ error: error.message || 'Research failed' });
+    }
+});
+
+// Stream cloud research (SSE)
+router.post('/stream', async (req: AuthRequest, res: Response) => {
+    try {
+        const { query, depth = 'standard', template = 'general', notebookId } = req.body;
+
+        if (!query) {
+            return res.status(400).json({ error: 'Query is required' });
+        }
+
+        const config: ResearchConfig = {
+            depth: depth as ResearchDepth,
+            template: template as ResearchTemplate,
+            notebookId
+        };
+
+        // Set headers for SSE
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        const result = await performCloudResearch(req.userId!, query, config, (progress) => {
+            res.write(`data: ${JSON.stringify(progress)}\n\n`);
+        });
+
+        // Send final result
+        // We can send a final event or just rely on the last progress event having isComplete: true
+        // format: data: {"type": "result", "data": ...}
+
+        // Ensure connection is closed
+        res.end();
+
+    } catch (error: any) {
+        console.error('Stream research error:', error);
+        // If headers haven't been sent (unlikely for SSE if started), send JSON error
+        // But for SSE, we usually send an error event
+        res.write(`data: ${JSON.stringify({ error: error.message || 'Research failed' })}\n\n`);
+        res.end();
     }
 });
 
@@ -142,8 +182,8 @@ router.get('/sessions/:id', async (req: AuthRequest, res: Response) => {
             [req.params.id]
         );
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             session: session.rows[0],
             sources: sources.rows
         });

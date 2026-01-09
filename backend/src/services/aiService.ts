@@ -10,7 +10,7 @@ const genAI = process.env.GEMINI_API_KEY
     : null;
 
 export interface ChatMessage {
-    role: 'user' | 'assistant' | 'system';
+    role: 'user' | 'assistant' | 'system' | 'model';
     content: string | Array<any>;
 }
 
@@ -94,7 +94,7 @@ export async function generateWithOpenRouter(
             // If content is already in multimodal format, keep it
             if (Array.isArray(msg.content)) {
                 return {
-                    role: msg.role,
+                    role: msg.role === 'model' ? 'assistant' : msg.role,
                     content: msg.content.map(part => {
                         // Convert image_url format for OpenRouter
                         if (part.type === 'image_url') {
@@ -108,8 +108,9 @@ export async function generateWithOpenRouter(
                     })
                 };
             }
-            // Simple text content
-            return { role: msg.role, content: msg.content };
+            // Simple text content with role mapping
+            const role = msg.role === 'model' ? 'assistant' : msg.role;
+            return { role, content: msg.content };
         });
 
         const response = await axios.post(
@@ -227,8 +228,17 @@ export async function* streamWithOpenRouter(
                     })
                 };
             }
-            // Simple text content
-            return { role: msg.role, content: msg.content };
+            // Simple text content with role mapping
+            const role = msg.role === 'model' ? 'assistant' : msg.role;
+            return { role, content: msg.content };
+        });
+
+        // Log payload for debugging
+        console.log('[OpenRouter] Streaming request:', {
+            model,
+            messageCount: convertedMessages.length,
+            roles: convertedMessages.map(m => m.role),
+            firstMessageContent: convertedMessages[0]?.content?.toString().substring(0, 50)
         });
 
         const response = await axios.post(
@@ -280,7 +290,21 @@ export async function* streamWithOpenRouter(
             buffer = lines[lines.length - 1];
         }
     } catch (error: any) {
-        console.error('OpenRouter streaming error:', error);
+        console.error('OpenRouter streaming error:', error.message);
+        // Try to read error response body if available
+        if (error.response?.data) {
+            let errorBody = '';
+            try {
+                // For stream responses, we need to read the data
+                const stream = error.response.data;
+                for await (const chunk of stream) {
+                    errorBody += chunk.toString();
+                }
+                console.error('[OpenRouter] Error response body:', errorBody);
+            } catch (e) {
+                console.error('[OpenRouter] Could not read error body');
+            }
+        }
         throw new Error(`OpenRouter streaming error: ${error.message}`);
     }
 }
