@@ -7,6 +7,7 @@ export type ActivityType =
   | 'flashcard_deck_completed'
   | 'notebook_created' 
   | 'notebook_shared' 
+  | 'notebook_forked'
   | 'study_streak' 
   | 'level_up'
   | 'joined_group' 
@@ -15,6 +16,7 @@ export type ActivityType =
   // New content-rich activity types
   | 'source_shared'
   | 'plan_shared'
+  | 'plan_forked'
   | 'podcast_generated'
   | 'research_completed'
   | 'image_uploaded'
