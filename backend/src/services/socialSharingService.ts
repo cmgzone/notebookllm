@@ -486,17 +486,16 @@ export const socialSharingService = {
     // Get sources (without full content for privacy, just metadata)
     const sourcesResult = await pool.query(`
       SELECT 
-        id, notebook_id, title, type, added_at, 
+        id, notebook_id, title, type, created_at, 
         CASE 
           WHEN type = 'text' THEN LEFT(content, 500) || CASE WHEN LENGTH(content) > 500 THEN '...' ELSE '' END
           ELSE NULL 
         END as content_preview,
         summary,
-        thumbnail_url,
         metadata
       FROM sources
       WHERE notebook_id = $1
-      ORDER BY added_at DESC
+      ORDER BY created_at DESC
     `, [notebookId]);
 
     return {

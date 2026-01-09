@@ -416,8 +416,8 @@ class _SourceCard extends StatelessWidget {
     final type = source['type'] ?? 'text';
     final summary = source['summary'];
     final contentPreview = source['content_preview'];
-    final addedAt = source['added_at'] != null
-        ? DateTime.parse(source['added_at'])
+    final addedAt = source['created_at'] != null
+        ? DateTime.parse(source['created_at'])
         : DateTime.now();
 
     return Card(
