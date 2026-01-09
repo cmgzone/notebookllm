@@ -190,12 +190,10 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
-          tabs: [
+          tabs: const [
             Tab(text: 'Overview', icon: Icon(Icons.info_outline)),
-            Tab(
-                text: 'Requirements ($requirementCount)',
-                icon: Icon(Icons.checklist)),
-            Tab(text: 'Tasks ($taskCount)', icon: Icon(Icons.task_alt)),
+            Tab(text: 'Requirements', icon: Icon(Icons.checklist)),
+            Tab(text: 'Tasks', icon: Icon(Icons.task_alt)),
           ],
         ),
       ),
@@ -637,7 +635,7 @@ class _RequirementCard extends StatelessWidget {
                   ),
                   child: Text(
                     earsPattern?.toUpperCase() ?? 'REQ',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 10,
                       color: Colors.purple,
                       fontWeight: FontWeight.bold,
@@ -672,7 +670,7 @@ class _RequirementCard extends StatelessWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.check_circle_outline,
+                        const Icon(Icons.check_circle_outline,
                             size: 16, color: Colors.green),
                         const SizedBox(width: 8),
                         Expanded(
