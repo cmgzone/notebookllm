@@ -841,13 +841,18 @@ export const socialSharingService = {
             .filter((id: string | undefined) => id !== undefined);
         }
 
+        // Format as PostgreSQL array literal for UUID[] column
+        const pgArrayLiteral = newRequirementIds.length > 0 
+          ? `{${newRequirementIds.join(',')}}` 
+          : '{}';
+
         await pool.query(`
           INSERT INTO plan_design_notes (plan_id, content, requirement_ids)
-          VALUES ($1, $2, $3)
+          VALUES ($1, $2, $3::uuid[])
         `, [
           newPlan.id,
           note.content,
-          newRequirementIds
+          pgArrayLiteral
         ]);
         designNotesCopied++;
       }
