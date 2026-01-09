@@ -23,7 +23,7 @@ async function checkPublicNotebooks() {
     console.log('='.repeat(100));
     
     for (const row of result.rows) {
-      const status = [];
+      const status: string[] = [];
       if (row.is_public) status.push('PUBLIC');
       else status.push('PRIVATE');
       if (row.is_locked) status.push('LOCKED');
