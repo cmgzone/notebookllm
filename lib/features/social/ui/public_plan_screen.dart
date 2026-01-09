@@ -310,7 +310,7 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
                           style: theme.textTheme.titleMedium,
                         ),
                         Text(
-                          'Created ${timeago.format(DateTime.parse(plan['created_at']))}',
+                          'Created ${plan['created_at'] != null ? timeago.format(DateTime.parse(plan['created_at'].toString())) : 'recently'}',
                           style:
                               TextStyle(color: Colors.grey[600], fontSize: 12),
                         ),
@@ -445,7 +445,10 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
-                      timeago.format(DateTime.parse(note['created_at'])),
+                      note['created_at'] != null
+                          ? timeago.format(
+                              DateTime.parse(note['created_at'].toString()))
+                          : '',
                       style: const TextStyle(fontSize: 11),
                     ),
                   );

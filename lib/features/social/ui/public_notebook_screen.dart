@@ -220,7 +220,7 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
                               style: theme.textTheme.titleMedium,
                             ),
                             Text(
-                              'Created ${timeago.format(DateTime.parse(notebook['created_at']))}',
+                              'Created ${notebook['created_at'] != null ? timeago.format(DateTime.parse(notebook['created_at'].toString())) : 'recently'}',
                               style: TextStyle(
                                   color: Colors.grey[600], fontSize: 12),
                             ),
