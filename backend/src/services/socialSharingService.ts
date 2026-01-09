@@ -93,12 +93,12 @@ export const socialSharingService = {
     // This makes the content discoverable in the discover feed
     if (contentType === 'notebook') {
       await pool.query(
-        'UPDATE notebooks SET share_count = share_count + 1, is_public = $2, updated_at = NOW() WHERE id = $1', 
+        'UPDATE notebooks SET share_count = share_count + 1, is_public = $2, updated_at = NOW() WHERE id = $1',
         [contentId, isPublic]
       );
     } else {
       await pool.query(
-        'UPDATE plans SET share_count = share_count + 1, is_public = $2, updated_at = NOW() WHERE id = $1', 
+        'UPDATE plans SET share_count = share_count + 1, is_public = $2, updated_at = NOW() WHERE id = $1',
         [contentId, isPublic]
       );
     }
@@ -151,7 +151,7 @@ export const socialSharingService = {
         ${contentType !== 'all' ? 'AND sc.content_type = $4' : ''}
       ORDER BY sc.created_at DESC
       LIMIT $2 OFFSET $3
-    `, contentType !== 'all' 
+    `, contentType !== 'all'
       ? [userId, limit, offset, contentType]
       : [userId, limit, offset]
     );
@@ -566,9 +566,9 @@ export const socialSharingService = {
       VALUES ($1, $2, $3, $4, false)
       RETURNING *
     `, [
-      userId, 
-      title, 
-      description, 
+      userId,
+      title,
+      description,
       original.category
     ]);
 
@@ -625,7 +625,7 @@ export const socialSharingService = {
       description: `Created "${title}" from ${original.original_owner}'s notebook`,
       referenceId: newNotebook.id,
       referenceType: 'notebook',
-      metadata: { 
+      metadata: {
         originalNotebookId: notebookId,
         originalOwner: original.user_id,
         sourcesCopied
@@ -713,17 +713,17 @@ export const socialSharingService = {
     includeRequirements?: boolean;
     includeTasks?: boolean;
     includeDesignNotes?: boolean;
-  } = {}): Promise<{ 
-    plan: any; 
+  } = {}): Promise<{
+    plan: any;
     requirementsCopied: number;
     tasksCopied: number;
     designNotesCopied: number;
   }> {
-    const { 
-      newTitle, 
-      includeRequirements = true, 
+    const {
+      newTitle,
+      includeRequirements = true,
       includeTasks = true,
-      includeDesignNotes = true 
+      includeDesignNotes = true
     } = options;
 
     // Get original plan
@@ -749,8 +749,8 @@ export const socialSharingService = {
       VALUES ($1, $2, $3, 'draft', false, $4)
       RETURNING *
     `, [
-      userId, 
-      title, 
+      userId,
+      title,
       description,
       JSON.stringify({
         forkedFrom: planId,
@@ -775,6 +775,23 @@ export const socialSharingService = {
       `, [planId]);
 
       for (const req of requirementsResult.rows) {
+        let acceptanceCriteria = req.acceptance_criteria;
+
+        // Handle potential malformed JSON in database
+        if (typeof acceptanceCriteria === 'string') {
+          try {
+            acceptanceCriteria = JSON.parse(acceptanceCriteria);
+          } catch (e) {
+            console.warn('Failed to parse (or re-parse) acceptance_criteria during fork:', e);
+            acceptanceCriteria = [];
+          }
+        }
+
+        // Ensure it's a valid object/array (postgres pg-node usually returns object for jsonb)
+        if (!acceptanceCriteria) {
+          acceptanceCriteria = [];
+        }
+
         const newReqResult = await pool.query(`
           INSERT INTO plan_requirements (plan_id, title, description, ears_pattern, acceptance_criteria)
           VALUES ($1, $2, $3, $4, $5)
@@ -784,7 +801,7 @@ export const socialSharingService = {
           req.title,
           req.description,
           req.ears_pattern,
-          req.acceptance_criteria
+          JSON.stringify(acceptanceCriteria) // Explicitly stringify to ensure valid JSON string is passed
         ]);
         requirementIdMap[req.id] = newReqResult.rows[0].id;
         requirementsCopied++;
@@ -842,8 +859,8 @@ export const socialSharingService = {
         }
 
         // Format as PostgreSQL array literal for UUID[] column
-        const pgArrayLiteral = newRequirementIds.length > 0 
-          ? `{${newRequirementIds.join(',')}}` 
+        const pgArrayLiteral = newRequirementIds.length > 0
+          ? `{${newRequirementIds.join(',')}}`
           : '{}';
 
         await pool.query(`
@@ -866,7 +883,7 @@ export const socialSharingService = {
       description: `Created "${title}" from ${original.original_owner}'s plan`,
       referenceId: newPlan.id,
       referenceType: 'plan',
-      metadata: { 
+      metadata: {
         originalPlanId: planId,
         originalOwner: original.user_id,
         requirementsCopied,
