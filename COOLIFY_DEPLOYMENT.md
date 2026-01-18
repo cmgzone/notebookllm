@@ -89,4 +89,25 @@ Once the deployment is "Healthy":
 
 ## Next Steps
 
-Once the backend is live, you can deploy the `web_app` following a similar process but pointing to the `/web_app` directory and providing the `NEXT_PUBLIC_API_URL` environment variable pointing to your deployed backend URL.
+Once the backend is live, you can deploy the `web_app` and `admin_panel`.
+
+### Deploying the Web App (Frontend)
+
+1.  **Create Service**: Select your repository.
+2.  **Configuration**:
+    *   Base Directory: `/web_app`
+    *   Dockerfile: `/Dockerfile`
+    *   Port: `3000`
+3.  **Environment Variables**:
+    *   `NEXT_PUBLIC_API_URL`: Your backend URL (e.g., `https://api.your-domain.com/api`).
+
+### Deploying the Admin Panel
+
+1.  **Create Service**: Select your repository.
+2.  **Configuration**:
+    *   Base Directory: `/admin_panel`
+    *   Dockerfile: `/Dockerfile`
+    *   Port: `80` (Note: Nginx runs on port 80 internally).
+3.  **Environment Variables**:
+    *   `VITE_API_URL`: Your backend URL (e.g., `https://api.your-domain.com/api`).
+    *   *Important*: Since this is a static build, if you change this variable later, you **MUST** trigger a full redeploy (Rebuild) for the changes to take effect.
