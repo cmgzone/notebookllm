@@ -262,6 +262,8 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
               _buildSubmitButton(theme),
               const SizedBox(height: 16),
               _buildToggleMode(theme),
+              const SizedBox(height: 24),
+              _buildLegalLinks(theme),
             ],
           ),
         ),
@@ -533,6 +535,52 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
             ? 'Already have an account? Sign In'
             : "Don't have an account? Sign Up",
       ),
+    );
+  }
+
+  Widget _buildLegalLinks(ThemeData theme) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 8,
+      runSpacing: 4,
+      children: [
+        Text(
+          'By continuing, you agree to our',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontSize: 11,
+          ),
+        ),
+        GestureDetector(
+          onTap: () => context.push('/privacy-policy'),
+          child: Text(
+            'Privacy Policy',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.primary,
+              fontSize: 11,
+              decoration: TextDecoration.underline,
+            ),
+          ),
+        ),
+        Text(
+          'and',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontSize: 11,
+          ),
+        ),
+        GestureDetector(
+          onTap: () => context.push('/terms-of-service'),
+          child: Text(
+            'Terms of Service',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.primary,
+              fontSize: 11,
+              decoration: TextDecoration.underline,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

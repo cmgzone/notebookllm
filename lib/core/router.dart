@@ -15,7 +15,8 @@ import '../features/studio/artifact.dart';
 import '../features/search/web_search_screen.dart';
 import '../features/studio/visual_studio_screen.dart';
 import '../features/settings/ai_model_settings_screen.dart';
-import '../features/settings/privacy_policy_screen.dart';
+import '../features/auth/privacy_policy_screen.dart';
+import '../features/auth/terms_of_service_screen.dart';
 import '../features/settings/migrate_agent_id_screen.dart';
 import '../features/notebook/notebook_detail_screen.dart';
 import '../features/notebook/notebook_chat_screen.dart';
@@ -305,6 +306,12 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             name: 'privacy-policy',
             pageBuilder: (context, state) =>
                 buildTransitionPage(child: const PrivacyPolicyScreen()),
+          ),
+          GoRoute(
+            path: '/terms-of-service',
+            name: 'terms-of-service',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const TermsOfServiceScreen()),
           ),
           // Gamification routes
           GoRoute(
