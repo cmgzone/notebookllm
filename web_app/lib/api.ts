@@ -1,6 +1,6 @@
 // API URL configuration
 // Uses environment variable or defaults to production Render backend
-const PRODUCTION_API_URL = 'https://notebookllm-ufj7.onrender.com/api';
+const PRODUCTION_API_URL = 'https://backend.taskiumnetwork.com/api';
 
 const getApiBase = () => {
     // Check for environment variable first
