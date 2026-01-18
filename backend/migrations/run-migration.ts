@@ -30,10 +30,12 @@ async function runMigration() {
 
         process.exit(0);
     } catch (error) {
-        console.error('❌ Migration failed:', error.message);
-        console.error(error);
+        const err = error as Error;
+        console.error('❌ Migration failed:', err.message);
+        console.error(err);
         process.exit(1);
     }
+}
 }
 
 runMigration();

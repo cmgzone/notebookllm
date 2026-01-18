@@ -981,23 +981,6 @@ class _MessageBubble extends ConsumerWidget {
                                   child: Icon(Icons.broken_image,
                                       color: scheme.outline),
                                 ),
-                                loadingBuilder:
-                                    (context, child, loadingProgress) {
-                                  if (loadingProgress == null) return child;
-                                  return Container(
-                                    width: 120,
-                                    height: 80,
-                                    color: scheme.surfaceContainerHighest,
-                                    child: const Center(
-                                      child: SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      ),
-                                    ),
-                                  );
-                                },
                               ),
                             ),
                             // Expand icon overlay
