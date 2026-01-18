@@ -1,6 +1,6 @@
 // API URL configuration
-// Uses environment variable or defaults to production Render backend
-const PRODUCTION_API_URL = 'https://backend.taskiumnetwork.com/api';
+// Uses environment variable or defaults
+const PRODUCTION_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 const getApiBase = () => {
     // Check for environment variable first
