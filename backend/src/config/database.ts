@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Build connection string from environment variables
-const connectionString = process.env.DATABASE_URL || 
+const connectionString = process.env.DATABASE_URL ||
     `postgresql://${process.env.NEON_USERNAME}:${process.env.NEON_PASSWORD}@${process.env.NEON_HOST}:${process.env.NEON_PORT || 5432}/${process.env.NEON_DATABASE}?sslmode=require`;
 
 const pool = new Pool({
@@ -26,27 +26,27 @@ export async function queryWithRetry<T>(
     maxRetries: number = 3
 ): Promise<T> {
     let lastError: Error | null = null;
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             return await queryFn();
         } catch (error: any) {
             lastError = error;
-            const isConnectionError = 
+            const isConnectionError =
                 error.message?.includes('Connection terminated') ||
                 error.message?.includes('connection timeout') ||
                 error.code === 'ECONNRESET' ||
                 error.code === 'ETIMEDOUT';
-            
+
             if (!isConnectionError || attempt === maxRetries) {
                 throw error;
             }
-            
+
             console.log(`Database connection attempt ${attempt}/${maxRetries} failed, retrying...`);
             await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
         }
     }
-    
+
     throw lastError;
 }
 
@@ -64,7 +64,7 @@ export async function initializeDatabase() {
     const client = await pool.connect();
     try {
         console.log('🔧 Initializing database tables...');
-        
+
         // Core tables
         await client.query(`
             -- Users table
