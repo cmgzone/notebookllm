@@ -381,12 +381,37 @@ class ApiService {
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+        let buffer = "";
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            const chunk = decoder.decode(value);
-            onChunk(chunk);
+
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (trimmedLine.startsWith('data: ')) {
+                    const dataStr = trimmedLine.substring(6);
+                    if (dataStr === '[DONE]') continue;
+
+                    try {
+                        const data = JSON.parse(dataStr);
+                        if (data.text) {
+                            onChunk(data.text);
+                        } else if (data.error) {
+                            console.error('SSE Error:', data.error);
+                            // Optionally handle error UI here
+                        }
+                    } catch (e) {
+                        console.error('Error parsing SSE chat data:', e);
+                    }
+                }
+            }
         }
     }
 

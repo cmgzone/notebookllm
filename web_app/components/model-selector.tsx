@@ -23,7 +23,7 @@ export default function ModelSelector({ selectedModel, onSelect, className = "" 
     useEffect(() => {
         if (selectedModel && models) {
             const allModels = Object.values(models).flat();
-            const found = allModels.find(m => m.id === selectedModel);
+            const found = allModels.find(m => m.modelId === selectedModel);
             if (found) setCurrentModel(found);
         }
     }, [selectedModel, models]);
@@ -68,7 +68,7 @@ export default function ModelSelector({ selectedModel, onSelect, className = "" 
                 const firstProvider = Object.keys(grouped)[0];
                 if (firstProvider && grouped[firstProvider].length > 0) {
                     const first = grouped[firstProvider][0];
-                    onSelect(first.id, first.provider);
+                    onSelect(first.modelId, first.provider);
                     setCurrentModel(first);
                 }
             }
@@ -122,15 +122,15 @@ export default function ModelSelector({ selectedModel, onSelect, className = "" 
                                     <button
                                         key={model.id}
                                         onClick={() => {
-                                            onSelect(model.id, model.provider);
+                                            onSelect(model.modelId, model.provider);
                                             setCurrentModel(model);
                                             setIsOpen(false);
                                         }}
-                                        className={`w-full text-left px-2 py-2 rounded-lg flex items-center gap-2 text-xs transition-colors ${currentModel?.id === model.id ? 'bg-blue-600/20 text-blue-400' : 'hover:bg-white/5 text-neutral-300'
+                                        className={`w-full text-left px-2 py-2 rounded-lg flex items-center gap-2 text-xs transition-colors ${currentModel?.modelId === model.modelId ? 'bg-blue-600/20 text-blue-400' : 'hover:bg-white/5 text-neutral-300'
                                             }`}
                                     >
                                         {provider === 'gemini' ? (
-                                            <Sparkles size={14} className={currentModel?.id === model.id ? "text-blue-400" : "text-neutral-500"} />
+                                            <Sparkles size={14} className={currentModel?.modelId === model.modelId ? "text-blue-400" : "text-neutral-500"} />
                                         ) : (
                                             <Box size={14} className={model.isPremium ? "text-amber-500" : "text-green-500"} />
                                         )}
