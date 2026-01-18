@@ -60,19 +60,7 @@ export default function DashboardPage() {
         router.push("/");
     };
 
-    const handleCreateNotebook = async () => {
-        if (!confirm("Create a new notebook?")) return;
-        try {
-            const newNotebook = await api.createNotebook({
-                title: "Untitled Notebook",
-                description: "Created via Web Dashboard",
-                category: "General"
-            });
-            setNotebooks([newNotebook, ...notebooks]);
-        } catch (error) {
-            alert("Failed to create notebook");
-        }
-    };
+
 
     if (authLoading || (!isAuthenticated && !authLoading)) {
         return (
@@ -92,13 +80,7 @@ export default function DashboardPage() {
                         <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
                         <p className="text-neutral-400">Welcome back, {user?.displayName || user?.email?.split("@")[0]}.</p>
                     </div>
-                    <button
-                        onClick={handleCreateNotebook}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                    >
-                        <BrainCircuit size={18} />
-                        New Notebook
-                    </button>
+
                 </header>
 
                 {isLoading ? (
@@ -119,13 +101,7 @@ export default function DashboardPage() {
                                         <BrainCircuit size={24} />
                                     </div>
                                     <h3 className="text-lg font-medium text-white mb-2">No notebooks yet</h3>
-                                    <p className="text-neutral-400 mb-6">Create your first notebook to start organizing your ideas.</p>
-                                    <button
-                                        onClick={handleCreateNotebook}
-                                        className="text-blue-400 hover:text-blue-300 font-medium text-sm"
-                                    >
-                                        Create one now &rarr;
-                                    </button>
+                                    <p className="text-neutral-400 mb-6">Create your first notebook in the mobile app to start organizing your ideas.</p>
                                 </div>
                             ) : (
                                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
