@@ -31,6 +31,13 @@ class NotebookDetailScreen extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
 
+    // Check if notebooks are loaded
+    if (notebooks.isEmpty) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     // Find the notebook
     final notebook = notebooks.firstWhere(
       (n) => n.id == notebookId,

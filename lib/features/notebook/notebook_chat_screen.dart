@@ -387,6 +387,12 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final notebooks = ref.watch(notebookProvider);
+    if (notebooks.isEmpty) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final notebook = notebooks.firstWhere(
       (n) => n.id == widget.notebookId,
       orElse: () => notebooks.first,
