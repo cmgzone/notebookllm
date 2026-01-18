@@ -823,6 +823,84 @@ class ApiService {
     }
   }
 
+  /// Generic SSE Stream helper
+  Stream<T> _streamRequest<T>({
+    required String endpoint,
+    required Map<String, dynamic> body,
+    required T Function(Map<String, dynamic>) parser,
+  }) async* {
+    final token = await getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final uri = Uri.parse('$_baseUrl$endpoint');
+    final request = http.Request('POST', uri);
+    request.headers.addAll({
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+    });
+    request.body = jsonEncode(body);
+
+    final client = http.Client();
+    try {
+      final response = await client.send(request);
+      if (response.statusCode != 200) {
+        throw Exception('Failed to stream: ${response.statusCode}');
+      }
+
+      yield* response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .map((line) {
+            if (line.startsWith('data: ')) {
+              final dataStr = line.substring(6);
+              // Check for special control messages
+              if (dataStr == '[DONE]') return null;
+              if (dataStr == '[ERROR]')
+                throw Exception('Stream error occurred');
+
+              try {
+                final json = jsonDecode(dataStr);
+                // Check if the event itself contains an error field
+                if (json is Map && json.containsKey('error')) {
+                  // If it's a structural error object, throw it
+                  throw Exception(json['message'] ?? json['error']);
+                }
+                return parser(json);
+              } catch (e) {
+                // Return null for parse errors to skip bad frames instead of crashing stream
+                developer.log('SSE Parse Error: $e', name: 'ApiService');
+                return null;
+              }
+            }
+            return null;
+          })
+          .where((item) => item != null)
+          .cast<T>();
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Stream deep research progress
+  Stream<Map<String, dynamic>> performDeepResearchStream({
+    required String query,
+    String? notebookId,
+    int maxResults = 10,
+    bool includeImages = true,
+  }) {
+    return _streamRequest(
+      endpoint: '/research/deep',
+      body: {
+        'query': query,
+        if (notebookId != null) 'notebookId': notebookId,
+        'maxResults': maxResults,
+        'includeImages': includeImages,
+      },
+      parser: (json) => json,
+    );
+  }
+
   Future<String> generateSummary({
     required String content,
     String provider = 'gemini',
