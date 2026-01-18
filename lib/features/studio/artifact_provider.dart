@@ -583,9 +583,9 @@ A: Text content, PDF documents, and web pages.
       List<Source> sources, VectorStore vectorStore) async {
     // Extract key concepts from sources using RAG
     const conceptsQuery = "key concepts main ideas important points";
-    final retrieved = vectorStore.search(conceptsQuery, topK: 8);
+    final retrieved = await vectorStore.search(conceptsQuery, topK: 8);
 
-    if (retrieved.isEmpty || vectorStore.chunkCount == 0) {
+    if (retrieved.isEmpty) {
       // If no chunks, generate from source content directly
       if (sources.isNotEmpty) {
         final sourceContent = sources
@@ -647,9 +647,9 @@ ${retrieved.map((r) => "• ${r.$1.text.substring(0, r.$1.text.length.clamp(0, 1
   Future<String> _generateBrief(
       List<Source> sources, VectorStore vectorStore) async {
     const insightsQuery = "insights findings conclusions recommendations";
-    final retrieved = vectorStore.search(insightsQuery, topK: 6);
+    final retrieved = await vectorStore.search(insightsQuery, topK: 6);
 
-    if (retrieved.isEmpty || vectorStore.chunkCount == 0) {
+    if (retrieved.isEmpty) {
       if (sources.isNotEmpty) {
         final sourceList =
             sources.map((s) => "• ${s.title}").take(10).join("\n");
@@ -708,9 +708,9 @@ Based on the analyzed content:
   Future<String> _generateFAQ(
       List<Source> sources, VectorStore vectorStore) async {
     const questionsQuery = "what how why when where who";
-    final retrieved = vectorStore.search(questionsQuery, topK: 6);
+    final retrieved = await vectorStore.search(questionsQuery, topK: 6);
 
-    if (retrieved.isEmpty || vectorStore.chunkCount == 0) {
+    if (retrieved.isEmpty) {
       if (sources.isNotEmpty) {
         return '''# Frequently Asked Questions
 
@@ -765,9 +765,9 @@ A: Yes, continue exploring your sources to discover additional insights and gene
   Future<String> _generateTimeline(
       List<Source> sources, VectorStore vectorStore) async {
     const timelineQuery = "timeline history dates events chronological order";
-    final retrieved = vectorStore.search(timelineQuery, topK: 8);
+    final retrieved = await vectorStore.search(timelineQuery, topK: 8);
 
-    if (retrieved.isEmpty || vectorStore.chunkCount == 0) {
+    if (retrieved.isEmpty) {
       if (sources.isNotEmpty) {
         final sourceList =
             sources.map((s) => "• ${s.title}").take(10).join("\n");
@@ -825,9 +825,9 @@ The timeline above represents key events and milestones identified from your sou
       List<Source> sources, VectorStore vectorStore) async {
     const conceptsQuery =
         "concepts relationships connections main ideas themes";
-    final retrieved = vectorStore.search(conceptsQuery, topK: 8);
+    final retrieved = await vectorStore.search(conceptsQuery, topK: 8);
 
-    if (retrieved.isEmpty || vectorStore.chunkCount == 0) {
+    if (retrieved.isEmpty) {
       if (sources.isNotEmpty) {
         final sourceList =
             sources.map((s) => "• **${s.title}**").take(8).join("\n");

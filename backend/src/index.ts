@@ -36,6 +36,7 @@ import notificationsRoutes from './routes/notifications.js';
 import googleDriveRoutes from './routes/googleDrive.js';
 import contentRoutes from './routes/content.js';
 import deepResearchRoutes from './routes/deepResearch.js';
+import ragRoutes from './routes/rag.js';
 
 // Import services
 import bunnyService from './services/bunnyService.js';
@@ -120,6 +121,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/google-drive', googleDriveRoutes);
 app.use('/api/content', contentRoutes);
 app.use('/api/research', deepResearchRoutes);
+app.use('/api', ragRoutes); // Register under /api base as it defines specific paths like /api/embeddings/*
 
 // 404 handler
 app.use((req, res) => {
