@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'source_provider.dart';
-import '../../core/sources/content_extractor_service.dart';
+import '../../core/api/api_service.dart';
 import '../../core/sources/url_validator.dart';
 
 class AddGoogleDriveSheet extends ConsumerStatefulWidget {
@@ -58,25 +58,52 @@ class _AddGoogleDriveSheetState extends ConsumerState<AddGoogleDriveSheet> {
       final fileType = _getFileType(url);
       final title = '$fileType: $fileId';
 
-      // Extract content using the content extractor service
-      final extractor = ref.read(contentExtractorServiceProvider);
-      final content = await extractor.extractGoogleDriveContent(url);
+      // Call backend API for content extraction
+      final apiService = ref.read(apiServiceProvider);
+      final response = await apiService.post('/google-drive/extract', {
+        'url': url,
+        'fileId': fileId,
+      });
 
-      await ref.read(sourceProvider.notifier).addSource(
-            title: title,
-            type: 'drive',
-            content: content,
-            notebookId: widget.notebookId,
-          );
+      if (response['success'] == true) {
+        final content = response['content'] as String;
+        final metadata = response['metadata'] as Map<String, dynamic>?;
 
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Google Drive file added successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
+        await ref.read(sourceProvider.notifier).addSource(
+              title: metadata?['format'] ?? title,
+              type: 'drive',
+              content: content,
+              notebookId: widget.notebookId,
+            );
+
+        if (!mounted) return;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Google Drive file added successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        // Show error with instructions
+        if (!mounted) return;
+        final errorMsg = response['error'] ?? 'Failed to extract content';
+        final instructions = response['instructions'] as List?;
+
+        String message = errorMsg;
+        if (instructions != null && instructions.isNotEmpty) {
+          message += '\n\nTips:\n';
+          message += instructions.map((i) => '• $i').join('\n');
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
