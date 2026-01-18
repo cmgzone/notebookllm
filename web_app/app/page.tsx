@@ -462,6 +462,11 @@ function FeaturesSection() {
       icon: <Youtube className="text-rose-500" />,
       title: "Multimedia Analysis",
       desc: "Analyze more than just text. Ingest YouTube videos, academic PDFs, and live web pages for a truly 360-degree understanding."
+    },
+    {
+      icon: <BrainCircuit className="text-orange-400" />,
+      title: "Custom Agent Skills",
+      desc: "Teach your AI Agent specialized capabilities. Define custom prompts, workflows, and rules that persist across sessions."
     }
   ];
 

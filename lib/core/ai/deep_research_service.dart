@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_service.dart';
 import '../../features/gamification/gamification_provider.dart';
+import 'ai_settings_service.dart';
 
 final deepResearchServiceProvider = Provider<DeepResearchService>((ref) {
   return DeepResearchService(ref);
@@ -122,6 +123,10 @@ class DeepResearchService {
     try {
       final api = ref.read(apiServiceProvider);
 
+      // Get AI settings (provider/model)
+      final settings =
+          await AISettingsService.getSettingsWithProviderDetection(ref);
+
       // Calculate max results based on depth
       int maxResults = 10;
       switch (depth) {
@@ -141,6 +146,8 @@ class DeepResearchService {
         notebookId: notebookId,
         maxResults: maxResults,
         includeImages: true,
+        provider: settings.provider,
+        model: settings.model,
       );
 
       // Listen to the stream and yield updates

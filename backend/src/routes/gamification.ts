@@ -125,6 +125,24 @@ router.get('/challenges', async (req: AuthRequest, res: Response) => {
             'SELECT * FROM daily_challenges WHERE user_id = $1 AND date = $2',
             [req.userId, today]
         );
+
+        if (result.rows.length === 0) {
+            // Generate challenges for today
+            const generated = generateDailyChallenges(req.userId!, today);
+            const results: any[] = [];
+
+            for (const ch of generated) {
+                const insertResult = await pool.query(
+                    `INSERT INTO daily_challenges (id, user_id, type, title, description, target_value, current_value, is_completed, xp_reward, date)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                     RETURNING *`,
+                    [ch.id, ch.user_id, ch.type, ch.title, ch.description, ch.target_value, ch.current_value, ch.is_completed, ch.xp_reward, ch.date]
+                );
+                results.push(insertResult.rows[0]);
+            }
+            return res.json({ success: true, challenges: results });
+        }
+
         res.json({ success: true, challenges: result.rows });
     } catch (error) {
         console.error('Get challenges error:', error);
@@ -132,11 +150,98 @@ router.get('/challenges', async (req: AuthRequest, res: Response) => {
     }
 });
 
+function generateDailyChallenges(userId: string, date: string): any[] {
+    const types = [
+        'reviewFlashcards', 'completeQuiz', 'addSource', 'chatWithAI',
+        'tutorSession', 'createMindmap', 'perfectQuiz', 'studyTime',
+        'deepResearch', 'voiceMode'
+    ];
+
+    // Shuffle and pick 3
+    const shuffled = types.sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, 3);
+
+    return selected.map(type => createChallenge(type, date, userId));
+}
+
+function createChallenge(type: string, date: string, userId: string): any {
+    const id = uuidv4();
+    let title = '';
+    let description = '';
+    let targetValue = 1;
+    let xpReward = 10;
+
+    const randomCount = (options: number[]) => options[Math.floor(Math.random() * options.length)];
+
+    switch (type) {
+        case 'reviewFlashcards':
+            targetValue = randomCount([10, 15, 20, 25]);
+            title = 'Flashcard Review';
+            description = `Review ${targetValue} flashcards`;
+            xpReward = targetValue * 2;
+            break;
+        case 'completeQuiz':
+            targetValue = randomCount([1, 2, 3]);
+            title = 'Quiz Time';
+            description = `Complete ${targetValue} quiz${targetValue > 1 ? 'zes' : ''}`;
+            xpReward = targetValue * 25;
+            break;
+        case 'addSource':
+            title = 'Knowledge Builder';
+            description = 'Add a new source to any notebook';
+            xpReward = 30;
+            break;
+        case 'chatWithAI':
+            targetValue = randomCount([5, 10, 15]);
+            title = 'AI Conversation';
+            description = `Send ${targetValue} messages to AI`;
+            xpReward = targetValue * 3;
+            break;
+        case 'tutorSession':
+            title = 'Tutor Time';
+            description = 'Complete a tutor session';
+            xpReward = 50;
+            break;
+        case 'createMindmap':
+            title = 'Mind Mapper';
+            description = 'Create a mind map';
+            xpReward = 40;
+            break;
+        case 'perfectQuiz':
+            title = 'Perfectionist';
+            description = 'Get 100% on any quiz';
+            xpReward = 75;
+            break;
+        case 'studyTime':
+            targetValue = randomCount([15, 30, 45]);
+            title = 'Study Session';
+            description = `Study for ${targetValue} minutes`;
+            xpReward = targetValue;
+            break;
+        case 'deepResearch':
+            title = 'Deep Dive';
+            description = 'Complete a deep research session';
+            xpReward = 60;
+            break;
+        case 'voiceMode':
+            title = 'Voice Activated';
+            description = 'Use voice mode';
+            xpReward = 25;
+            break;
+    }
+
+    return {
+        id, user_id: userId, type, title, description,
+        target_value: targetValue, current_value: 0,
+        is_completed: false, xp_reward: xpReward, date
+    };
+}
+
 // Batch update challenges
 router.post('/challenges/batch', async (req: AuthRequest, res: Response) => {
     try {
         const { challenges } = req.body;
-        
+
         if (!challenges || !Array.isArray(challenges)) {
             return res.status(400).json({ error: 'challenges array required' });
         }

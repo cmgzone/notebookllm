@@ -856,8 +856,9 @@ class ApiService {
               final dataStr = line.substring(6);
               // Check for special control messages
               if (dataStr == '[DONE]') return null;
-              if (dataStr == '[ERROR]')
+              if (dataStr == '[ERROR]') {
                 throw Exception('Stream error occurred');
+              }
 
               try {
                 final json = jsonDecode(dataStr);
@@ -888,6 +889,8 @@ class ApiService {
     String? notebookId,
     int maxResults = 10,
     bool includeImages = true,
+    String? provider,
+    String? model,
   }) {
     return _streamRequest(
       endpoint: '/research/deep',
@@ -896,6 +899,8 @@ class ApiService {
         if (notebookId != null) 'notebookId': notebookId,
         'maxResults': maxResults,
         'includeImages': includeImages,
+        if (provider != null) 'provider': provider,
+        if (model != null) 'model': model,
       },
       parser: (json) => json,
     );
@@ -1103,6 +1108,50 @@ class ApiService {
   Future<bool> sourceHasChunks(String sourceId) async {
     final chunks = await getChunksForSource(sourceId);
     return chunks.isNotEmpty;
+  }
+
+  // ============ AGENT SKILLS ============
+
+  Future<List<Map<String, dynamic>>> getAgentSkills() async {
+    final response = await get('/agent-skills');
+    return List<Map<String, dynamic>>.from(response['skills'] ?? []);
+  }
+
+  Future<Map<String, dynamic>> createAgentSkill({
+    required String name,
+    required String content,
+    String? description,
+    Map<String, dynamic>? parameters,
+  }) async {
+    final response = await post('/agent-skills', {
+      'name': name,
+      'content': content,
+      if (description != null) 'description': description,
+      if (parameters != null) 'parameters': parameters,
+    });
+    return response['skill'];
+  }
+
+  Future<Map<String, dynamic>> updateAgentSkill({
+    required String id,
+    String? name,
+    String? content,
+    String? description,
+    Map<String, dynamic>? parameters,
+    bool? isActive,
+  }) async {
+    final response = await put('/agent-skills/$id', {
+      if (name != null) 'name': name,
+      if (content != null) 'content': content,
+      if (description != null) 'description': description,
+      if (parameters != null) 'parameters': parameters,
+      if (isActive != null) 'is_active': isActive,
+    });
+    return response['skill'];
+  }
+
+  Future<void> deleteAgentSkill(String id) async {
+    await delete('/agent-skills/$id');
   }
 
   // ============ GAMIFICATION ============

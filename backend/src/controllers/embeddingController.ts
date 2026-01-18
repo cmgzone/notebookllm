@@ -111,7 +111,7 @@ export const storeEmbeddings = async (req: Request, res: Response) => {
 
         await client.query('BEGIN');
 
-        const results = [];
+        const results: any[] = [];
 
         // Process in batches
         for (const chunk of chunks) {
