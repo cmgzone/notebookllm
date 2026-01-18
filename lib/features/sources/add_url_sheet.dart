@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'source_provider.dart';
+import '../../core/api/api_service.dart';
 
 class AddUrlSheet extends ConsumerStatefulWidget {
   final String? notebookId;
@@ -24,34 +25,55 @@ class _AddUrlSheetState extends ConsumerState<AddUrlSheet> {
     final url = _controller.text.trim();
     if (url.isEmpty) return;
 
+    // Basic URL validation
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid URL starting with http:// or https://'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
-      await ref.read(sourceProvider.notifier).addSource(
-            title: url,
-            type: 'url',
-            content: 'Fetched content from $url',
-            notebookId: widget.notebookId,
-          );
+      // Call backend API for content extraction
+      final apiService = ref.read(apiServiceProvider);
+      final response = await apiService.post('/content/extract-web', {
+        'url': url,
+      });
 
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('URL added successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to add URL: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+      if (response['success'] == true) {
+        final content = response['content'] as String;
+        final metadata = response['metadata'] as Map<String, dynamic>?;
+
+        await ref.read(sourceProvider.notifier).addSource(
+              title: metadata?['title'] ?? url,
+              type: 'url',
+              content: content,
+              notebookId: widget.notebookId,
+            );
+
+        if (!mounted) return;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Web content extracted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response['error'] ?? 'Failed to extract content'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
   }
 
   @override

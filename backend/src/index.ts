@@ -34,6 +34,7 @@ import socialSharingRoutes from './routes/socialSharing.js';
 import messagingRoutes from './routes/messaging.js';
 import notificationsRoutes from './routes/notifications.js';
 import googleDriveRoutes from './routes/googleDrive.js';
+import contentRoutes from './routes/content.js';
 
 // Import services
 import bunnyService from './services/bunnyService.js';
@@ -116,6 +117,7 @@ app.use('/api/social-sharing', socialSharingRoutes);
 app.use('/api/messaging', messagingRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/google-drive', googleDriveRoutes);
+app.use('/api/content', contentRoutes);
 
 // 404 handler
 app.use((req, res) => {

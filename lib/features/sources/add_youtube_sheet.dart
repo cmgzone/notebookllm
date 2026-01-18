@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'source_provider.dart';
-import '../../core/sources/content_extractor_service.dart';
+import '../../core/api/api_service.dart';
 import '../../core/sources/url_validator.dart';
 
 class AddYouTubeSheet extends ConsumerStatefulWidget {
@@ -50,27 +50,44 @@ class _AddYouTubeSheetState extends ConsumerState<AddYouTubeSheet> {
 
     try {
       final videoId = _extractVideoId(url);
-      final title = 'YouTube: $videoId';
 
-      // Extract content using the content extractor service
-      final extractor = ref.read(contentExtractorServiceProvider);
-      final content = await extractor.extractYouTubeContent(url);
+      // Call backend API for content extraction
+      final apiService = ref.read(apiServiceProvider);
+      final response = await apiService.post('/content/extract-youtube', {
+        'url': url,
+        'videoId': videoId,
+      });
 
-      await ref.read(sourceProvider.notifier).addSource(
-            title: title,
-            type: 'youtube',
-            content: content,
-            notebookId: widget.notebookId,
-          );
+      if (response['success'] == true) {
+        final content = response['content'] as String;
+        final metadata = response['metadata'] as Map<String, dynamic>?;
 
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('YouTube video added successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
+        await ref.read(sourceProvider.notifier).addSource(
+              title: metadata?['title'] ?? 'YouTube: $videoId',
+              type: 'youtube',
+              content: content,
+              notebookId: widget.notebookId,
+            );
+
+        if (!mounted) return;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(metadata?['hasTranscript'] == true
+                ? 'YouTube video added with transcript'
+                : 'YouTube video added (transcript not available)'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response['error'] ?? 'Failed to extract content'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
