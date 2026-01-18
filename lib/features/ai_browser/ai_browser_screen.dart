@@ -1439,10 +1439,31 @@ class _AIBrowserScreenState extends ConsumerState<AIBrowserScreen> {
                 SizedBox(
                   width: 14,
                   height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: scheme.tertiary,
-                  ),
+                  child: Stack(children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: scheme.tertiary,
+                        shape: BoxShape.circle,
+                      ),
+                    )
+                        .animate(onPlay: (c) => c.repeat())
+                        .scale(
+                            begin: const Offset(1, 1),
+                            end: const Offset(2, 2),
+                            duration: 1.5.seconds,
+                            curve: Curves.easeOut)
+                        .fadeOut(duration: 1.5.seconds),
+                    Center(
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: scheme.tertiary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  ]),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
