@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'agent_notebook_badge.dart';
 
 class NotebookCard extends StatelessWidget {
@@ -46,12 +47,15 @@ class NotebookCard extends StatelessWidget {
           errorBuilder: (_, __, ___) => const SizedBox.shrink(),
         );
       } else if (coverImage!.startsWith('http')) {
-        return Image.network(
-          coverImage!,
+        return CachedNetworkImage(
+          imageUrl: coverImage!,
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
-          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          placeholder: (context, url) => Container(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          ),
+          errorWidget: (_, __, ___) => const SizedBox.shrink(),
         );
       }
     } catch (e) {
