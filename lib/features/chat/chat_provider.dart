@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_service.dart';
 import '../../core/ai/web_browsing_service.dart';
@@ -34,7 +34,8 @@ class ChatNotifier extends StateNotifier<List<Message>> {
               ))
           .toList();
     } catch (e) {
-      // Handle error cleanly
+      // Log error for debugging but don't crash - chat can work without history
+      debugPrint('Error loading chat history: $e');
     }
   }
 
@@ -89,6 +90,17 @@ class ChatNotifier extends StateNotifier<List<Message>> {
 
     StringBuffer buffer = StringBuffer();
     List<Citation> citations = [];
+
+    // Add initial placeholder AI message
+    final placeholderMsg = Message(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      text: '',
+      isUser: false,
+      timestamp: DateTime.now(),
+      isDeepSearch: useDeepSearch,
+    );
+    state = [...state, placeholderMsg];
+
     await for (final tokens in stream) {
       for (final t in tokens) {
         t.when(
@@ -109,7 +121,7 @@ class ChatNotifier extends StateNotifier<List<Message>> {
       }
 
       final aiMsg = Message(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: placeholderMsg.id,
         text: buffer.toString(),
         isUser: false,
         timestamp: DateTime.now(),

@@ -34,11 +34,13 @@ class SuggestionService {
 
       // Get brief source context
       final sources = ref.read(sourceProvider);
-      final sourceContext = sources
-          .take(5)
-          .map((s) =>
-              '- ${s.title}: ${s.content.substring(0, 100).replaceAll('\n', ' ')}...')
-          .join('\n');
+      final sourceContext =
+          sources.take(5).where((s) => s.content.isNotEmpty).map((s) {
+        // Safely get first 100 characters using min to avoid RangeError
+        final contentPreview =
+            s.content.length > 100 ? s.content.substring(0, 100) : s.content;
+        return '- ${s.title}: ${contentPreview.replaceAll('\n', ' ')}...';
+      }).join('\n');
 
       // Get recent history
       final recentHistory =

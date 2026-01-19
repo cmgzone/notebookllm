@@ -130,6 +130,22 @@ async function ensureTables() {
         `);
         console.log('✅ api_keys table ready');
 
+        // Chat messages table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                notebook_id TEXT REFERENCES notebooks(id) ON DELETE CASCADE,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            
+            CREATE INDEX IF NOT EXISTS idx_chat_messages_user_notebook ON chat_messages(user_id, notebook_id);
+            CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON chat_messages(created_at);
+        `);
+        console.log('✅ chat_messages table ready');
+
         // Add is_active column to users if not exists
         try {
             await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`);
