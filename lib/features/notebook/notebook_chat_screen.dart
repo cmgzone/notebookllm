@@ -57,11 +57,21 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
           .read(apiServiceProvider)
           .getChatHistory(notebookId: widget.notebookId);
       final messages = history
-          .map((data) => ChatMessage(
-                text: data['content'],
+          .map((data) {
+            try {
+              return ChatMessage(
+                text: data['content'] ?? '',
                 isUser: data['role'] == 'user',
-                timestamp: DateTime.parse(data['created_at']),
-              ))
+                timestamp:
+                    DateTime.tryParse(data['created_at']?.toString() ?? '') ??
+                        DateTime.now(),
+              );
+            } catch (e) {
+              // Skip invalid messages
+              return null;
+            }
+          })
+          .whereType<ChatMessage>() // Filter out nulls
           .toList();
 
       if (mounted) {
