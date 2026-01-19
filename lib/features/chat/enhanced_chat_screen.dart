@@ -27,7 +27,6 @@ import '../../core/extensions/color_compat.dart';
 //
 import '../../theme/motion.dart';
 import '../../core/audio/voice_service.dart';
-import '../subscription/services/credit_manager.dart';
 import 'context_usage_widget.dart';
 import 'github_action_detector.dart';
 import '../github/github_issue_dialog.dart';
