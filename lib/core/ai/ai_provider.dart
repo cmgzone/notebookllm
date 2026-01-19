@@ -291,10 +291,10 @@ $prompt
 ═══════════════════════════════════════════════════════════
 ''';
 
-      final String response;
+      final Stream<String> stream;
       if (provider == 'openrouter') {
         final apiKey = await _getOpenRouterKey();
-        response = await _openRouterService.generateContent(
+        stream = await _openRouterService.generateStream(
           fullPrompt,
           model: model,
           apiKey: apiKey,
@@ -302,12 +302,28 @@ $prompt
       } else {
         // Use Gemini
         final apiKey = await _getGeminiKey();
-        response = await _geminiService.generateContent(
+        stream = _geminiService.streamContent(
           fullPrompt,
           model: model,
           apiKey: apiKey,
         );
       }
+
+      final buffer = StringBuffer();
+      // Initialize with empty response to start 'streaming' UI state
+      state = state.copyWith(
+          status: AIStatus.loading, lastResponse: '', clearError: true);
+
+      await for (final chunk in stream) {
+        buffer.write(chunk);
+        state = state.copyWith(
+          status: AIStatus.loading,
+          lastResponse: buffer.toString(),
+          clearError: true,
+        );
+      }
+
+      final response = buffer.toString();
 
       state = state.copyWith(
         status: AIStatus.success,

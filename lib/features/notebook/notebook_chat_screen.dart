@@ -582,17 +582,33 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
+                    itemCount: _messages.length +
+                        (ref.watch(aiProvider).status == AIStatus.loading &&
+                                ref
+                                        .watch(aiProvider)
+                                        .lastResponse
+                                        ?.isNotEmpty ==
+                                    true &&
+                                _webBrowsingStatus == null
+                            ? 1
+                            : 0),
                     itemBuilder: (context, index) {
-                      final message = _messages[index];
-                      return _MessageBubble(message: message)
-                          .animate()
-                          .slideY(
-                            begin: 0.2, // Slide up
-                            duration: 300.ms,
-                            curve: Curves.easeOut,
-                          )
-                          .fadeIn();
+                      if (index < _messages.length) {
+                        final message = _messages[index];
+                        return _MessageBubble(message: message)
+                            .animate()
+                            .fadeIn();
+                      } else {
+                        // Streaming message
+                        final aiState = ref.watch(aiProvider);
+                        return _MessageBubble(
+                          message: ChatMessage(
+                            text: aiState.lastResponse ?? '',
+                            isUser: false,
+                            timestamp: DateTime.now(),
+                          ),
+                        ).animate().fadeIn();
+                      }
                     },
                   ),
           ),
