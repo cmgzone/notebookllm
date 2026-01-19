@@ -175,8 +175,6 @@ class ChatNotifier extends StateNotifier<List<Message>> {
         isUser: false,
         timestamp: DateTime.now(),
       );
-        timestamp: DateTime.now(),
-      );
       if (mounted) state = [...state, errorMsg];
       return;
     }
