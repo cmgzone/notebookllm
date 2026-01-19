@@ -79,26 +79,11 @@ class _EnhancedChatScreenState extends ConsumerState<EnhancedChatScreen> {
     if (text.isEmpty && _selectedImage == null) return;
 
     try {
-      // Check and consume credits (more for web browsing)
-      final hasCredits = await ref.tryUseCredits(
-        context: context,
-        amount: _isWebBrowsingEnabled
-            ? CreditCosts.chatMessage * 3
-            : _selectedImage != null
-                ? CreditCosts.chatMessage * 2
-                : CreditCosts.chatMessage,
-        feature: _isWebBrowsingEnabled
-            ? 'web_browsing_chat'
-            : _selectedImage != null
-                ? 'image_chat'
-                : 'chat_message',
-      );
-      if (!hasCredits) return;
-
       // Capture image data before clearing
       final imageBytes = _selectedImageBytes;
       final imagePath = _selectedImage?.path;
 
+      // Send message immediately - credits will be consumed after AI responds
       ref.read(chatProvider.notifier).send(
             text.isNotEmpty ? text : 'Analyze this image',
             useDeepSearch: _isDeepSearchEnabled,

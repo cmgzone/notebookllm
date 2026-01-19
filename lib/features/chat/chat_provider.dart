@@ -4,6 +4,7 @@ import '../../core/api/api_service.dart';
 import '../../core/ai/web_browsing_service.dart';
 import 'message.dart';
 import 'stream_provider.dart';
+import '../subscription/services/credit_manager.dart';
 
 import 'services/suggestion_service.dart';
 
@@ -160,6 +161,20 @@ class ChatNotifier extends StateNotifier<List<Message>> {
 
   /// Handle web browsing mode with real-time updates
   Future<void> _handleWebBrowsing(String query) async {
+    // Check credits first
+    final creditManager = ref.read(creditManagerProvider);
+    if (creditManager.currentBalance <= 0) {
+      final errorMsg = Message(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        text:
+            '⚠️ **Insufficient Credits**\n\nYou do not have enough credits to send this message.',
+        isUser: false,
+        timestamp: DateTime.now(),
+      );
+      state = [...state, errorMsg];
+      return;
+    }
+
     _isWebBrowsing = true;
     _currentBrowsingUpdate = null;
 
@@ -205,6 +220,14 @@ class ChatNotifier extends StateNotifier<List<Message>> {
 
     _isWebBrowsing = false;
     _currentBrowsingUpdate = null;
+
+    // Consume credits after successful browsing
+    try {
+      await creditManager.useCredits(
+          amount: CreditCosts.chatMessage * 3, feature: 'web_browsing_chat');
+    } catch (e) {
+      debugPrint('Error consuming credits: $e');
+    }
 
     // Save AI response
     if (state.isNotEmpty && !state.last.isUser) {
