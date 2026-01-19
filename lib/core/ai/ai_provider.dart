@@ -65,7 +65,7 @@ class AINotifier extends StateNotifier<AIState> {
     ChatStyle style = ChatStyle.standard,
     List<AIPromptResponse>? externalHistory,
   }) async {
-    state = state.copyWith(status: AIStatus.loading, error: null);
+    state = state.copyWith(status: AIStatus.loading, clearError: true);
 
     try {
       final provider = await _getSelectedProvider();
@@ -326,7 +326,7 @@ $prompt
   }
 
   Future<void> generateStream(String prompt) async {
-    state = state.copyWith(status: AIStatus.loading, error: null);
+    state = state.copyWith(status: AIStatus.loading, clearError: true);
     try {
       final provider = await _getSelectedProvider();
       final model = await _getSelectedModel();
@@ -484,7 +484,7 @@ Respond in JSON format with:
   }
 
   void clearError() {
-    state = state.copyWith(error: null);
+    state = state.copyWith(clearError: true);
   }
 }
 
@@ -505,12 +505,13 @@ class AIState {
     AIStatus? status,
     String? lastResponse,
     String? error,
+    bool clearError = false,
     List<AIPromptResponse>? history,
   }) {
     return AIState(
       status: status ?? this.status,
       lastResponse: lastResponse ?? this.lastResponse,
-      error: error ?? this.error,
+      error: clearError ? null : (error ?? this.error),
       history: history ?? this.history,
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:ui';
 import '../sources/source_provider.dart';
@@ -239,6 +240,29 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
         );
 
     final aiState = ref.read(aiProvider);
+
+    // Check for errors first
+    if (aiState.error != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('AI Error: ${aiState.error}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Settings',
+              textColor: Colors.white,
+              onPressed: () {
+                // Navigate to AI settings
+                context.push('/settings/ai');
+              },
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     if (aiState.lastResponse != null) {
       // Save AI Message
       await ref.read(apiServiceProvider).saveChatMessage(
