@@ -353,13 +353,15 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
 
       await for (final chunk in stream) {
         final tokens = [StreamToken.text(text: chunk)];
-        state = [...state, ...tokens];
+        if (mounted) {
+          state = [...state, ...tokens];
+        }
         yield tokens;
       }
 
       // Signal completion
       const doneToken = StreamToken.done();
-      state = [...state, doneToken];
+      if (mounted) state = [...state, doneToken];
       yield [doneToken];
 
       // Track gamification
@@ -404,7 +406,7 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
       }
 
       final errorToken = StreamToken.text(text: errorMessage);
-      state = [...state, errorToken];
+      if (mounted) state = [...state, errorToken];
       yield [errorToken];
     } finally {
       // Consume credits if the stream was successful

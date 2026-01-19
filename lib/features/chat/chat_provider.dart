@@ -130,7 +130,9 @@ class ChatNotifier extends StateNotifier<List<Message>> {
           citations: citations,
           isDeepSearch: useDeepSearch,
         );
-        state = [...state.sublist(0, state.length - 1), aiMsg];
+        if (mounted) {
+          state = [...state.sublist(0, state.length - 1), aiMsg];
+        }
       }
     } catch (e) {
       debugPrint('Error in AI stream: $e');
@@ -144,7 +146,9 @@ class ChatNotifier extends StateNotifier<List<Message>> {
         timestamp: DateTime.now(),
         isDeepSearch: useDeepSearch,
       );
-      state = [...state.sublist(0, state.length - 1), errorMsg];
+      if (mounted) {
+        state = [...state.sublist(0, state.length - 1), errorMsg];
+      }
     }
 
     // Save AI response
@@ -171,7 +175,9 @@ class ChatNotifier extends StateNotifier<List<Message>> {
         isUser: false,
         timestamp: DateTime.now(),
       );
-      state = [...state, errorMsg];
+        timestamp: DateTime.now(),
+      );
+      if (mounted) state = [...state, errorMsg];
       return;
     }
 
@@ -186,7 +192,7 @@ class ChatNotifier extends StateNotifier<List<Message>> {
       timestamp: DateTime.now(),
       isWebBrowsing: true,
     );
-    state = [...state, placeholderMsg];
+    if (mounted) state = [...state, placeholderMsg];
 
     final webService = ref.read(webBrowsingServiceProvider);
     final screenshots = <String>[];
@@ -215,7 +221,9 @@ class ChatNotifier extends StateNotifier<List<Message>> {
         isDeepSearch: true,
       );
 
-      state = [...state.sublist(0, state.length - 1), statusMsg];
+      if (mounted) {
+        state = [...state.sublist(0, state.length - 1), statusMsg];
+      }
     }
 
     _isWebBrowsing = false;
@@ -259,7 +267,9 @@ class ChatNotifier extends StateNotifier<List<Message>> {
           suggestedQuestions: suggestions.questions,
           relatedSources: suggestions.sources,
         );
-        state = [...state.sublist(0, state.length - 1), updatedMsg];
+        if (mounted) {
+          state = [...state.sublist(0, state.length - 1), updatedMsg];
+        }
       }
     }
   }
