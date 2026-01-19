@@ -225,9 +225,38 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
       }
     }
 
+    // Add regular sources with global truncation
+    const int maxTotalChars = 60000; // ~15k tokens, safe buffer
+    int currentChars = 0;
+
+    // Count chars from GitHub context first (already added)
+    for (final s in contextList) {
+      currentChars += s.length;
+    }
+
     // Add regular sources
     for (final source in regularSources) {
-      contextList.add('${source.title}: ${source.content}');
+      if (currentChars >= maxTotalChars) {
+        contextList.add('... [Remaining sources truncated due to size limits]');
+        break;
+      }
+
+      final content = source.content;
+      final remainingChars = maxTotalChars - currentChars;
+
+      // Reserve some space for title
+      if (remainingChars < 100) break;
+
+      String addedContent;
+      if (content.length > remainingChars) {
+        addedContent =
+            '${source.title}: ${content.substring(0, remainingChars)}...';
+      } else {
+        addedContent = '${source.title}: $content';
+      }
+
+      contextList.add(addedContent);
+      currentChars += addedContent.length;
     }
 
     // Construct history pairs
