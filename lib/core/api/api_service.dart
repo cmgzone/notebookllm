@@ -780,6 +780,10 @@ class ApiService {
     final token = await getToken();
     if (token == null) throw Exception('Not authenticated');
 
+    developer.log(
+        '[ApiService] chatWithAIStream - provider: $provider, model: $model',
+        name: 'ApiService');
+
     final uri = Uri.parse('$_baseUrl/ai/chat/stream');
     final request = http.Request('POST', uri);
     request.headers.addAll({
@@ -794,9 +798,18 @@ class ApiService {
 
     final client = http.Client();
     try {
+      developer.log('[ApiService] Sending stream request to: $uri',
+          name: 'ApiService');
       final response = await client.send(request);
+      developer.log(
+          '[ApiService] Stream response status: ${response.statusCode}',
+          name: 'ApiService');
+
       if (response.statusCode != 200) {
-        throw Exception('Failed to stream: ${response.statusCode}');
+        final body = await response.stream.bytesToString();
+        developer.log('[ApiService] Stream error response: $body',
+            name: 'ApiService');
+        throw Exception('Failed to stream: ${response.statusCode} - $body');
       }
 
       yield* response.stream
@@ -818,6 +831,10 @@ class ApiService {
           })
           .where((text) => text != null)
           .cast<String>();
+    } catch (e) {
+      developer.log('[ApiService] chatWithAIStream error: $e',
+          name: 'ApiService');
+      rethrow;
     } finally {
       client.close();
     }

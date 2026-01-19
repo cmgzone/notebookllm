@@ -35,11 +35,28 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
 
   Future<String> _getSelectedModel() async {
     final settings = await AISettingsService.getSettings();
-    if (settings.model == null || settings.model!.isEmpty) {
-      throw Exception(
-          'No AI model selected. Please configure a model in settings.');
+    if (settings.model != null && settings.model!.isNotEmpty) {
+      debugPrint('[StreamNotifier] Using selected model: ${settings.model}');
+      return settings.model!;
     }
-    return settings.model!;
+
+    // Try to get the first available model from the API
+    debugPrint('[StreamNotifier] No model selected, trying to get default...');
+    try {
+      final modelsAsync = await ref.read(availableModelsProvider.future);
+      for (final models in modelsAsync.values) {
+        if (models.isNotEmpty) {
+          final defaultModel = models.first.id;
+          debugPrint('[StreamNotifier] Using default model: $defaultModel');
+          return defaultModel;
+        }
+      }
+    } catch (e) {
+      debugPrint('[StreamNotifier] Error getting default model: $e');
+    }
+
+    throw Exception(
+        '⚠️ **No AI model selected**\n\nPlease go to Settings and select an AI model to use for chat.');
   }
 
   String _buildContextualPrompt(String query, List<Message> chatHistory,
