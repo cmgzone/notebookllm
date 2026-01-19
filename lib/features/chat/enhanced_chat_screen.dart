@@ -78,41 +78,54 @@ class _EnhancedChatScreenState extends ConsumerState<EnhancedChatScreen> {
     final text = _controller.text.trim();
     if (text.isEmpty && _selectedImage == null) return;
 
-    // Check and consume credits (more for web browsing)
-    final hasCredits = await ref.tryUseCredits(
-      context: context,
-      amount: _isWebBrowsingEnabled
-          ? CreditCosts.chatMessage * 3
-          : _selectedImage != null
-              ? CreditCosts.chatMessage * 2
-              : CreditCosts.chatMessage,
-      feature: _isWebBrowsingEnabled
-          ? 'web_browsing_chat'
-          : _selectedImage != null
-              ? 'image_chat'
-              : 'chat_message',
-    );
-    if (!hasCredits) return;
+    try {
+      // Check and consume credits (more for web browsing)
+      final hasCredits = await ref.tryUseCredits(
+        context: context,
+        amount: _isWebBrowsingEnabled
+            ? CreditCosts.chatMessage * 3
+            : _selectedImage != null
+                ? CreditCosts.chatMessage * 2
+                : CreditCosts.chatMessage,
+        feature: _isWebBrowsingEnabled
+            ? 'web_browsing_chat'
+            : _selectedImage != null
+                ? 'image_chat'
+                : 'chat_message',
+      );
+      if (!hasCredits) return;
 
-    // Capture image data before clearing
-    final imageBytes = _selectedImageBytes;
-    final imagePath = _selectedImage?.path;
+      // Capture image data before clearing
+      final imageBytes = _selectedImageBytes;
+      final imagePath = _selectedImage?.path;
 
-    ref.read(chatProvider.notifier).send(
-          text.isNotEmpty ? text : 'Analyze this image',
-          useDeepSearch: _isDeepSearchEnabled,
-          useWebBrowsing: _isWebBrowsingEnabled,
-          imagePath: imagePath,
-          imageBytes: imageBytes,
+      ref.read(chatProvider.notifier).send(
+            text.isNotEmpty ? text : 'Analyze this image',
+            useDeepSearch: _isDeepSearchEnabled,
+            useWebBrowsing: _isWebBrowsingEnabled,
+            imagePath: imagePath,
+            imageBytes: imageBytes,
+          );
+
+      _controller.clear();
+      setState(() {
+        _selectedImage = null;
+        _selectedImageBytes = null;
+      });
+
+      Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+    } catch (e) {
+      debugPrint('Error sending message: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Failed to send message: ${e.toString().split(':').last.trim()}'),
+            backgroundColor: Colors.red,
+          ),
         );
-
-    _controller.clear();
-    setState(() {
-      _selectedImage = null;
-      _selectedImageBytes = null;
-    });
-
-    Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+      }
+    }
   }
 
   Future<void> _pickImage() async {

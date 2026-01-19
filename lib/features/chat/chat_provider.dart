@@ -101,34 +101,49 @@ class ChatNotifier extends StateNotifier<List<Message>> {
     );
     state = [...state, placeholderMsg];
 
-    await for (final tokens in stream) {
-      for (final t in tokens) {
-        t.when(
-          text: (txt) => buffer.write(txt),
-          citation: (id, snippet) {
-            final parts = id.split('::');
-            final chunkId = parts.isNotEmpty ? parts.first : id;
-            final sourceId = parts.length > 1 ? parts[1] : 's1';
-            citations.add(Citation(
-                id: chunkId,
-                sourceId: sourceId,
-                snippet: snippet,
-                start: 0,
-                end: 10));
-          },
-          done: () {},
-        );
-      }
+    try {
+      await for (final tokens in stream) {
+        for (final t in tokens) {
+          t.when(
+            text: (txt) => buffer.write(txt),
+            citation: (id, snippet) {
+              final parts = id.split('::');
+              final chunkId = parts.isNotEmpty ? parts.first : id;
+              final sourceId = parts.length > 1 ? parts[1] : 's1';
+              citations.add(Citation(
+                  id: chunkId,
+                  sourceId: sourceId,
+                  snippet: snippet,
+                  start: 0,
+                  end: 10));
+            },
+            done: () {},
+          );
+        }
 
-      final aiMsg = Message(
+        final aiMsg = Message(
+          id: placeholderMsg.id,
+          text: buffer.toString(),
+          isUser: false,
+          timestamp: DateTime.now(),
+          citations: citations,
+          isDeepSearch: useDeepSearch,
+        );
+        state = [...state.sublist(0, state.length - 1), aiMsg];
+      }
+    } catch (e) {
+      debugPrint('Error in AI stream: $e');
+      // Update the placeholder with an error message
+      final errorMsg = Message(
         id: placeholderMsg.id,
-        text: buffer.toString(),
+        text: buffer.isEmpty
+            ? '⚠️ Sorry, something went wrong. Please try again.'
+            : '${buffer.toString()}\n\n⚠️ *Response interrupted due to an error.*',
         isUser: false,
         timestamp: DateTime.now(),
-        citations: citations,
         isDeepSearch: useDeepSearch,
       );
-      state = [...state.sublist(0, state.length - 1), aiMsg];
+      state = [...state.sublist(0, state.length - 1), errorMsg];
     }
 
     // Save AI response

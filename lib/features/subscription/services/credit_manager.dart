@@ -105,19 +105,24 @@ class CreditManager {
     final userId = _userId;
     if (userId == null) return false;
 
-    final success = await _service.consumeCredits(
-      userId: userId,
-      amount: amount,
-      feature: feature,
-      metadata: metadata,
-    );
+    try {
+      final success = await _service.consumeCredits(
+        userId: userId,
+        amount: amount,
+        feature: feature,
+        metadata: metadata,
+      );
 
-    if (success) {
-      // Invalidate the subscription provider to refresh UI
-      _ref.invalidate(userSubscriptionProvider);
+      if (success) {
+        // Invalidate the subscription provider to refresh UI
+        _ref.invalidate(userSubscriptionProvider);
+      }
+
+      return success;
+    } catch (e) {
+      debugPrint('Error consuming credits: $e');
+      return false;
     }
-
-    return success;
   }
 
   /// Get current credit balance (from cache - may be stale)
@@ -127,7 +132,13 @@ class CreditManager {
   Future<int> getFreshBalance() async {
     final userId = _userId;
     if (userId == null) return 0;
-    return await _service.getCreditBalance(userId);
+    try {
+      return await _service.getCreditBalance(userId);
+    } catch (e) {
+      debugPrint('Error fetching credit balance: $e');
+      // Return cached balance on error, or a high number to not block user
+      return currentBalance > 0 ? currentBalance : 999999;
+    }
   }
 
   /// Show insufficient credits dialog
