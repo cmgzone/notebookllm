@@ -65,9 +65,8 @@ export async function initializeDatabase() {
     try {
         console.log('🔧 Initializing database tables...');
 
-        // Core tables
+        // Core tables - split into smaller chunks
         await client.query(`
-            -- Users table
             CREATE TABLE IF NOT EXISTS users (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 email TEXT UNIQUE NOT NULL,
@@ -84,8 +83,9 @@ export async function initializeDatabase() {
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
+        `);
 
-            -- Notebooks table
+        await client.query(`
             CREATE TABLE IF NOT EXISTS notebooks (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -97,8 +97,9 @@ export async function initializeDatabase() {
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
+        `);
 
-            -- Sources table
+        await client.query(`
             CREATE TABLE IF NOT EXISTS sources (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 notebook_id UUID NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
@@ -110,8 +111,9 @@ export async function initializeDatabase() {
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
+        `);
 
-            -- Chunks table (for RAG)
+        await client.query(`
             CREATE TABLE IF NOT EXISTS chunks (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 source_id UUID NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
@@ -120,8 +122,9 @@ export async function initializeDatabase() {
                 embedding VECTOR(1536),
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
+        `);
 
-            -- Tags table
+        await client.query(`
             CREATE TABLE IF NOT EXISTS tags (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -129,22 +132,24 @@ export async function initializeDatabase() {
                 color TEXT NOT NULL,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
+        `);
 
-            -- Notebook-Tags junction
+        await client.query(`
             CREATE TABLE IF NOT EXISTS notebook_tags (
                 notebook_id UUID REFERENCES notebooks(id) ON DELETE CASCADE,
                 tag_id UUID REFERENCES tags(id) ON DELETE CASCADE,
                 PRIMARY KEY (notebook_id, tag_id)
             );
 
-            -- Source-Tags junction
             CREATE TABLE IF NOT EXISTS source_tags (
                 source_id UUID REFERENCES sources(id) ON DELETE CASCADE,
                 tag_id UUID REFERENCES tags(id) ON DELETE CASCADE,
                 PRIMARY KEY (source_id, tag_id)
             );
+        `);
 
-            -- Create indexes
+        // Create indexes separately
+        await client.query(`
             CREATE INDEX IF NOT EXISTS idx_notebooks_user_id ON notebooks(user_id);
             CREATE INDEX IF NOT EXISTS idx_notebooks_agent ON notebooks(is_agent_notebook) WHERE is_agent_notebook = true;
             CREATE INDEX IF NOT EXISTS idx_sources_notebook_id ON sources(notebook_id);
@@ -152,7 +157,7 @@ export async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_tags_user_id ON tags(user_id);
         `);
 
-        // Subscription tables
+        // Subscription tables - split into smaller chunks
         await client.query(`
             CREATE TABLE IF NOT EXISTS subscription_plans (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -165,7 +170,9 @@ export async function initializeDatabase() {
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
+        `);
 
+        await client.query(`
             CREATE TABLE IF NOT EXISTS user_subscriptions (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -178,7 +185,9 @@ export async function initializeDatabase() {
                 updated_at TIMESTAMPTZ DEFAULT NOW(),
                 UNIQUE(user_id)
             );
+        `);
 
+        await client.query(`
             CREATE TABLE IF NOT EXISTS credit_transactions (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -200,7 +209,7 @@ export async function initializeDatabase() {
             );
         `);
 
-        // Gamification tables
+        // Gamification tables - split into smaller chunks
         await client.query(`
             CREATE TABLE IF NOT EXISTS user_stats (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -218,7 +227,9 @@ export async function initializeDatabase() {
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
+        `);
 
+        await client.query(`
             CREATE TABLE IF NOT EXISTS achievements (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -229,7 +240,9 @@ export async function initializeDatabase() {
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 UNIQUE(user_id, achievement_id)
             );
+        `);
 
+        await client.query(`
             CREATE TABLE IF NOT EXISTS daily_challenges (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -246,7 +259,7 @@ export async function initializeDatabase() {
             );
         `);
 
-        // Study tools tables
+        // Study tools tables - split into smaller chunks
         await client.query(`
             CREATE TABLE IF NOT EXISTS flashcard_decks (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -257,7 +270,9 @@ export async function initializeDatabase() {
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
+        `);
 
+        await client.query(`
             CREATE TABLE IF NOT EXISTS flashcards (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 deck_id UUID NOT NULL REFERENCES flashcard_decks(id) ON DELETE CASCADE,
@@ -270,7 +285,9 @@ export async function initializeDatabase() {
                 next_review_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
+        `);
 
+        await client.query(`
             CREATE TABLE IF NOT EXISTS quizzes (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -284,7 +301,9 @@ export async function initializeDatabase() {
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
+        `);
 
+        await client.query(`
             CREATE TABLE IF NOT EXISTS quiz_questions (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 quiz_id UUID NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
@@ -294,7 +313,9 @@ export async function initializeDatabase() {
                 explanation TEXT,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
+        `);
 
+        await client.query(`
             CREATE TABLE IF NOT EXISTS mind_maps (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -320,7 +341,7 @@ export async function initializeDatabase() {
             );
         `);
 
-        // API tokens table (for MCP authentication)
+        // API tokens table
         await client.query(`
             CREATE TABLE IF NOT EXISTS api_tokens (
                 id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
@@ -344,7 +365,9 @@ export async function initializeDatabase() {
                 user_agent TEXT,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
+        `);
 
+        await client.query(`
             CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id);
             CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
             CREATE INDEX IF NOT EXISTS idx_api_tokens_active ON api_tokens(user_id) WHERE revoked_at IS NULL;
@@ -352,9 +375,8 @@ export async function initializeDatabase() {
 
         console.log('✅ API tokens tables initialized');
 
-        // Agent communication tables (for MCP/coding agent support)
+        // Agent communication tables
         await client.query(`
-            -- Agent sessions table
             CREATE TABLE IF NOT EXISTS agent_sessions (
                 id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
                 user_id TEXT NOT NULL,
@@ -369,8 +391,9 @@ export async function initializeDatabase() {
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 UNIQUE(user_id, agent_identifier)
             );
+        `);
 
-            -- Source conversations table
+        await client.query(`
             CREATE TABLE IF NOT EXISTS source_conversations (
                 id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
                 source_id TEXT NOT NULL,
@@ -379,7 +402,6 @@ export async function initializeDatabase() {
                 UNIQUE(source_id)
             );
 
-            -- Conversation messages table
             CREATE TABLE IF NOT EXISTS conversation_messages (
                 id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
                 conversation_id TEXT NOT NULL REFERENCES source_conversations(id) ON DELETE CASCADE,
@@ -389,8 +411,9 @@ export async function initializeDatabase() {
                 is_read BOOLEAN DEFAULT false,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
+        `);
 
-            -- Create indexes for agent communication
+        await client.query(`
             CREATE INDEX IF NOT EXISTS idx_agent_sessions_user ON agent_sessions(user_id);
             CREATE INDEX IF NOT EXISTS idx_agent_sessions_status ON agent_sessions(status);
             CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent_identifier ON agent_sessions(agent_identifier);
@@ -401,7 +424,6 @@ export async function initializeDatabase() {
         `);
 
         console.log('✅ Agent communication tables initialized');
-
         console.log('✅ Core tables initialized');
     } catch (error) {
         console.error('❌ Database initialization error:', error);

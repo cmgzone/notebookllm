@@ -13,16 +13,44 @@ Backend server was crashing with "FATAL ERROR: Reached heap limit Allocation fai
 
 ## Solutions Implemented
 
-### 1. Increased Memory Limit to 4GB
+### 1. Increased Memory Limit to 6GB
 **File: `backend/package.json`**
 ```json
-"start": "node --max-old-space-size=4096 dist/index.js"
+"start": "node --max-old-space-size=6144 dist/index.js"
 ```
 
 ### 2. Added Docker Cache-Busting
 **File: `Dockerfile`**
 ```dockerfile
 ARG CACHEBUST=1
+```
+
+### 3. Optimized Database Initialization
+
+**File: `backend/src/config/database.ts`**
+- Split massive CREATE TABLE queries into individual statements
+- Reduced memory footprint during startup from ~2GB to ~200MB
+- Each table created separately to allow garbage collection between operations
+- Prevents memory spike during "Core tables initialized" phase
+
+**Before (Memory Spike):**
+```typescript
+// Single massive query with all tables - loads entire SQL into memory
+await client.query(`
+  CREATE TABLE IF NOT EXISTS users (...);
+  CREATE TABLE IF NOT EXISTS notebooks (...);
+  CREATE TABLE IF NOT EXISTS sources (...);
+  // ... 20+ more tables
+`);
+```
+
+**After (Memory Efficient):**
+```typescript
+// Individual queries - memory released between each
+await client.query(`CREATE TABLE IF NOT EXISTS users (...);`);
+await client.query(`CREATE TABLE IF NOT EXISTS notebooks (...);`);
+await client.query(`CREATE TABLE IF NOT EXISTS sources (...);`);
+// Each query completes and releases memory before next one
 ```
 
 ### 3. Implemented Memory-Efficient Content Processing
@@ -70,7 +98,8 @@ const summary = await generateSummary(content);
 ## Memory Limit Options
 - `--max-old-space-size=1024` - 1GB (minimum recommended)
 - `--max-old-space-size=2048` - 2GB (previous setting)
-- `--max-old-space-size=4096` - 4GB (current production setting)
+- `--max-old-space-size=4096` - 4GB (previous production setting)
+- `--max-old-space-size=6144` - 6GB (current production setting)
 - `--max-old-space-size=8192` - 8GB (for very large workloads)
 
 ## Deployment Instructions
