@@ -45,14 +45,34 @@ import codeVerificationService from './services/codeVerificationService.js';
 import codeAnalysisService from './services/codeAnalysisService.js';
 import { agentWebSocketService } from './services/agentWebSocketService.js';
 import { planningWebSocketService } from './services/planningWebSocketService.js';
+import { connectRedis, disconnectRedis } from './config/redis.js';
 
 // Load environment variables
 dotenv.config();
+
+// Initialize Redis
+connectRedis().catch(err => {
+    console.error('Redis initialization failed:', err);
+    console.log('⚠️  Continuing without Redis caching');
+});
 
 // Initialize services
 bunnyService.initialize();
 codeVerificationService.initialize();
 codeAnalysisService.initialize();
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+    console.log('SIGTERM received, shutting down gracefully...');
+    await disconnectRedis();
+    process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+    console.log('SIGINT received, shutting down gracefully...');
+    await disconnectRedis();
+    process.exit(0);
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;

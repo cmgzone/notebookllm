@@ -10,6 +10,7 @@ import {
     type ChatMessage
 } from '../services/aiService.js';
 import { checkCredits, consumeCredits, calculateChatCreditCost } from '../services/creditService.js';
+import { getCache, setCache, CacheTTL, CacheKeys, getOrSetCache } from '../services/cacheService.js';
 import pool from '../config/database.js';
 
 const router = express.Router();
@@ -41,12 +42,37 @@ router.get('/models', authenticateToken, async (req: AuthRequest, res: Response)
     try {
         const userId = req.userId;
 
+        // Try to get from cache first
+        const cacheKey = CacheKeys.aiModels();
+        const cached = await getCache<any[]>(cacheKey);
+        
+        if (cached) {
+            // Get user's subscription status
+            const hasPremiumAccess = userId ? await userHasPremiumAccess(userId) : false;
+            
+            // Add can_access field based on user's subscription
+            const modelsWithAccess = cached.map(model => ({
+                ...model,
+                can_access: !model.is_premium || hasPremiumAccess
+            }));
+
+            return res.json({
+                success: true,
+                models: modelsWithAccess,
+                has_premium_access: hasPremiumAccess,
+                cached: true
+            });
+        }
+
         // Get user's subscription status
         const hasPremiumAccess = userId ? await userHasPremiumAccess(userId) : false;
 
         const result = await pool.query(
             'SELECT id, name, model_id, provider, description, context_window, is_active, is_premium FROM ai_models WHERE is_active = true ORDER BY provider, name'
         );
+
+        // Cache the models list for 1 hour
+        await setCache(cacheKey, result.rows, CacheTTL.HOUR);
 
         // Add can_access field to each model based on user's subscription
         const modelsWithAccess = result.rows.map(model => ({
