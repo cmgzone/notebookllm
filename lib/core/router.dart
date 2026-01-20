@@ -52,6 +52,7 @@ import '../features/language_learning/language_session_screen.dart';
 import '../features/admin/ai_models_manager_screen.dart';
 import '../features/ai_browser/ai_browser_screen.dart';
 import '../features/settings/agent_connections_screen.dart';
+import '../features/agent_skills/agent_skills_screen.dart';
 import '../features/github/github_connect_screen.dart';
 import '../features/github/github_repos_screen.dart';
 import '../features/planning/ui/plans_list_screen.dart';
@@ -383,6 +384,12 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             name: 'agent-connections',
             pageBuilder: (context, state) =>
                 buildTransitionPage(child: const AgentConnectionsScreen()),
+          ),
+          GoRoute(
+            path: '/agent-skills',
+            name: 'agent-skills',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const AgentSkillsScreen()),
           ),
           GoRoute(
             path: '/github',

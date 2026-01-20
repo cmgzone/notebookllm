@@ -65,7 +65,7 @@ class AINotifier extends StateNotifier<AIState> {
     ChatStyle style = ChatStyle.standard,
     List<AIPromptResponse>? externalHistory,
   }) async {
-    state = state.copyWith(status: AIStatus.loading, error: null);
+    state = state.copyWith(status: AIStatus.loading, clearError: true);
 
     try {
       final provider = await _getSelectedProvider();
@@ -291,10 +291,10 @@ $prompt
 ═══════════════════════════════════════════════════════════
 ''';
 
-      final String response;
+      final Stream<String> stream;
       if (provider == 'openrouter') {
         final apiKey = await _getOpenRouterKey();
-        response = await _openRouterService.generateContent(
+        stream = await _openRouterService.generateStream(
           fullPrompt,
           model: model,
           apiKey: apiKey,
@@ -302,12 +302,28 @@ $prompt
       } else {
         // Use Gemini
         final apiKey = await _getGeminiKey();
-        response = await _geminiService.generateContent(
+        stream = _geminiService.streamContent(
           fullPrompt,
           model: model,
           apiKey: apiKey,
         );
       }
+
+      final buffer = StringBuffer();
+      // Initialize with empty response to start 'streaming' UI state
+      state = state.copyWith(
+          status: AIStatus.loading, lastResponse: '', clearError: true);
+
+      await for (final chunk in stream) {
+        buffer.write(chunk);
+        state = state.copyWith(
+          status: AIStatus.loading,
+          lastResponse: buffer.toString(),
+          clearError: true,
+        );
+      }
+
+      final response = buffer.toString();
 
       state = state.copyWith(
         status: AIStatus.success,
@@ -326,7 +342,7 @@ $prompt
   }
 
   Future<void> generateStream(String prompt) async {
-    state = state.copyWith(status: AIStatus.loading, error: null);
+    state = state.copyWith(status: AIStatus.loading, clearError: true);
     try {
       final provider = await _getSelectedProvider();
       final model = await _getSelectedModel();
@@ -484,7 +500,7 @@ Respond in JSON format with:
   }
 
   void clearError() {
-    state = state.copyWith(error: null);
+    state = state.copyWith(clearError: true);
   }
 }
 
@@ -505,12 +521,13 @@ class AIState {
     AIStatus? status,
     String? lastResponse,
     String? error,
+    bool clearError = false,
     List<AIPromptResponse>? history,
   }) {
     return AIState(
       status: status ?? this.status,
       lastResponse: lastResponse ?? this.lastResponse,
-      error: error ?? this.error,
+      error: clearError ? null : (error ?? this.error),
       history: history ?? this.history,
     );
   }

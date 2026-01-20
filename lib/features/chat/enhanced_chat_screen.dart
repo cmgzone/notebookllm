@@ -27,7 +27,6 @@ import '../../core/extensions/color_compat.dart';
 //
 import '../../theme/motion.dart';
 import '../../core/audio/voice_service.dart';
-import '../subscription/services/credit_manager.dart';
 import 'context_usage_widget.dart';
 import 'github_action_detector.dart';
 import '../github/github_issue_dialog.dart';
@@ -78,41 +77,39 @@ class _EnhancedChatScreenState extends ConsumerState<EnhancedChatScreen> {
     final text = _controller.text.trim();
     if (text.isEmpty && _selectedImage == null) return;
 
-    // Check and consume credits (more for web browsing)
-    final hasCredits = await ref.tryUseCredits(
-      context: context,
-      amount: _isWebBrowsingEnabled
-          ? CreditCosts.chatMessage * 3
-          : _selectedImage != null
-              ? CreditCosts.chatMessage * 2
-              : CreditCosts.chatMessage,
-      feature: _isWebBrowsingEnabled
-          ? 'web_browsing_chat'
-          : _selectedImage != null
-              ? 'image_chat'
-              : 'chat_message',
-    );
-    if (!hasCredits) return;
+    try {
+      // Capture image data before clearing
+      final imageBytes = _selectedImageBytes;
+      final imagePath = _selectedImage?.path;
 
-    // Capture image data before clearing
-    final imageBytes = _selectedImageBytes;
-    final imagePath = _selectedImage?.path;
+      // Send message immediately - credits will be consumed after AI responds
+      ref.read(chatProvider.notifier).send(
+            text.isNotEmpty ? text : 'Analyze this image',
+            useDeepSearch: _isDeepSearchEnabled,
+            useWebBrowsing: _isWebBrowsingEnabled,
+            imagePath: imagePath,
+            imageBytes: imageBytes,
+          );
 
-    ref.read(chatProvider.notifier).send(
-          text.isNotEmpty ? text : 'Analyze this image',
-          useDeepSearch: _isDeepSearchEnabled,
-          useWebBrowsing: _isWebBrowsingEnabled,
-          imagePath: imagePath,
-          imageBytes: imageBytes,
+      _controller.clear();
+      setState(() {
+        _selectedImage = null;
+        _selectedImageBytes = null;
+      });
+
+      Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+    } catch (e) {
+      debugPrint('Error sending message: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Failed to send message: ${e.toString().split(':').last.trim()}'),
+            backgroundColor: Colors.red,
+          ),
         );
-
-    _controller.clear();
-    setState(() {
-      _selectedImage = null;
-      _selectedImageBytes = null;
-    });
-
-    Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+      }
+    }
   }
 
   Future<void> _pickImage() async {

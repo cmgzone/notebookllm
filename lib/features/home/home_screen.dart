@@ -702,6 +702,14 @@ class _AppDrawer extends ConsumerWidget {
                         },
                       ),
                       _DrawerItem(
+                        icon: LucideIcons.hammer,
+                        label: 'Agent Skills',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/agent-skills');
+                        },
+                      ),
+                      _DrawerItem(
                         icon: LucideIcons.shield,
                         label: 'Security',
                         onTap: () {

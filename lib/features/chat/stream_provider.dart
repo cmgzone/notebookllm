@@ -13,6 +13,7 @@ import 'message.dart';
 import '../../core/ai/ai_models_provider.dart';
 import '../../core/api/api_service.dart';
 import 'github_chat_context_builder.dart';
+import '../subscription/services/credit_manager.dart';
 
 class StreamNotifier extends StateNotifier<List<StreamToken>> {
   StreamNotifier(this.ref) : super([]);
@@ -35,11 +36,28 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
 
   Future<String> _getSelectedModel() async {
     final settings = await AISettingsService.getSettings();
-    if (settings.model == null || settings.model!.isEmpty) {
-      throw Exception(
-          'No AI model selected. Please configure a model in settings.');
+    if (settings.model != null && settings.model!.isNotEmpty) {
+      debugPrint('[StreamNotifier] Using selected model: ${settings.model}');
+      return settings.model!;
     }
-    return settings.model!;
+
+    // Try to get the first available model from the API
+    debugPrint('[StreamNotifier] No model selected, trying to get default...');
+    try {
+      final modelsAsync = await ref.read(availableModelsProvider.future);
+      for (final models in modelsAsync.values) {
+        if (models.isNotEmpty) {
+          final defaultModel = models.first.id;
+          debugPrint('[StreamNotifier] Using default model: $defaultModel');
+          return defaultModel;
+        }
+      }
+    } catch (e) {
+      debugPrint('[StreamNotifier] Error getting default model: $e');
+    }
+
+    throw Exception(
+        '⚠️ **No AI model selected**\n\nPlease go to Settings and select an AI model to use for chat.');
   }
 
   String _buildContextualPrompt(String query, List<Message> chatHistory,
@@ -214,7 +232,36 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
       bool useDeepSearch = false,
       Uint8List? imageBytes}) async* {
     // Keep screen awake during AI generation
+    // Keep screen awake during AI generation
     await wakelockService.acquire();
+
+    // Calculate credit cost
+    int creditCost = CreditCosts.chatMessage;
+    String featureName = 'chat_message';
+
+    if (imageBytes != null) {
+      creditCost = CreditCosts.chatMessage * 2;
+      featureName = 'image_chat';
+    } else if (useDeepSearch) {
+      // Optional: Add extra cost for deep search if desired
+      // creditCost += CreditCosts.deepResearch;
+    }
+
+    // Soft check for credits (don't consume yet)
+    final creditManager = ref.read(creditManagerProvider);
+    final currentBalance = creditManager.currentBalance;
+
+    if (currentBalance <= 0) {
+      yield [
+        const StreamToken.text(
+            text:
+                '⚠️ **Insufficient Credits**\n\nYou do not have enough credits to send this message. Please upgrade your plan or top up credits.')
+      ];
+      yield [const StreamToken.done()];
+      return;
+    }
+
+    bool streamSuccess = false;
 
     try {
       final provider = await _getSelectedProvider();
@@ -308,13 +355,15 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
 
       await for (final chunk in stream) {
         final tokens = [StreamToken.text(text: chunk)];
-        state = [...state, ...tokens];
+        if (mounted) {
+          state = [...state, ...tokens];
+        }
         yield tokens;
       }
 
       // Signal completion
       const doneToken = StreamToken.done();
-      state = [...state, doneToken];
+      if (mounted) state = [...state, doneToken];
       yield [doneToken];
 
       // Track gamification
@@ -326,6 +375,8 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
       if (useDeepSearch) {
         ref.read(gamificationProvider.notifier).trackFeatureUsed('deep_search');
       }
+
+      streamSuccess = true;
     } catch (e) {
       // Handle errors with better messages
       String errorMessage = e.toString();
@@ -357,9 +408,21 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
       }
 
       final errorToken = StreamToken.text(text: errorMessage);
-      state = [...state, errorToken];
+      if (mounted) state = [...state, errorToken];
       yield [errorToken];
     } finally {
+      // Consume credits if the stream was successful
+      if (streamSuccess) {
+        try {
+          await creditManager.useCredits(
+            amount: creditCost,
+            feature: featureName,
+          );
+        } catch (e) {
+          debugPrint('Error consuming credits: $e');
+        }
+      }
+
       // Release wake lock when done
       await wakelockService.release();
     }

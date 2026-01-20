@@ -1,12 +1,15 @@
 import type { Request, Response } from 'express';
 import axios from 'axios';
 import pool from '../config/database.js';
+import { generateResponse, ChatMessage } from '../services/aiService.js';
 
 interface DeepResearchRequest {
     query: string;
     notebookId?: string;
     maxResults?: number;
     includeImages?: boolean;
+    provider?: 'gemini' | 'openrouter';
+    model?: string;
 }
 
 interface ResearchStep {
@@ -22,7 +25,7 @@ interface ResearchStep {
  * Performs multi-step autonomous research with streaming updates
  */
 export const performDeepResearch = async (req: Request, res: Response) => {
-    const { query, notebookId, maxResults = 10, includeImages = true } = req.body as DeepResearchRequest;
+    const { query, notebookId, maxResults = 10, includeImages = true, provider = 'gemini', model } = req.body as DeepResearchRequest;
     const userId = (req as any).user?.userId;
 
     if (!userId) {
@@ -114,10 +117,10 @@ export const performDeepResearch = async (req: Request, res: Response) => {
             timestamp: new Date().toISOString()
         });
 
-        const summary = await generateResearchSummary(query, extractedContent);
+        const summary = await generateResearchSummary(query, extractedContent, provider, model);
 
         // Step 4: Extract key insights
-        const insights = await extractKeyInsights(summary, extractedContent);
+        const insights = await extractKeyInsights(summary, extractedContent, provider, model);
 
         // Update session with results
         await pool.query(
@@ -280,12 +283,16 @@ async function performWebSearch(query: string, maxResults: number): Promise<any[
  * Extract content from search results
  */
 async function extractContentFromResults(results: any[]): Promise<any[]> {
+<<<<<<< HEAD
     const extracted: Array<{
         url: string;
         title: string;
         content: string;
         snippet: string;
     }> = [];
+=======
+    const extracted: Array<any> = [];
+>>>>>>> 4100517c7cde6edf81f49aeaf761fe336f5e3f43
 
     for (const result of results) {
         try {
@@ -328,35 +335,82 @@ async function extractContentFromResults(results: any[]): Promise<any[]> {
 /**
  * Generate research summary using AI
  */
-async function generateResearchSummary(query: string, sources: any[]): Promise<string> {
+async function generateResearchSummary(
+    query: string,
+    sources: any[],
+    provider: 'gemini' | 'openrouter' = 'gemini',
+    model?: string
+): Promise<string> {
     const combinedContent = sources
         .map(s => `Source: ${s.title}\n${s.content}`)
         .join('\n\n---\n\n');
 
-    const prompt = `As a research assistant, create a comprehensive summary based on the following sources about "${query}":
+    const messages: ChatMessage[] = [
+        {
+            role: 'system',
+            content: `You are an advanced research assistant. You have been tasked with answering a user query based on valid search results.
+            
+            Your goal is to synthesize the information from the provided sources into a comprehensive, coherent, and well-structured report.
+            
+            Guidelines:
+            1. Focus on answering the user's specific query.
+            2. Synthesize information from multiple sources; do not just list them.
+            3. Highlight key findings, statistics, and expert opinions.
+            4. Be objective and factual.
+            5. Structure the report with clear headings and bullet points where appropriate.
+            6. Use Markdown formatting.`
+        },
+        {
+            role: 'user',
+            content: `Research Query: "${query}"
+            
+            Sources:
+            ${combinedContent.substring(0, 50000)}`
+        }
+    ];
 
-${combinedContent.substring(0, 15000)}
-
-Provide a well-structured summary that:
-1. Answers the research question
-2. Synthesizes information from multiple sources
-3. Highlights key findings
-4. Is clear and concise`;
-
-    // This would call your AI service - for now return a placeholder
-    // You can integrate with Gemini/OpenRouter here
-    return `Research summary for: ${query}\n\nBased on ${sources.length} sources, here are the key findings...\n\n[AI-generated summary would go here]`;
+    try {
+        return await generateResponse(messages, provider, model);
+    } catch (error) {
+        console.error('Research summary generation failed:', error);
+        return `Failed to generate AI summary. Found ${sources.length} sources but AI generation error occurred.`;
+    }
 }
 
 /**
- * Extract key insights from research
+ * Extract key insights from research result
  */
-async function extractKeyInsights(summary: string, sources: any[]): Promise<string[]> {
-    // This would use AI to extract insights
-    // For now, return example insights
-    return [
-        'Key insight 1 from the research',
-        'Key insight 2 from the research',
-        'Key insight 3 from the research'
+async function extractKeyInsights(
+    summary: string,
+    sources: any[],
+    provider: 'gemini' | 'openrouter' = 'gemini',
+    model?: string
+): Promise<string[]> {
+    const messages: ChatMessage[] = [
+        {
+            role: 'system',
+            content: 'You are an expert analyst. Extract the top 3-5 most important insights or takeaways from the provided research summary.'
+        },
+        {
+            role: 'user',
+            content: `Summary:
+            ${summary.substring(0, 30000)}
+            
+            Extract 3-5 key insights as a simple JSON string array (e.g. ["insight 1", "insight 2"]). do not use markdown formatting for the json.`
+        }
     ];
+
+    try {
+        const response = await generateResponse(messages, provider, model);
+        // Attempt to parse JSON
+        const match = response.match(/\[[\s\S]*\]/);
+        if (match) {
+            return JSON.parse(match[0]);
+        }
+        // Fallback: split by newlines if array parse fails
+        return response.split('\n').filter(line => line.trim().startsWith('-') || line.trim().startsWith('*')).map(l => l.replace(/^[-*]\s*/, ''));
+    } catch (error) {
+        console.warn('Insight extraction failed:', error);
+        return ['Analysis completed', 'Sources reviewed', 'Summary generated'];
+    }
 }

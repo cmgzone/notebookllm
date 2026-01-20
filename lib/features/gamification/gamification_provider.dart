@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'achievement.dart';
@@ -106,35 +105,12 @@ class GamificationNotifier extends StateNotifier<GamificationState> {
 
       // Update streak client-side and sync
       _updateStreak();
-
-      // If no challenges for today, generate them and sync to backend
-      if (state.todaysChallenges.isEmpty) {
-        await _generateAndSyncDailyChallenges();
-      }
     } catch (e) {
       debugPrint('Error loading gamification data from backend: $e');
     }
   }
 
-  Future<void> _generateAndSyncDailyChallenges() async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final newChallenges = _generateDailyChallenges(today);
-
-    final api = ref.read(apiServiceProvider);
-    try {
-      final synced = await api.batchUpdateChallenges(
-          newChallenges.map((c) => c.toBackendJson()).toList());
-      state = state.copyWith(
-        dailyChallenges: [
-          ...state.dailyChallenges,
-          ...synced.map((j) => DailyChallenge.fromBackendJson(j))
-        ],
-      );
-    } catch (e) {
-      debugPrint('Error syncing daily challenges: $e');
-    }
-  }
+// Methods _generateAndSyncDailyChallenges, _generateDailyChallenges, and _createChallenge removed as logic moved to backend.
 
   void _updateStreak() {
     final now = DateTime.now();
@@ -197,117 +173,6 @@ class GamificationNotifier extends StateNotifier<GamificationState> {
         return current.copyWith(lastActiveDate: DateTime.parse(value));
       default:
         return current;
-    }
-  }
-
-  List<DailyChallenge> _generateDailyChallenges(DateTime date) {
-    final random = Random(date.millisecondsSinceEpoch);
-    final challenges = <DailyChallenge>[];
-    final types = ChallengeType.values.toList()..shuffle(random);
-
-    for (int i = 0; i < 3 && i < types.length; i++) {
-      challenges.add(_createChallenge(types[i], date, random));
-    }
-    return challenges;
-  }
-
-  DailyChallenge _createChallenge(
-      ChallengeType type, DateTime date, Random random) {
-    switch (type) {
-      case ChallengeType.reviewFlashcards:
-        final count = [10, 15, 20, 25][random.nextInt(4)];
-        return DailyChallenge(
-          title: 'Flashcard Review',
-          description: 'Review $count flashcards',
-          type: type,
-          targetValue: count,
-          xpReward: count * 2,
-          date: date,
-        );
-      case ChallengeType.completeQuiz:
-        final count = [1, 2, 3][random.nextInt(3)];
-        return DailyChallenge(
-          title: 'Quiz Time',
-          description: 'Complete $count quiz${count > 1 ? 'zes' : ''}',
-          type: type,
-          targetValue: count,
-          xpReward: count * 25,
-          date: date,
-        );
-      case ChallengeType.addSource:
-        return DailyChallenge(
-          title: 'Knowledge Builder',
-          description: 'Add a new source to any notebook',
-          type: type,
-          targetValue: 1,
-          xpReward: 30,
-          date: date,
-        );
-      case ChallengeType.chatWithAI:
-        final count = [5, 10, 15][random.nextInt(3)];
-        return DailyChallenge(
-          title: 'AI Conversation',
-          description: 'Send $count messages to AI',
-          type: type,
-          targetValue: count,
-          xpReward: count * 3,
-          date: date,
-        );
-      case ChallengeType.tutorSession:
-        return DailyChallenge(
-          title: 'Tutor Time',
-          description: 'Complete a tutor session',
-          type: type,
-          targetValue: 1,
-          xpReward: 50,
-          date: date,
-        );
-      case ChallengeType.createMindmap:
-        return DailyChallenge(
-          title: 'Mind Mapper',
-          description: 'Create a mind map',
-          type: type,
-          targetValue: 1,
-          xpReward: 40,
-          date: date,
-        );
-      case ChallengeType.perfectQuiz:
-        return DailyChallenge(
-          title: 'Perfectionist',
-          description: 'Get 100% on any quiz',
-          type: type,
-          targetValue: 1,
-          xpReward: 75,
-          date: date,
-        );
-      case ChallengeType.studyTime:
-        final minutes = [15, 30, 45][random.nextInt(3)];
-        return DailyChallenge(
-          title: 'Study Session',
-          description: 'Study for $minutes minutes',
-          type: type,
-          targetValue: minutes,
-          xpReward: minutes,
-          date: date,
-        );
-      case ChallengeType.deepResearch:
-        return DailyChallenge(
-          title: 'Deep Dive',
-          description: 'Complete a deep research session',
-          type: type,
-          targetValue: 1,
-          xpReward: 60,
-          date: date,
-        );
-      case ChallengeType.voiceMode:
-        return DailyChallenge(
-          title: 'Voice Activated',
-          description: 'Use voice mode',
-          type: type,
-          targetValue: 1,
-          xpReward: 25,
-          date: date,
-        );
     }
   }
 

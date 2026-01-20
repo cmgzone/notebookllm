@@ -310,11 +310,28 @@ export async function* streamWithOpenRouter(
 }
 
 /**
+ * Generic AI generation with provider selection
+ */
+export async function generateResponse(
+    messages: ChatMessage[],
+    provider: 'gemini' | 'openrouter' | 'openai' = 'gemini',
+    model?: string
+): Promise<string> {
+    if (provider === 'openrouter') {
+        return generateWithOpenRouter(messages, model); // model defaults in function if undefined
+    } else {
+        // Default to Gemini
+        return generateWithGemini(messages, model); // model defaults in function if undefined
+    }
+}
+
+/**
  * Generate content summary using AI
  */
 export async function generateSummary(
     content: string,
-    provider: 'gemini' | 'openrouter' = 'gemini'
+    provider: 'gemini' | 'openrouter' = 'gemini',
+    model?: string
 ): Promise<string> {
     const messages: ChatMessage[] = [
         {
@@ -327,11 +344,7 @@ export async function generateSummary(
         }
     ];
 
-    if (provider === 'gemini') {
-        return generateWithGemini(messages);
-    } else {
-        return generateWithOpenRouter(messages);
-    }
+    return generateResponse(messages, provider, model);
 }
 
 /**

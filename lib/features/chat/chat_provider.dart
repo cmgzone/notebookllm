@@ -7,6 +7,7 @@ import '../../core/ai/web_browsing_service.dart';
 import '../subscription/providers/subscription_provider.dart';
 import 'message.dart';
 import 'stream_provider.dart';
+import '../subscription/services/credit_manager.dart';
 
 import 'services/suggestion_service.dart';
 
@@ -37,7 +38,8 @@ class ChatNotifier extends StateNotifier<List<Message>> {
               ))
           .toList();
     } catch (e) {
-      // Handle error cleanly
+      // Log error for debugging but don't crash - chat can work without history
+      debugPrint('Error loading chat history: $e');
     }
   }
 
@@ -100,6 +102,16 @@ class ChatNotifier extends StateNotifier<List<Message>> {
       StringBuffer buffer = StringBuffer();
       List<Citation> citations = [];
 
+      // Add initial placeholder AI message
+      final placeholderMsg = Message(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        text: '',
+        isUser: false,
+        timestamp: DateTime.now(),
+        isDeepSearch: useDeepSearch,
+      );
+      state = [...state, placeholderMsg];
+
       await for (final tokens in stream) {
         for (final t in tokens) {
           t.when(
@@ -122,7 +134,7 @@ class ChatNotifier extends StateNotifier<List<Message>> {
         }
 
         final aiMsg = Message(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          id: placeholderMsg.id,
           text: buffer.toString(),
           isUser: false,
           timestamp: DateTime.now(),
@@ -160,7 +172,8 @@ class ChatNotifier extends StateNotifier<List<Message>> {
       // Invalidate subscription to refresh balance
       ref.invalidate(userSubscriptionProvider);
     } catch (e) {
-      // Handle other errors
+      debugPrint('Error in AI stream: $e');
+      // Update with an error message
       final errorMsg = Message(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         text: '⚠️ **Error**\n\n${e.toString()}',
@@ -173,6 +186,20 @@ class ChatNotifier extends StateNotifier<List<Message>> {
 
   /// Handle web browsing mode with real-time updates
   Future<void> _handleWebBrowsing(String query) async {
+    // Check credits first
+    final creditManager = ref.read(creditManagerProvider);
+    if (creditManager.currentBalance <= 0) {
+      final errorMsg = Message(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        text:
+            '⚠️ **Insufficient Credits**\n\nYou do not have enough credits to send this message.',
+        isUser: false,
+        timestamp: DateTime.now(),
+      );
+      if (mounted) state = [...state, errorMsg];
+      return;
+    }
+
     _isWebBrowsing = true;
     _currentBrowsingUpdate = null;
 
@@ -184,7 +211,7 @@ class ChatNotifier extends StateNotifier<List<Message>> {
       timestamp: DateTime.now(),
       isWebBrowsing: true,
     );
-    state = [...state, placeholderMsg];
+    if (mounted) state = [...state, placeholderMsg];
 
     final webService = ref.read(webBrowsingServiceProvider);
     final screenshots = <String>[];
@@ -213,11 +240,21 @@ class ChatNotifier extends StateNotifier<List<Message>> {
         isDeepSearch: true,
       );
 
-      state = [...state.sublist(0, state.length - 1), statusMsg];
+      if (mounted) {
+        state = [...state.sublist(0, state.length - 1), statusMsg];
+      }
     }
 
     _isWebBrowsing = false;
     _currentBrowsingUpdate = null;
+
+    // Consume credits after successful browsing
+    try {
+      await creditManager.useCredits(
+          amount: CreditCosts.chatMessage * 3, feature: 'web_browsing_chat');
+    } catch (e) {
+      debugPrint('Error consuming credits: $e');
+    }
 
     // Save AI response
     if (state.isNotEmpty && !state.last.isUser) {
@@ -249,7 +286,9 @@ class ChatNotifier extends StateNotifier<List<Message>> {
           suggestedQuestions: suggestions.questions,
           relatedSources: suggestions.sources,
         );
-        state = [...state.sublist(0, state.length - 1), updatedMsg];
+        if (mounted) {
+          state = [...state.sublist(0, state.length - 1), updatedMsg];
+        }
       }
     }
   }

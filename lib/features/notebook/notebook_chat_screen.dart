@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:ui';
 import '../sources/source_provider.dart';
@@ -56,11 +57,21 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
           .read(apiServiceProvider)
           .getChatHistory(notebookId: widget.notebookId);
       final messages = history
-          .map((data) => ChatMessage(
-                text: data['content'],
+          .map((data) {
+            try {
+              return ChatMessage(
+                text: data['content'] ?? '',
                 isUser: data['role'] == 'user',
-                timestamp: DateTime.parse(data['created_at']),
-              ))
+                timestamp:
+                    DateTime.tryParse(data['created_at']?.toString() ?? '') ??
+                        DateTime.now(),
+              );
+            } catch (e) {
+              // Skip invalid messages
+              return null;
+            }
+          })
+          .whereType<ChatMessage>() // Filter out nulls
           .toList();
 
       if (mounted) {
@@ -214,9 +225,38 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
       }
     }
 
+    // Add regular sources with global truncation
+    const int maxTotalChars = 60000; // ~15k tokens, safe buffer
+    int currentChars = 0;
+
+    // Count chars from GitHub context first (already added)
+    for (final s in contextList) {
+      currentChars += s.length;
+    }
+
     // Add regular sources
     for (final source in regularSources) {
-      contextList.add('${source.title}: ${source.content}');
+      if (currentChars >= maxTotalChars) {
+        contextList.add('... [Remaining sources truncated due to size limits]');
+        break;
+      }
+
+      final content = source.content;
+      final remainingChars = maxTotalChars - currentChars;
+
+      // Reserve some space for title
+      if (remainingChars < 100) break;
+
+      String addedContent;
+      if (content.length > remainingChars) {
+        addedContent =
+            '${source.title}: ${content.substring(0, remainingChars)}...';
+      } else {
+        addedContent = '${source.title}: $content';
+      }
+
+      contextList.add(addedContent);
+      currentChars += addedContent.length;
     }
 
     // Construct history pairs
@@ -239,6 +279,29 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
         );
 
     final aiState = ref.read(aiProvider);
+
+    // Check for errors first
+    if (aiState.error != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('AI Error: ${aiState.error}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Settings',
+              textColor: Colors.white,
+              onPressed: () {
+                // Navigate to AI settings
+                context.push('/settings/ai');
+              },
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     if (aiState.lastResponse != null) {
       // Save AI Message
       await ref.read(apiServiceProvider).saveChatMessage(
@@ -387,6 +450,12 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final notebooks = ref.watch(notebookProvider);
+    if (notebooks.isEmpty) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final notebook = notebooks.firstWhere(
       (n) => n.id == widget.notebookId,
       orElse: () => notebooks.first,
@@ -513,17 +582,33 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
+                    itemCount: _messages.length +
+                        (ref.watch(aiProvider).status == AIStatus.loading &&
+                                ref
+                                        .watch(aiProvider)
+                                        .lastResponse
+                                        ?.isNotEmpty ==
+                                    true &&
+                                _webBrowsingStatus == null
+                            ? 1
+                            : 0),
                     itemBuilder: (context, index) {
-                      final message = _messages[index];
-                      return _MessageBubble(message: message)
-                          .animate()
-                          .slideY(
-                            begin: 0.2, // Slide up
-                            duration: 300.ms,
-                            curve: Curves.easeOut,
-                          )
-                          .fadeIn();
+                      if (index < _messages.length) {
+                        final message = _messages[index];
+                        return _MessageBubble(message: message)
+                            .animate()
+                            .fadeIn();
+                      } else {
+                        // Streaming message
+                        final aiState = ref.watch(aiProvider);
+                        return _MessageBubble(
+                          message: ChatMessage(
+                            text: aiState.lastResponse ?? '',
+                            isUser: false,
+                            timestamp: DateTime.now(),
+                          ),
+                        ).animate().fadeIn();
+                      }
                     },
                   ),
           ),

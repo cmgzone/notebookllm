@@ -381,7 +381,62 @@ class _DetailBodyState extends ConsumerState<_DetailBody> {
 
   Widget _buildChunkList(BuildContext context) {
     if (_chunks.isEmpty) {
-      return const Center(child: Text('No text extracted'));
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.description_outlined,
+                  size: 48, color: Theme.of(context).colorScheme.outline),
+              const SizedBox(height: 16),
+              Text(
+                'No Text Extracted',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                widget.source.content.isEmpty
+                    ? 'The content for this source appears to be empty. This typically happens if the file or URL failed to process on the server.'
+                    : 'Text extraction returned no results.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.6),
+                    ),
+              ),
+              if (widget.source.content.isEmpty) ...[
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: () async {
+                    // Refresh parent provider
+                    await ref.read(sourceProvider.notifier).loadSources();
+                    // Refresh chunks
+                    _loadChunks();
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Refresh Data'),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'If refreshing doesn\'t help, please delete and re-add this source.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.5),
+                      ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
     }
 
     final scheme = Theme.of(context).colorScheme;
