@@ -282,13 +282,21 @@ export async function* streamWithOpenRouter(
                             yield content;
                         }
                     } catch (e) {
-                        // Ignore parse errors for partial lines (shouldn't happen with line split logic)
+                        // Ignore parse errors for partial lines
                     }
                 }
             }
             // Keep the last partial line in buffer
             buffer = lines[lines.length - 1];
+            
+            // Prevent buffer from growing too large
+            if (buffer.length > 10000) {
+                buffer = buffer.slice(-5000);
+            }
         }
+        
+        // Clear buffer to free memory
+        buffer = '';
     } catch (error: any) {
         console.error('OpenRouter streaming error:', error.message);
         // Try to read error response body if available
@@ -333,6 +341,9 @@ export async function generateSummary(
     provider: 'gemini' | 'openrouter' = 'gemini',
     model?: string
 ): Promise<string> {
+    // Limit content to prevent memory issues (50KB max)
+    const truncatedContent = content.substring(0, 50000);
+    
     const messages: ChatMessage[] = [
         {
             role: 'system',
@@ -340,7 +351,7 @@ export async function generateSummary(
         },
         {
             role: 'user',
-            content: `Please create a comprehensive summary of the following content:\n\n${content.substring(0, 500000)}`
+            content: `Please create a comprehensive summary of the following content:\n\n${truncatedContent}`
         }
     ];
 
@@ -354,6 +365,9 @@ export async function generateQuestions(
     content: string,
     count: number = 5
 ): Promise<string[]> {
+    // Limit content to prevent memory issues (30KB max)
+    const truncatedContent = content.substring(0, 30000);
+    
     const messages: ChatMessage[] = [
         {
             role: 'system',
@@ -361,7 +375,7 @@ export async function generateQuestions(
         },
         {
             role: 'user',
-            content: `Generate ${count} thoughtful questions that could be asked about the following content. Return only the questions, one per line, without numbering:\n\n${content.substring(0, 500000)}`
+            content: `Generate ${count} thoughtful questions that could be asked about the following content. Return only the questions, one per line, without numbering:\n\n${truncatedContent}`
         }
     ];
 
@@ -380,6 +394,9 @@ export async function generateFlashcards(
     content: string,
     count: number = 10
 ): Promise<Array<{ question: string; answer: string }>> {
+    // Limit content to prevent memory issues (30KB max)
+    const truncatedContent = content.substring(0, 30000);
+    
     const messages: ChatMessage[] = [
         {
             role: 'system',
@@ -387,7 +404,7 @@ export async function generateFlashcards(
         },
         {
             role: 'user',
-            content: `Create ${count} flashcards from this content. Return as JSON array with "question" and "answer" fields:\n\n${content.substring(0, 500000)}`
+            content: `Create ${count} flashcards from this content. Return as JSON array with "question" and "answer" fields:\n\n${truncatedContent}`
         }
     ];
 
@@ -417,6 +434,9 @@ export async function generateQuiz(
     correctIndex: number;
     explanation: string;
 }>> {
+    // Limit content to prevent memory issues (30KB max)
+    const truncatedContent = content.substring(0, 30000);
+    
     const messages: ChatMessage[] = [
         {
             role: 'system',
@@ -424,7 +444,7 @@ export async function generateQuiz(
         },
         {
             role: 'user',
-            content: `Create ${count} multiple-choice questions from this content. Each should have 4 options. Return as JSON array with fields: "question", "options" (array of 4 strings), "correctIndex" (0-3), "explanation":\n\n${content.substring(0, 500000)}`
+            content: `Create ${count} multiple-choice questions from this content. Each should have 4 options. Return as JSON array with fields: "question", "options" (array of 4 strings), "correctIndex" (0-3), "explanation":\n\n${truncatedContent}`
         }
     ];
 

@@ -1,34 +1,71 @@
 # Node.js Memory Limit Fix
 
 ## Problem
-Backend server was crashing with "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory"
+Backend server was crashing with "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory" even with 4GB memory limit.
 
-## Root Cause
-Node.js by default limits heap memory to around 1.4-1.7GB. The backend application was exceeding this limit during operation, likely due to:
-- Large AI model responses being processed
-- Multiple concurrent requests
-- Memory-intensive operations (embeddings, deep research, etc.)
+## Root Causes
+1. Node.js default heap memory limit (~1.4-1.7GB) was too low
+2. **Memory leaks from unbounded content loading:**
+   - Loading 500KB+ of content into AI prompts
+   - No limits on database query results
+   - Streaming buffers growing indefinitely
+   - No cleanup after processing large data
 
-## Solution
-Increased Node.js heap memory limit to 4GB by adding the `--max-old-space-size=4096` flag to the start script.
+## Solutions Implemented
 
-### Changes Made
-
+### 1. Increased Memory Limit to 4GB
 **File: `backend/package.json`**
 ```json
 "start": "node --max-old-space-size=4096 dist/index.js"
 ```
 
+### 2. Added Docker Cache-Busting
 **File: `Dockerfile`**
-Added cache-busting argument to force Docker to rebuild and pick up the new package.json:
 ```dockerfile
 ARG CACHEBUST=1
 ```
 
-This allocates 4GB of heap memory for the Node.js process.
+### 3. Implemented Memory-Efficient Content Processing
 
-### Docker Cache Issue
-The initial deployment was still using 2GB because Docker cached the old package.json layer. The CACHEBUST argument forces Docker to invalidate the cache and rebuild with the updated package.json.
+**File: `backend/src/services/aiService.ts`**
+- Limited summary content: 500KB → 50KB
+- Limited flashcard content: 500KB → 30KB
+- Limited quiz content: 500KB → 30KB
+- Limited question generation: 500KB → 30KB
+- Added buffer size limits in streaming (max 10KB)
+- Added buffer cleanup after streaming
+
+**File: `backend/src/services/researchService.ts`**
+- Limited page content fetch: 5KB → 3KB per page
+- Added maxContentLength: 100KB per HTTP request
+- Limited sources in report: 12 → 8 sources
+- Limited source content: 2KB → 1.5KB per source
+- Reduced image/video references in reports
+
+**File: `backend/src/routes/ai.ts`**
+- Limited notebook chunks: 100 → 50 chunks
+- Limited notebook summary: 500KB → 50KB
+- Limited sources for questions: 10 → 5 sources
+- Limited question content: 500KB → 30KB
+
+## Memory Optimization Strategy
+
+### Before (Memory Leak Pattern)
+```typescript
+// ❌ Loading massive content
+const content = allSources.map(s => s.content).join('\n').substring(0, 500000);
+const summary = await generateSummary(content);
+```
+
+### After (Memory Efficient)
+```typescript
+// ✅ Strict limits + cleanup
+const content = allSources.slice(0, 5).map(s => 
+  s.content.substring(0, 5000)
+).join('\n').substring(0, 50000);
+const summary = await generateSummary(content);
+// content is garbage collected after use
+```
 
 ## Memory Limit Options
 - `--max-old-space-size=1024` - 1GB (minimum recommended)

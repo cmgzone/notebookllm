@@ -150,10 +150,11 @@ async function fetchPageContent(url: string): Promise<string> {
     try {
         const response = await axios.get(url, {
             timeout: 10000,
+            maxContentLength: 100000, // Limit to 100KB
             headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ResearchBot/1.0)' }
         });
         
-        // Basic HTML to text extraction
+        // Basic HTML to text extraction with strict limits
         let text = response.data;
         if (typeof text === 'string') {
             text = text
@@ -162,7 +163,7 @@ async function fetchPageContent(url: string): Promise<string> {
                 .replace(/<[^>]+>/g, ' ')
                 .replace(/\s+/g, ' ')
                 .trim()
-                .substring(0, 5000);
+                .substring(0, 3000); // Reduced from 5000 to 3000
         }
         return text || '';
     } catch (error) {
@@ -194,8 +195,14 @@ async function synthesizeReport(
     videos: string[],
     template: ResearchTemplate
 ): Promise<string> {
-    const sourcesText = sources.slice(0, 12).map((s, i) => 
-        `Source ${i + 1} [${s.credibility.toUpperCase()} ${s.credibilityScore}%]: ${s.title}\nURL: ${s.url}\nContent: ${s.content.substring(0, 2000)}`
+    // Limit sources and content to prevent memory issues
+    const limitedSources = sources.slice(0, 8).map((s, i) => ({
+        ...s,
+        content: s.content.substring(0, 1500) // Limit each source to 1.5KB
+    }));
+    
+    const sourcesText = limitedSources.map((s, i) => 
+        `Source ${i + 1} [${s.credibility.toUpperCase()} ${s.credibilityScore}%]: ${s.title}\nURL: ${s.url}\nContent: ${s.content}`
     ).join('\n\n---\n\n');
 
     const templatePrompt = getTemplatePrompt(template);
@@ -211,8 +218,8 @@ Use markdown formatting. Cite sources with [Title](URL). Prioritize high-credibi
 SOURCES:
 ${sourcesText}
 
-IMAGES (embed relevant ones): ${images.slice(0, 6).join(', ')}
-VIDEOS (reference relevant ones): ${videos.slice(0, 3).join(', ')}
+IMAGES (embed relevant ones): ${images.slice(0, 4).join(', ')}
+VIDEOS (reference relevant ones): ${videos.slice(0, 2).join(', ')}
 
 Write the complete report:`
     }];

@@ -312,14 +312,14 @@ router.post('/questions', async (req: AuthRequest, res: Response) => {
 
         // Get sources content
         const sourcesResult = await pool.query(
-            `SELECT title, content FROM sources WHERE notebook_id = $1 LIMIT 10`,
+            `SELECT title, content FROM sources WHERE notebook_id = $1 LIMIT 5`, // Reduced from 10 to 5
             [notebookId]
         );
 
         const content = sourcesResult.rows
             .map(s => `${s.title}: ${s.content || ''}`)
             .join('\n\n')
-            .substring(0, 500000);
+            .substring(0, 30000); // Reduced from 500000 to 30000
 
         const questions = await generateQuestions(content, count);
 
@@ -355,7 +355,7 @@ router.post('/notebook-summary', async (req: AuthRequest, res: Response) => {
              INNER JOIN sources s ON c.source_id = s.id
              WHERE s.notebook_id = $1
              ORDER BY c.chunk_index ASC
-             LIMIT 100`,
+             LIMIT 50`, // Reduced from 100 to 50
             [notebookId]
         );
 
@@ -364,17 +364,17 @@ router.post('/notebook-summary', async (req: AuthRequest, res: Response) => {
             content = chunksResult.rows
                 .map(c => c.content_text)
                 .join(' ')
-                .substring(0, 500000);
+                .substring(0, 50000); // Reduced from 500000 to 50000
         } else {
             // Fall back to sources content
             const sourcesResult = await pool.query(
-                `SELECT title, content FROM sources WHERE notebook_id = $1`,
+                `SELECT title, content FROM sources WHERE notebook_id = $1 LIMIT 10`,
                 [notebookId]
             );
             content = sourcesResult.rows
                 .map(s => `${s.title}: ${s.content || ''}`)
                 .join('\n\n')
-                .substring(0, 500000);
+                .substring(0, 50000); // Reduced from 500000 to 50000
         }
 
         const summary = await generateSummary(content);
