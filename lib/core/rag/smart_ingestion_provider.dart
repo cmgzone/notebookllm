@@ -5,26 +5,20 @@ import 'chunk.dart';
 import '../../features/sources/source_provider.dart';
 import 'rag_provider.dart';
 
-final useRealIngestionProvider = StateProvider<bool>((ref) => true); // Enable real ingestion by default
+final useRealIngestionProvider =
+    StateProvider<bool>((ref) => true); // Enable real ingestion by default
 
-final ingestionProvider = FutureProvider.family<List<Chunk>, String>((ref, sourceId) async {
+final ingestionProvider =
+    FutureProvider.family<List<Chunk>, String>((ref, sourceId) async {
   final sources = ref.watch(sourceProvider);
   final source = sources.firstWhere((s) => s.id == sourceId);
   final real = ref.watch(realIngestionProvider);
-  
+
   try {
-    if (real != null) {
-      // Use real embedding service (OpenAI or Gemini)
-      final chunks = await real.chunkSource(source);
-      ref.read(vectorStoreProvider).addChunks(chunks);
-      return chunks;
-    } else {
-      // Fallback to mock ingestion service
-      final service = ref.read(ingestionServiceProvider);
-      final chunks = service.chunkSource(source);
-      ref.read(vectorStoreProvider).addChunks(chunks);
-      return chunks;
-    }
+    // Use real embedding service (OpenAI or Gemini)
+    final chunks = await real.chunkSource(source);
+    ref.read(vectorStoreProvider).addChunks(chunks);
+    return chunks;
   } catch (e) {
     if (kDebugMode) {
       debugPrint('Ingestion failed for source $sourceId: $e');

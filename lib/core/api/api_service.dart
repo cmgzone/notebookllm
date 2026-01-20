@@ -856,8 +856,9 @@ class ApiService {
               final dataStr = line.substring(6);
               // Check for special control messages
               if (dataStr == '[DONE]') return null;
-              if (dataStr == '[ERROR]')
+              if (dataStr == '[ERROR]') {
                 throw Exception('Stream error occurred');
+              }
 
               try {
                 final json = jsonDecode(dataStr);

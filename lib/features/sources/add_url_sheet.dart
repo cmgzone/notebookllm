@@ -29,7 +29,8 @@ class _AddUrlSheetState extends ConsumerState<AddUrlSheet> {
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter a valid URL starting with http:// or https://'),
+          content: Text(
+              'Please enter a valid URL starting with http:// or https://'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -74,6 +75,17 @@ class _AddUrlSheetState extends ConsumerState<AddUrlSheet> {
           ),
         );
       }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error adding URL: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
