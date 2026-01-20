@@ -32,9 +32,42 @@ The initial deployment was still using 2GB because Docker cached the old package
 
 ## Memory Limit Options
 - `--max-old-space-size=1024` - 1GB (minimum recommended)
-- `--max-old-space-size=2048` - 2GB (current setting)
-- `--max-old-space-size=4096` - 4GB (for high-traffic production)
+- `--max-old-space-size=2048` - 2GB (previous setting)
+- `--max-old-space-size=4096` - 4GB (current production setting)
 - `--max-old-space-size=8192` - 8GB (for very large workloads)
+
+## Deployment Instructions
+
+### For Coolify or Docker-based Deployments:
+
+1. **Pull latest changes** from GitHub (commit e5c13c3 or later)
+
+2. **Force rebuild without cache** in Coolify:
+   - Go to your deployment settings
+   - Find "Build Options" or "Advanced Settings"
+   - Enable "Force Rebuild" or "No Cache"
+   - Or manually trigger rebuild with: `docker build --no-cache .`
+
+3. **Verify the deployment**:
+   - Check logs for: `node --max-old-space-size=4096 dist/index.js`
+   - Should NOT show `--max-old-space-size=2048`
+
+4. **Alternative**: Change CACHEBUST value in Dockerfile to force rebuild:
+   ```dockerfile
+   ARG CACHEBUST=2  # Change this number to force rebuild
+   ```
+
+### Verification
+After deployment, check the startup logs. You should see the process starting with 4GB limit:
+```
+npm start
+> node --max-old-space-size=4096 dist/index.js
+```
+
+If you still see `2048`, the cache wasn't cleared. Try:
+- Deleting the deployment and recreating it
+- Using `docker system prune -a` to clear all Docker cache
+- Manually building with `--no-cache` flag
 
 ## Monitoring
 To monitor memory usage:
