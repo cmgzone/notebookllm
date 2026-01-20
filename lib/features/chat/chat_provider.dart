@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_service.dart';
 import '../../core/ai/web_browsing_service.dart';
+import '../subscription/providers/subscription_provider.dart';
 import 'message.dart';
 import 'stream_provider.dart';
 
@@ -55,14 +58,6 @@ class ChatNotifier extends StateNotifier<List<Message>> {
       bool useWebBrowsing = false,
       String? imagePath,
       Uint8List? imageBytes}) async {
-    // Save to backend
-    try {
-      await ref.read(apiServiceProvider).saveChatMessage(
-            role: 'user',
-            content: text,
-          );
-    } catch (_) {}
-
     final userMsg = Message(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       text: text,
@@ -70,7 +65,20 @@ class ChatNotifier extends StateNotifier<List<Message>> {
       timestamp: DateTime.now(),
       imageUrl: imagePath,
     );
+
+    // 1. Add message to UI IMMEDIATELY (no await)
     state = [...state, userMsg];
+
+    // 2. Save user message to backend in background (non-blocking)
+    unawaited(
+      ref
+          .read(apiServiceProvider)
+          .saveChatMessage(
+            role: 'user',
+            content: text,
+          )
+          .catchError((_) => <String, dynamic>{}),
+    );
 
     // Use web browsing mode if enabled
     if (useWebBrowsing) {
@@ -80,55 +88,87 @@ class ChatNotifier extends StateNotifier<List<Message>> {
 
     // Pass chat history to stream provider for context
     final chatHistory = state.where((m) => m.id != userMsg.id).toList();
-    final stream = ref.read(streamProvider.notifier).ask(
-          text,
-          chatHistory: chatHistory,
-          useDeepSearch: useDeepSearch,
-          imageBytes: imageBytes,
-        );
 
-    StringBuffer buffer = StringBuffer();
-    List<Citation> citations = [];
-    await for (final tokens in stream) {
-      for (final t in tokens) {
-        t.when(
-          text: (txt) => buffer.write(txt),
-          citation: (id, snippet) {
-            final parts = id.split('::');
-            final chunkId = parts.isNotEmpty ? parts.first : id;
-            final sourceId = parts.length > 1 ? parts[1] : 's1';
-            citations.add(Citation(
-                id: chunkId,
-                sourceId: sourceId,
-                snippet: snippet,
-                start: 0,
-                end: 10));
-          },
-          done: () {},
+    try {
+      final stream = ref.read(streamProvider.notifier).ask(
+            text,
+            chatHistory: chatHistory,
+            useDeepSearch: useDeepSearch,
+            imageBytes: imageBytes,
+          );
+
+      StringBuffer buffer = StringBuffer();
+      List<Citation> citations = [];
+
+      await for (final tokens in stream) {
+        for (final t in tokens) {
+          t.when(
+            text: (txt) {
+              buffer.write(txt);
+            },
+            citation: (id, snippet) {
+              final parts = id.split('::');
+              final chunkId = parts.isNotEmpty ? parts.first : id;
+              final sourceId = parts.length > 1 ? parts[1] : 's1';
+              citations.add(Citation(
+                  id: chunkId,
+                  sourceId: sourceId,
+                  snippet: snippet,
+                  start: 0,
+                  end: 10));
+            },
+            done: () {},
+          );
+        }
+
+        final aiMsg = Message(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          text: buffer.toString(),
+          isUser: false,
+          timestamp: DateTime.now(),
+          citations: citations,
+          isDeepSearch: useDeepSearch,
         );
+        state = [...state.sublist(0, state.length - 1), aiMsg];
       }
 
-      final aiMsg = Message(
+      // Save AI response to backend in background (non-blocking)
+      unawaited(
+        ref
+            .read(apiServiceProvider)
+            .saveChatMessage(
+              role: 'model',
+              content: buffer.toString(),
+            )
+            .catchError((_) => <String, dynamic>{}),
+      );
+
+      // Generate Smart Suggestions
+      _generateSuggestions();
+    } on InsufficientCreditsException catch (e) {
+      // Handle insufficient credits error
+      final errorMsg = Message(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        text: buffer.toString(),
+        text: '⚠️ **Insufficient Credits**\n\n'
+            'You need ${e.required} credits but only have ${e.available} credits available.\n\n'
+            'Please purchase more credits or upgrade your plan to continue.',
         isUser: false,
         timestamp: DateTime.now(),
-        citations: citations,
-        isDeepSearch: useDeepSearch,
       );
-      state = [...state.sublist(0, state.length - 1), aiMsg];
+      state = [...state.sublist(0, state.length - 1), errorMsg];
+
+      // Invalidate subscription to refresh balance
+      ref.invalidate(userSubscriptionProvider);
+    } catch (e) {
+      // Handle other errors
+      final errorMsg = Message(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        text: '⚠️ **Error**\n\n${e.toString()}',
+        isUser: false,
+        timestamp: DateTime.now(),
+      );
+      state = [...state.sublist(0, state.length - 1), errorMsg];
     }
-
-    // Save AI response
-    try {
-      await ref.read(apiServiceProvider).saveChatMessage(
-            role: 'model',
-            content: buffer.toString(),
-          );
-    } catch (_) {}
-
-    // Generate Smart Suggestions
-    _generateSuggestions();
   }
 
   /// Handle web browsing mode with real-time updates

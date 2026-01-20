@@ -6,6 +6,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// Custom exception for insufficient credits
+class InsufficientCreditsException implements Exception {
+  final String message;
+  final int required;
+  final int available;
+
+  InsufficientCreditsException({
+    required this.message,
+    required this.required,
+    required this.available,
+  });
+
+  @override
+  String toString() => message;
+}
+
 final apiServiceProvider = Provider<ApiService>((ref) {
   return ApiService(ref);
 });
@@ -776,6 +792,8 @@ class ApiService {
     required List<Map<String, dynamic>> messages,
     String provider = 'gemini',
     String? model,
+    bool useDeepSearch = false,
+    bool hasImage = false,
   }) async* {
     final token = await getToken();
     if (token == null) throw Exception('Not authenticated');
@@ -790,11 +808,29 @@ class ApiService {
       'messages': messages,
       'provider': provider,
       if (model != null) 'model': model,
+      'useDeepSearch': useDeepSearch,
+      'hasImage': hasImage,
     });
 
     final client = http.Client();
     try {
       final response = await client.send(request);
+
+      // Handle insufficient credits error
+      if (response.statusCode == 402) {
+        final errorBody = await response.stream.bytesToString();
+        try {
+          final errorJson = jsonDecode(errorBody);
+          throw InsufficientCreditsException(
+            message: errorJson['message'] ?? 'Insufficient credits',
+            required: errorJson['required'] ?? 0,
+            available: errorJson['available'] ?? 0,
+          );
+        } catch (e) {
+          throw Exception('Insufficient credits');
+        }
+      }
+
       if (response.statusCode != 200) {
         throw Exception('Failed to stream: ${response.statusCode}');
       }

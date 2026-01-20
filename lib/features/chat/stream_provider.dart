@@ -297,11 +297,13 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
         ];
       }
 
-      // Always use Backend Proxy Stream
+      // Always use Backend Proxy Stream with credit flags
       final stream = ref.read(apiServiceProvider).chatWithAIStream(
             messages: messages,
             provider: provider,
             model: model,
+            useDeepSearch: useDeepSearch,
+            hasImage: imageBytes != null,
           );
 
       await for (final chunk in stream) {
