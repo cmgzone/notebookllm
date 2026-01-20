@@ -35,7 +35,10 @@ export const authenticateToken = async (
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
+    console.log(`[Auth] Request to ${req.method} ${req.path} - Auth header present: ${!!authHeader}, Token present: ${!!token}`);
+
     if (!token) {
+        console.log('[Auth] No token provided');
         return res.status(401).json({ error: 'Access token required' });
     }
 
@@ -99,12 +102,14 @@ export const authenticateToken = async (
             email: string;
             role?: string;
         };
+        console.log(`[Auth] JWT validated successfully for user: ${decoded.userId}`);
         req.userId = decoded.userId;
         req.userEmail = decoded.email;
         req.authMethod = 'jwt';
         if (decoded.role) req.userRole = decoded.role;
         next();
     } catch (error) {
+        console.log(`[Auth] JWT validation failed:`, error);
         return res.status(403).json({ error: 'Invalid or expired token' });
     }
 };
