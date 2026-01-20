@@ -3,10 +3,17 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Parse Redis URL to check if TLS is needed
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const usesTLS = redisUrl.startsWith('rediss://');
+
 // Create Redis client
 const redisClient = createClient({
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
+    url: redisUrl,
     socket: {
+        // TLS configuration for secure connections
+        tls: usesTLS,
+        rejectUnauthorized: false, // Accept self-signed certificates
         reconnectStrategy: (retries) => {
             if (retries > 10) {
                 console.error('❌ Redis: Too many reconnection attempts, giving up');

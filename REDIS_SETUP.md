@@ -32,6 +32,32 @@ The app uses the cache-aside pattern:
 
 ## Setup Options
 
+### Option 0: No Redis (Simplest - App Works Fine!)
+
+**The app works perfectly without Redis!**
+
+If you're seeing Redis connection errors and don't need caching:
+
+1. **Remove REDIS_URL from .env:**
+   ```env
+   # Just comment it out or delete the line
+   # REDIS_URL=redis://localhost:6379
+   ```
+
+2. **Restart the backend**
+
+3. **App continues normally:**
+   - No caching (slightly slower)
+   - No errors
+   - All features work
+   - Database handles all queries
+
+**When to skip Redis:**
+- Development/testing
+- Low traffic applications
+- Troubleshooting other issues
+- Don't want to manage another service
+
 ### Option 1: Local Redis (Development)
 
 **Install Redis:**
@@ -340,6 +366,36 @@ REDIS_URL=localhost:6379
 # Correct
 REDIS_URL=redis://localhost:6379
 ```
+
+### Self-Signed Certificate Error
+
+**Error:**
+```
+Error: self-signed certificate in certificate chain
+code: 'SELF_SIGNED_CERT_IN_CHAIN'
+```
+
+**Solution:**
+This is already handled in the code with `rejectUnauthorized: false`. If you still see this error:
+
+1. **Check your Redis URL format:**
+   ```env
+   # For TLS/SSL connections, use rediss:// (with double 's')
+   REDIS_URL=rediss://username:password@host:port
+   
+   # For non-TLS connections, use redis://
+   REDIS_URL=redis://username:password@host:port
+   ```
+
+2. **For managed Redis services (Redis Cloud, Upstash):**
+   - They typically use TLS by default
+   - Use the `rediss://` URL they provide
+   - The app automatically accepts self-signed certificates
+
+3. **Disable Redis temporarily:**
+   - Remove or comment out REDIS_URL from .env
+   - App will continue without caching
+   - No errors will occur
 
 ### Authentication Failed
 
