@@ -10,15 +10,15 @@ Node.js by default limits heap memory to around 1.4-1.7GB. The backend applicati
 - Memory-intensive operations (embeddings, deep research, etc.)
 
 ## Solution
-Increased Node.js heap memory limit to 2GB by adding the `--max-old-space-size=2048` flag to the start script.
+Increased Node.js heap memory limit to 4GB by adding the `--max-old-space-size=4096` flag to the start script.
 
 ### Changes Made
 **File: `backend/package.json`**
 ```json
-"start": "node --max-old-space-size=2048 dist/index.js"
+"start": "node --max-old-space-size=4096 dist/index.js"
 ```
 
-This allocates 2GB of heap memory for the Node.js process.
+This allocates 4GB of heap memory for the Node.js process.
 
 ## Memory Limit Options
 - `--max-old-space-size=1024` - 1GB (minimum recommended)
