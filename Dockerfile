@@ -2,6 +2,9 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+# Cache-busting argument to force rebuild when needed
+ARG CACHEBUST=1
+
 # Copy backend package files
 COPY backend/package*.json ./
 
@@ -17,5 +20,5 @@ RUN npm run build
 # Expose port
 EXPOSE 3000
 
-# Start command
+# Start command (uses 4GB memory limit)
 CMD ["npm", "start"]

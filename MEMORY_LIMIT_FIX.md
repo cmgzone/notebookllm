@@ -13,12 +13,22 @@ Node.js by default limits heap memory to around 1.4-1.7GB. The backend applicati
 Increased Node.js heap memory limit to 4GB by adding the `--max-old-space-size=4096` flag to the start script.
 
 ### Changes Made
+
 **File: `backend/package.json`**
 ```json
 "start": "node --max-old-space-size=4096 dist/index.js"
 ```
 
+**File: `Dockerfile`**
+Added cache-busting argument to force Docker to rebuild and pick up the new package.json:
+```dockerfile
+ARG CACHEBUST=1
+```
+
 This allocates 4GB of heap memory for the Node.js process.
+
+### Docker Cache Issue
+The initial deployment was still using 2GB because Docker cached the old package.json layer. The CACHEBUST argument forces Docker to invalidate the cache and rebuild with the updated package.json.
 
 ## Memory Limit Options
 - `--max-old-space-size=1024` - 1GB (minimum recommended)
