@@ -283,16 +283,12 @@ async function performWebSearch(query: string, maxResults: number): Promise<any[
  * Extract content from search results
  */
 async function extractContentFromResults(results: any[]): Promise<any[]> {
-<<<<<<< HEAD
     const extracted: Array<{
         url: string;
         title: string;
         content: string;
         snippet: string;
     }> = [];
-=======
-    const extracted: Array<any> = [];
->>>>>>> 4100517c7cde6edf81f49aeaf761fe336f5e3f43
 
     for (const result of results) {
         try {

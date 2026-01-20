@@ -131,11 +131,7 @@ async function getVideoTranscript(videoId: string): Promise<string> {
  * Format YouTube content for storage
  */
 function formatYouTubeContent(metadata: any, transcript: string, videoId: string, url: string): string {
-<<<<<<< HEAD
     const content: string[] = [];
-=======
-    const content: any[] = [];
->>>>>>> 4100517c7cde6edf81f49aeaf761fe336f5e3f43
 
     content.push(`# ${metadata.title}`);
 
