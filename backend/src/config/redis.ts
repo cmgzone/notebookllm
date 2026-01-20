@@ -7,19 +7,29 @@ dotenv.config();
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const usesTLS = redisUrl.startsWith('rediss://');
 
-// Create Redis client
+// Create Redis client with proper TLS configuration
 const redisClient = createClient({
     url: redisUrl,
-    socket: {
-        // TLS configuration for secure connections
-        tls: usesTLS,
+    socket: usesTLS ? {
+        // TLS configuration for secure connections (rediss://)
+        tls: true,
         rejectUnauthorized: false, // Accept self-signed certificates
         reconnectStrategy: (retries) => {
             if (retries > 10) {
                 console.error('❌ Redis: Too many reconnection attempts, giving up');
                 return new Error('Too many retries');
             }
-            // Exponential backoff: 50ms, 100ms, 200ms, 400ms, etc.
+            const delay = Math.min(retries * 50, 3000);
+            console.log(`🔄 Redis: Reconnecting in ${delay}ms (attempt ${retries})`);
+            return delay;
+        },
+    } : {
+        // Non-TLS configuration for local connections (redis://)
+        reconnectStrategy: (retries) => {
+            if (retries > 10) {
+                console.error('❌ Redis: Too many reconnection attempts, giving up');
+                return new Error('Too many retries');
+            }
             const delay = Math.min(retries * 50, 3000);
             console.log(`🔄 Redis: Reconnecting in ${delay}ms (attempt ${retries})`);
             return delay;
