@@ -898,15 +898,22 @@ class ApiService {
     try {
       final response = await client.send(request);
       if (response.statusCode != 200) {
-        throw Exception('Failed to stream: ${response.statusCode}');
+        final errorBody = await response.stream.bytesToString();
+        developer.log('Stream error: ${response.statusCode} - $errorBody',
+            name: 'ApiService');
+        throw Exception(
+            'Failed to stream: ${response.statusCode} - ${errorBody.isNotEmpty ? errorBody : "Unknown error"}');
       }
 
       yield* response.stream
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .map((line) {
+            if (line.isEmpty) return null;
+
             if (line.startsWith('data: ')) {
-              final dataStr = line.substring(6);
+              final dataStr = line.substring(6).trim();
+
               // Check for special control messages
               if (dataStr == '[DONE]') return null;
               if (dataStr == '[ERROR]') {
@@ -923,7 +930,8 @@ class ApiService {
                 return parser(json);
               } catch (e) {
                 // Return null for parse errors to skip bad frames instead of crashing stream
-                developer.log('SSE Parse Error: $e', name: 'ApiService');
+                developer.log('SSE Parse Error for line: $line - Error: $e',
+                    name: 'ApiService');
                 return null;
               }
             }
@@ -931,6 +939,10 @@ class ApiService {
           })
           .where((item) => item != null)
           .cast<T>();
+    } catch (e, stackTrace) {
+      developer.log('Stream request error: $e', name: 'ApiService');
+      developer.log('Stack trace: $stackTrace', name: 'ApiService');
+      rethrow;
     } finally {
       client.close();
     }

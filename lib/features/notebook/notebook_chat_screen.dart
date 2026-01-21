@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:ui';
+import 'dart:async';
 import '../sources/source_provider.dart';
 import '../../core/ai/ai_provider.dart';
 import '../../core/ai/web_browsing_service.dart';
@@ -51,28 +52,58 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
   }
 
   Future<void> _loadHistory() async {
+    if (!mounted) return;
+
     setState(() => _isLoading = true);
     try {
       final history = await ref
           .read(apiServiceProvider)
           .getChatHistory(notebookId: widget.notebookId);
-      final messages = history
-          .map((data) {
-            try {
-              return ChatMessage(
-                text: data['content'] ?? '',
-                isUser: data['role'] == 'user',
-                timestamp:
-                    DateTime.tryParse(data['created_at']?.toString() ?? '') ??
-                        DateTime.now(),
-              );
-            } catch (e) {
-              // Skip invalid messages
-              return null;
+
+      final messages = <ChatMessage>[];
+
+      for (final data in history) {
+        try {
+          // Validate required fields
+          if (!data.containsKey('content') || !data.containsKey('role')) {
+            debugPrint('Skipping invalid message data: $data');
+            continue;
+          }
+
+          final content = data['content'];
+          final role = data['role'];
+
+          // Ensure content is a string
+          if (content == null) {
+            debugPrint('Skipping message with null content');
+            continue;
+          }
+
+          final contentStr = content.toString();
+          if (contentStr.isEmpty) {
+            debugPrint('Skipping message with empty content');
+            continue;
+          }
+
+          // Parse timestamp safely
+          DateTime timestamp = DateTime.now();
+          if (data.containsKey('created_at') && data['created_at'] != null) {
+            final parsedTime = DateTime.tryParse(data['created_at'].toString());
+            if (parsedTime != null) {
+              timestamp = parsedTime;
             }
-          })
-          .whereType<ChatMessage>() // Filter out nulls
-          .toList();
+          }
+
+          messages.add(ChatMessage(
+            text: contentStr,
+            isUser: role.toString() == 'user',
+            timestamp: timestamp,
+          ));
+        } catch (e) {
+          debugPrint('Error parsing message: $e, data: $data');
+          // Continue processing other messages
+        }
+      }
 
       if (mounted) {
         setState(() {
@@ -80,12 +111,32 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
           _messages.addAll(messages);
           _isLoading = false;
         });
-        Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+
+        // Scroll to bottom after a delay to ensure UI is ready
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+          }
+        });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Error loading chat history: $e');
+      debugPrint('Stack trace: $stackTrace');
+
       if (mounted) {
         setState(() => _isLoading = false);
-        debugPrint('Error loading chat history: $e');
+
+        // Show user-friendly error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to load chat history. Starting fresh.'),
+            backgroundColor: Colors.orange,
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: _loadHistory,
+            ),
+          ),
+        );
       }
     }
   }
@@ -111,12 +162,17 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
     );
     if (!hasCredits) return;
 
+    // Add user message immediately
+    final userMessage = ChatMessage(
+      text: message,
+      isUser: true,
+      timestamp: DateTime.now(),
+    );
+
+    if (!mounted) return;
+
     setState(() {
-      _messages.add(ChatMessage(
-        text: message,
-        isUser: true,
-        timestamp: DateTime.now(),
-      ));
+      _messages.add(userMessage);
       _isLoading = true;
       _webBrowsingStatus = null;
       _webBrowsingScreenshots = [];
@@ -127,12 +183,18 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
     _scrollToBottom();
 
     try {
-      // Save User Message
-      await ref.read(apiServiceProvider).saveChatMessage(
+      // Save User Message (non-blocking)
+      ref
+          .read(apiServiceProvider)
+          .saveChatMessage(
             role: 'user',
             content: message,
             notebookId: widget.notebookId,
-          );
+          )
+          .catchError((e) {
+        debugPrint('Error saving user message: $e');
+        return <String, dynamic>{};
+      });
 
       if (_isWebBrowsingEnabled) {
         // Use web browsing service
@@ -141,10 +203,38 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
         // Regular chat flow
         await _handleRegularChat(message);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Error in _sendMessage: $e');
+      debugPrint('Stack trace: $stackTrace');
+
       if (mounted) {
+        // Remove the loading state
+        setState(() => _isLoading = false);
+
+        // Show user-friendly error message
+        String errorMessage = 'Failed to send message';
+        if (e.toString().contains('network') ||
+            e.toString().contains('connection')) {
+          errorMessage = 'Network error. Please check your connection.';
+        } else if (e.toString().contains('401') ||
+            e.toString().contains('Unauthorized')) {
+          errorMessage = 'Authentication error. Please log in again.';
+        } else if (e.toString().contains('timeout')) {
+          errorMessage = 'Request timed out. Please try again.';
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: () {
+                _messageController.text = message;
+                _sendMessage();
+              },
+            ),
+          ),
         );
       }
     } finally {
@@ -155,169 +245,259 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
   }
 
   Future<void> _handleWebBrowsing(String message) async {
-    final webBrowsingService = ref.read(webBrowsingServiceProvider);
+    if (!mounted) return;
 
-    await for (final update in webBrowsingService.browse(query: message)) {
-      if (!mounted) return;
+    try {
+      final webBrowsingService = ref.read(webBrowsingServiceProvider);
 
-      setState(() {
-        _webBrowsingStatus = update.status;
-        if (update.screenshotUrl != null &&
-            !_webBrowsingScreenshots.contains(update.screenshotUrl)) {
-          _webBrowsingScreenshots.add(update.screenshotUrl!);
-        }
-        _webBrowsingSources = update.sources;
-      });
-      _scrollToBottom();
-
-      if (update.isComplete && update.finalResponse != null) {
-        // Save AI Message
-        await ref.read(apiServiceProvider).saveChatMessage(
-              role: 'model',
-              content: update.finalResponse!,
-              notebookId: widget.notebookId,
-            );
+      await for (final update in webBrowsingService.browse(query: message)) {
+        if (!mounted) return;
 
         setState(() {
-          _messages.add(ChatMessage(
-            text: update.finalResponse!,
-            isUser: false,
-            timestamp: DateTime.now(),
-            isWebBrowsing: true,
-            webBrowsingScreenshots: List.from(_webBrowsingScreenshots),
-            webBrowsingSources: List.from(_webBrowsingSources),
-          ));
-          _webBrowsingStatus = null;
+          _webBrowsingStatus = update.status;
+          if (update.screenshotUrl != null &&
+              !_webBrowsingScreenshots.contains(update.screenshotUrl)) {
+            _webBrowsingScreenshots.add(update.screenshotUrl!);
+          }
+          _webBrowsingSources = update.sources;
         });
         _scrollToBottom();
+
+        if (update.isComplete && update.finalResponse != null) {
+          // Save AI Message (non-blocking)
+          ref
+              .read(apiServiceProvider)
+              .saveChatMessage(
+                role: 'model',
+                content: update.finalResponse!,
+                notebookId: widget.notebookId,
+              )
+              .catchError((e) {
+            debugPrint('Error saving AI message: $e');
+            return <String, dynamic>{};
+          });
+
+          if (mounted) {
+            setState(() {
+              _messages.add(ChatMessage(
+                text: update.finalResponse!,
+                isUser: false,
+                timestamp: DateTime.now(),
+                isWebBrowsing: true,
+                webBrowsingScreenshots: List.from(_webBrowsingScreenshots),
+                webBrowsingSources: List.from(_webBrowsingSources),
+              ));
+              _webBrowsingStatus = null;
+            });
+            _scrollToBottom();
+          }
+          break;
+        }
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error in web browsing: $e');
+      debugPrint('Stack trace: $stackTrace');
+
+      if (mounted) {
+        setState(() => _webBrowsingStatus = null);
+
+        // Add error message to chat
+        _messages.add(ChatMessage(
+          text:
+              '⚠️ **Web Browsing Error**\n\nFailed to browse the web. Please try again or use regular chat mode.',
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
       }
     }
   }
 
   Future<void> _handleRegularChat(String message) async {
-    // Get notebook sources for context
-    final allSources = ref.read(sourceProvider);
-    final notebookSources =
-        allSources.where((s) => s.notebookId == widget.notebookId).toList();
+    if (!mounted) return;
 
-    // Separate GitHub sources from regular sources
-    // Requirements: 2.1 - Include relevant GitHub source content in AI context
-    final githubSources =
-        notebookSources.where((s) => s.isGitHubSource).toList();
-    final regularSources =
-        notebookSources.where((s) => !s.isGitHubSource).toList();
+    try {
+      // Get notebook sources for context
+      final allSources = ref.read(sourceProvider);
+      final notebookSources =
+          allSources.where((s) => s.notebookId == widget.notebookId).toList();
 
-    // Build context with enhanced GitHub formatting
-    final contextList = <String>[];
+      // Separate GitHub sources from regular sources
+      final githubSources =
+          notebookSources.where((s) => s.isGitHubSource).toList();
+      final regularSources =
+          notebookSources.where((s) => !s.isGitHubSource).toList();
 
-    // Add GitHub sources with enhanced context
-    for (final source in githubSources) {
-      final githubContext = GitHubChatContextBuilder.buildSourceContext(source);
-      contextList.add(githubContext);
-    }
+      // Build context with enhanced GitHub formatting
+      final contextList = <String>[];
 
-    // Add repository structure if we have GitHub sources
-    if (githubSources.isNotEmpty) {
-      final repoStructure =
-          GitHubChatContextBuilder.buildRepoStructureContext(githubSources);
-      if (repoStructure.isNotEmpty) {
-        contextList.add(repoStructure);
-      }
-    }
-
-    // Add regular sources with global truncation
-    const int maxTotalChars = 60000; // ~15k tokens, safe buffer
-    int currentChars = 0;
-
-    // Count chars from GitHub context first (already added)
-    for (final s in contextList) {
-      currentChars += s.length;
-    }
-
-    // Add regular sources
-    for (final source in regularSources) {
-      if (currentChars >= maxTotalChars) {
-        contextList.add('... [Remaining sources truncated due to size limits]');
-        break;
+      // Add GitHub sources with enhanced context
+      for (final source in githubSources) {
+        try {
+          final githubContext =
+              GitHubChatContextBuilder.buildSourceContext(source);
+          if (githubContext.isNotEmpty) {
+            contextList.add(githubContext);
+          }
+        } catch (e) {
+          debugPrint(
+              'Error building GitHub context for source ${source.id}: $e');
+        }
       }
 
-      final content = source.content;
-      final remainingChars = maxTotalChars - currentChars;
-
-      // Reserve some space for title
-      if (remainingChars < 100) break;
-
-      String addedContent;
-      if (content.length > remainingChars) {
-        addedContent =
-            '${source.title}: ${content.substring(0, remainingChars)}...';
-      } else {
-        addedContent = '${source.title}: $content';
+      // Add repository structure if we have GitHub sources
+      if (githubSources.isNotEmpty) {
+        try {
+          final repoStructure =
+              GitHubChatContextBuilder.buildRepoStructureContext(githubSources);
+          if (repoStructure.isNotEmpty) {
+            contextList.add(repoStructure);
+          }
+        } catch (e) {
+          debugPrint('Error building repo structure: $e');
+        }
       }
 
-      contextList.add(addedContent);
-      currentChars += addedContent.length;
-    }
+      // Add regular sources with global truncation
+      const int maxTotalChars = 60000; // ~15k tokens, safe buffer
+      int currentChars = 0;
 
-    // Construct history pairs
-    final historyPairs = <AIPromptResponse>[];
-    for (int i = 0; i < _messages.length - 1; i++) {
-      if (_messages[i].isUser && !_messages[i + 1].isUser) {
-        historyPairs.add(AIPromptResponse(
-            prompt: _messages[i].text,
-            response: _messages[i + 1].text,
-            timestamp: _messages[i + 1].timestamp));
+      // Count chars from GitHub context first (already added)
+      for (final s in contextList) {
+        currentChars += s.length;
       }
-    }
 
-    // Generate AI response
-    await ref.read(aiProvider.notifier).generateContent(
-          message,
-          context: contextList,
-          style: _selectedStyle,
-          externalHistory: historyPairs,
-        );
+      // Add regular sources
+      for (final source in regularSources) {
+        if (currentChars >= maxTotalChars) {
+          contextList
+              .add('... [Remaining sources truncated due to size limits]');
+          break;
+        }
 
-    final aiState = ref.read(aiProvider);
+        try {
+          final content = source.content;
+          final title = source.title;
+          final remainingChars = maxTotalChars - currentChars;
 
-    // Check for errors first
-    if (aiState.error != null) {
+          // Reserve some space for title
+          if (remainingChars < 100) break;
+
+          String addedContent;
+          if (content.length > remainingChars) {
+            addedContent = '$title: ${content.substring(0, remainingChars)}...';
+          } else {
+            addedContent = '$title: $content';
+          }
+
+          contextList.add(addedContent);
+          currentChars += addedContent.length;
+        } catch (e) {
+          debugPrint('Error processing source ${source.id}: $e');
+        }
+      }
+
+      // Construct history pairs safely
+      final historyPairs = <AIPromptResponse>[];
+      try {
+        for (int i = 0; i < _messages.length - 1; i++) {
+          if (i + 1 < _messages.length &&
+              _messages[i].isUser &&
+              !_messages[i + 1].isUser) {
+            historyPairs.add(AIPromptResponse(
+              prompt: _messages[i].text,
+              response: _messages[i + 1].text,
+              timestamp: _messages[i + 1].timestamp,
+            ));
+          }
+        }
+      } catch (e) {
+        debugPrint('Error building history pairs: $e');
+        // Continue without history if there's an error
+      }
+
+      // Generate AI response
+      await ref.read(aiProvider.notifier).generateContent(
+            message,
+            context: contextList,
+            style: _selectedStyle,
+            externalHistory: historyPairs,
+          );
+
+      if (!mounted) return;
+
+      final aiState = ref.read(aiProvider);
+
+      // Check for errors first
+      if (aiState.error != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('AI Error: ${aiState.error}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Settings',
+                textColor: Colors.white,
+                onPressed: () {
+                  // Navigate to AI settings
+                  context.push('/settings/ai');
+                },
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (aiState.lastResponse != null && aiState.lastResponse!.isNotEmpty) {
+        // Save AI Message (non-blocking)
+        ref
+            .read(apiServiceProvider)
+            .saveChatMessage(
+              role: 'model',
+              content: aiState.lastResponse!,
+              notebookId: widget.notebookId,
+            )
+            .catchError((e) {
+          debugPrint('Error saving AI message: $e');
+          return <String, dynamic>{};
+        });
+
+        if (mounted) {
+          setState(() {
+            _messages.add(ChatMessage(
+              text: aiState.lastResponse!,
+              isUser: false,
+              timestamp: DateTime.now(),
+            ));
+          });
+          _scrollToBottom();
+        }
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error in regular chat: $e');
+      debugPrint('Stack trace: $stackTrace');
+
       if (mounted) {
+        // Add error message to chat
+        _messages.add(ChatMessage(
+          text:
+              '⚠️ **Chat Error**\n\nFailed to generate response. Please try again.',
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('AI Error: ${aiState.error}'),
+            content: const Text('Failed to generate AI response'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
             action: SnackBarAction(
-              label: 'Settings',
-              textColor: Colors.white,
-              onPressed: () {
-                // Navigate to AI settings
-                context.push('/settings/ai');
-              },
+              label: 'Retry',
+              onPressed: () => _handleRegularChat(message),
             ),
           ),
         );
       }
-      return;
-    }
-
-    if (aiState.lastResponse != null) {
-      // Save AI Message
-      await ref.read(apiServiceProvider).saveChatMessage(
-            role: 'model',
-            content: aiState.lastResponse!,
-            notebookId: widget.notebookId,
-          );
-
-      setState(() {
-        _messages.add(ChatMessage(
-          text: aiState.lastResponse!,
-          isUser: false,
-          timestamp: DateTime.now(),
-        ));
-      });
-      _scrollToBottom();
     }
   }
 

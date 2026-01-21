@@ -1,0 +1,158 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/backend
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run linting
+        working-directory: backend
+        run: npm run lint
+
+      - name: Build TypeScript
+        working-directory: backend
+        run: npm run build
+
+      - name: Run tests
+        working-directory: backend
+        run: npm test
+        env:
+          NODE_ENV: test
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Output image
+        id: image
+        run: |
+          echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+  deploy-staging:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    environment: staging
+    
+    steps:
+      - name: Deploy to staging
+        run: |
+          echo "Deploying ${{ needs.build-and-push.outputs.image }} to staging"
+          # Add your staging deployment commands here
+          # For example, if using a cloud provider:
+          # - Update container service
+          # - Run database migrations
+          # - Health check
+
+  deploy-production:
+    needs: [build-and-push, deploy-staging]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    environment: production
+    
+    steps:
+      - name: Deploy to production
+        run: |
+          echo "Deploying ${{ needs.build-and-push.outputs.image }} to production"
+          # Add your production deployment commands here
+          # For example:
+          # - Update production container service
+          # - Run database migrations
+          # - Health check
+          # - Notify team
+
+  security-scan:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    permissions:
+      security-events: write
+    
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.build-and-push.outputs.image }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'

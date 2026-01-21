@@ -1,9 +1,16 @@
 import type { Request, Response } from 'express';
 import pool from '../config/database.js';
 import axios from 'axios';
+import pdf from 'pdf-parse';
 
 interface IngestionRequest {
     sourceId: string;
+}
+
+interface PDFPage {
+    pageNumber: number;
+    text: string;
+    lines: number;
 }
 
 /**
@@ -18,9 +25,9 @@ export const processSource = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, error: 'Source ID is required' });
         }
 
-        // 1. Fetch source content
+        // 1. Fetch source content and metadata
         const sourceResult = await pool.query(
-            `SELECT title, content, type FROM sources WHERE id = $1`,
+            `SELECT title, content, type, mime_type FROM sources WHERE id = $1`,
             [sourceId]
         );
 
@@ -30,78 +37,326 @@ export const processSource = async (req: Request, res: Response) => {
 
         const source = sourceResult.rows[0];
 
-        // 2. Chunk content (Simple recursive character text splitter logic)
-        const chunks = splitText(source.content, 1000, 100); // 1000 chars, 100 overlap
+        // Validate source content
+        if (!source.content) {
+            console.warn(`Source ${sourceId} has no content`);
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Source content is empty' 
+            });
+        }
+
+        // Log source info for debugging
+        console.log(`Processing source ${sourceId}: ${source.title} (type: ${source.type}, mime: ${source.mime_type})`);
+
+        // 2. Determine processing strategy based on source type
+        let chunks: string[];
+        try {
+            if (isPdfSource(source)) {
+                chunks = await processPdfSource(source, sourceId);
+            } else {
+                chunks = processTextSource(source, sourceId);
+            }
+            
+            console.log(`Generated ${chunks.length} chunks for source ${sourceId}`);
+        } catch (error) {
+            console.error(`Error processing source ${sourceId}:`, error);
+            return res.status(500).json({ 
+                success: false, 
+                error: 'Failed to process source content',
+                details: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+
+        if (chunks.length === 0) {
+            console.warn(`No chunks generated for source ${sourceId}`);
+            return res.json({
+                success: true,
+                chunksProcessed: 0,
+                chunksStored: 0,
+                message: 'No content to process'
+            });
+        }
 
         // 3. Call embedding service to store chunks
-        // We call our own internal embedding controller logic or endpoint
-        // Since we are inside the backend, we can just import the logic or call the endpoint
-        // calling localhost endpoint is safer for decoupling
-
-        const response = await axios.post(
-            `http://localhost:${process.env.PORT || 3000}/api/embeddings/store`,
-            {
-                chunks: chunks.map(text => ({
-                    sourceId,
-                    content: text,
-                    metadata: { title: source.title, type: source.type }
-                }))
-            },
-            {
-                headers: {
-                    'Authorization': req.headers.authorization, // Pass through auth
-                    'Content-Type': 'application/json'
+        try {
+            const response = await axios.post(
+                `http://localhost:${process.env.PORT || 3000}/api/embeddings/store`,
+                {
+                    chunks: chunks.map(text => ({
+                        sourceId,
+                        content: text,
+                        metadata: { title: source.title, type: source.type }
+                    }))
+                },
+                {
+                    headers: {
+                        'Authorization': req.headers.authorization,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 60000 // 60 second timeout for large PDFs
                 }
-            }
-        );
+            );
 
-        return res.json({
-            success: true,
-            chunksProcessed: chunks.length,
-            chunksStored: response.data.count
-        });
+            console.log(`Successfully stored ${response.data.count || chunks.length} chunks for source ${sourceId}`);
+
+            return res.json({
+                success: true,
+                chunksProcessed: chunks.length,
+                chunksStored: response.data.count || chunks.length
+            });
+
+        } catch (embeddingError: any) {
+            console.error(`Error storing embeddings for source ${sourceId}:`, embeddingError.message);
+            return res.status(500).json({ 
+                success: false, 
+                error: 'Failed to store embeddings',
+                details: embeddingError.message
+            });
+        }
 
     } catch (error: any) {
         console.error('Ingestion error:', error);
-        return res.status(500).json({ success: false, error: error.message });
+        return res.status(500).json({ 
+            success: false, 
+            error: error.message || 'Unknown ingestion error'
+        });
     }
 };
 
 /**
- * Split text into chunks with overlap
+ * Check if source is a PDF
  */
-function splitText(text: string, chunkSize: number = 1000, overlap: number = 100): string[] {
-    if (!text) return [];
+function isPdfSource(source: any): boolean {
+    return source.type === 'pdf' || 
+           source.mime_type === 'application/pdf' ||
+           (typeof source.content === 'string' && source.content.startsWith('JVBERi0x'));
+}
+
+/**
+ * Process PDF source with page-level handling
+ */
+async function processPdfSource(source: any, sourceId: string): Promise<string[]> {
+    console.log(`Processing PDF source ${sourceId}`);
+    
+    let pdfBuffer: Buffer;
+    
+    // Handle different content formats
+    if (typeof source.content === 'string') {
+        // Check if it's base64 encoded
+        if (source.content.startsWith('JVBERi0x') || source.content.startsWith('data:application/pdf;base64,')) {
+            const base64Data = source.content.replace('data:application/pdf;base64,', '');
+            pdfBuffer = Buffer.from(base64Data, 'base64');
+        } else {
+            // Assume it's already text content (shouldn't happen for real PDFs)
+            console.warn(`PDF source ${sourceId} appears to be text content, processing as text`);
+            return processTextSource(source, sourceId);
+        }
+    } else {
+        throw new Error('Invalid PDF content format');
+    }
+
+    try {
+        // Parse PDF with pdf-parse
+        const pdfData = await pdf(pdfBuffer, {
+            // Limit pages to prevent memory issues
+            max: 500,
+            version: 'v1.10.100'
+        });
+
+        console.log(`PDF ${sourceId}: ${pdfData.numpages} pages, ${pdfData.text.length} chars total`);
+
+        // Process each page separately
+        const allChunks: string[] = [];
+        const pages = extractPdfPages(pdfData);
+
+        for (const page of pages) {
+            const cleanText = normalizeText(page.text);
+            if (!cleanText) {
+                console.log(`Skipping empty page ${page.pageNumber} in PDF ${sourceId}`);
+                continue;
+            }
+
+            // Check for oversized pages
+            if (cleanText.length > 50000) {
+                console.warn(`Page ${page.pageNumber} in PDF ${sourceId} is very large (${cleanText.length} chars), splitting`);
+                // Split large pages in half before chunking
+                const midPoint = Math.floor(cleanText.length / 2);
+                const breakPoint = cleanText.lastIndexOf(' ', midPoint);
+                const actualBreak = breakPoint > midPoint - 1000 ? breakPoint : midPoint;
+                
+                const part1 = cleanText.substring(0, actualBreak);
+                const part2 = cleanText.substring(actualBreak);
+                
+                allChunks.push(...bulletproofSplitText(part1, 1000, 200));
+                allChunks.push(...bulletproofSplitText(part2, 1000, 200));
+            } else {
+                // Normal page chunking
+                const pageChunks = bulletproofSplitText(cleanText, 1000, 200);
+                allChunks.push(...pageChunks);
+            }
+
+            // Safety check
+            if (allChunks.length > 50000) {
+                console.warn(`PDF ${sourceId} generated too many chunks, stopping at 50000`);
+                break;
+            }
+        }
+
+        return allChunks;
+
+    } catch (error) {
+        console.error(`Error parsing PDF ${sourceId}:`, error);
+        throw new Error(`Failed to parse PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+}
+
+/**
+ * Extract pages from PDF data
+ */
+function extractPdfPages(pdfData: any): PDFPage[] {
+    const pages: PDFPage[] = [];
+    
+    // pdf-parse doesn't give us individual pages, so we need to split the text
+    // This is a simplified approach - in production you might want to use a more sophisticated PDF library
+    const fullText = pdfData.text || '';
+    const lines = fullText.split('\n');
+    
+    // Simple heuristic: split by form feed characters or large gaps
+    let currentPage = 1;
+    let currentPageText = '';
+    let currentPageLines = 0;
+    
+    for (const line of lines) {
+        // Check for page break indicators
+        if (line.includes('\f') || line.includes('Page ') || currentPageLines > 100) {
+            if (currentPageText.trim()) {
+                pages.push({
+                    pageNumber: currentPage,
+                    text: currentPageText.trim(),
+                    lines: currentPageLines
+                });
+                currentPage++;
+                currentPageText = '';
+                currentPageLines = 0;
+            }
+        }
+        
+        currentPageText += line + '\n';
+        currentPageLines++;
+    }
+    
+    // Add the last page
+    if (currentPageText.trim()) {
+        pages.push({
+            pageNumber: currentPage,
+            text: currentPageText.trim(),
+            lines: currentPageLines
+        });
+    }
+    
+    // If we only got one "page", split it artificially
+    if (pages.length === 1 && pages[0].text.length > 10000) {
+        const text = pages[0].text;
+        const chunks = Math.ceil(text.length / 5000);
+        const newPages: PDFPage[] = [];
+        
+        for (let i = 0; i < chunks; i++) {
+            const start = i * 5000;
+            const end = Math.min(start + 5000, text.length);
+            const breakPoint = i === chunks - 1 ? end : text.lastIndexOf(' ', end);
+            const actualEnd = breakPoint > start ? breakPoint : end;
+            
+            newPages.push({
+                pageNumber: i + 1,
+                text: text.substring(start, actualEnd),
+                lines: text.substring(start, actualEnd).split('\n').length
+            });
+        }
+        
+        return newPages;
+    }
+    
+    return pages;
+}
+
+/**
+ * Process regular text source
+ */
+function processTextSource(source: any, sourceId: string): string[] {
+    console.log(`Processing text source ${sourceId}`);
+    
+    const cleanText = normalizeText(source.content);
+    if (!cleanText) {
+        console.warn(`Text source ${sourceId} has no valid content after cleaning`);
+        return [];
+    }
+
+    return bulletproofSplitText(cleanText, 1000, 200);
+}
+
+/**
+ * Normalize and clean text input
+ */
+function normalizeText(text: any): string | null {
+    if (!text || typeof text !== 'string') {
+        return null;
+    }
+
+    // Remove null bytes and other problematic characters
+    const cleaned = text
+        .replace(/\0/g, '')           // Remove null bytes
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control chars except \n, \r, \t
+        .replace(/\s+/g, ' ')         // Normalize whitespace
+        .trim();
+
+    // Check for minimum content length
+    if (cleaned.length < 20) {
+        return null;
+    }
+
+    // Check for garbage content (too many repeated characters)
+    const uniqueChars = new Set(cleaned.toLowerCase()).size;
+    if (uniqueChars < 10 && cleaned.length > 100) {
+        console.warn('Text appears to be garbage (too few unique characters)');
+        return null;
+    }
+
+    return cleaned;
+}
+
+/**
+ * Bulletproof text splitting with all safety measures
+ */
+function bulletproofSplitText(text: string, chunkSize: number = 1000, overlap: number = 200): string[] {
+    if (!text || typeof text !== 'string') {
+        return [];
+    }
+
+    // Validate parameters
+    if (chunkSize <= 0 || overlap < 0 || overlap >= chunkSize) {
+        throw new Error(`Invalid chunk parameters: chunkSize=${chunkSize}, overlap=${overlap}`);
+    }
 
     const chunks: string[] = [];
     let start = 0;
+    const step = chunkSize - overlap;
 
     while (start < text.length) {
-        let end = start + chunkSize;
-
-        // If not at the end, try to break at a newline or space
-        if (end < text.length) {
-            // Look for last newline in the chunk
-            let breakPoint = text.lastIndexOf('\n', end);
-            if (breakPoint === -1 || breakPoint < start) {
-                // Look for last space
-                breakPoint = text.lastIndexOf(' ', end);
-            }
-
-            if (breakPoint !== -1 && breakPoint > start) {
-                end = breakPoint;
-            }
-        } else {
-            end = text.length;
+        const end = Math.min(start + chunkSize, text.length);
+        const chunk = text.slice(start, end).trim();
+        
+        if (chunk.length > 0) {
+            chunks.push(chunk);
         }
+        
+        start += step;
 
-        chunks.push(text.substring(start, end).trim());
-
-        // Move start pointer for overlap
-        start = end > text.length ? text.length : end - overlap;
-        // Prevent infinite loop if overlap >= chunksize (shouldn't happen with defaults)
-        if (start >= end) start = end;
+        // HARD safety guard
+        if (chunks.length > 50000) {
+            throw new Error('Too many chunks — aborting ingestion');
+        }
     }
 
-    return chunks.filter(c => c.length > 0);
+    return chunks;
 }

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_service.dart';
@@ -26,20 +25,71 @@ class ChatNotifier extends StateNotifier<List<Message>> {
   WebBrowsingUpdate? get currentBrowsingUpdate => _currentBrowsingUpdate;
 
   Future<void> _loadHistory() async {
+    if (!mounted) return;
+
     try {
       final history =
           await ref.read(apiServiceProvider).getChatHistory(notebookId: null);
-      state = history
-          .map((data) => Message(
-                id: data['id'],
-                text: data['content'],
-                isUser: data['role'] == 'user',
-                timestamp: DateTime.parse(data['created_at']),
-              ))
-          .toList();
-    } catch (e) {
+
+      final messages = <Message>[];
+
+      for (final data in history) {
+        try {
+          // Validate required fields
+          if (!data.containsKey('content') || !data.containsKey('role')) {
+            debugPrint('Skipping invalid message data: $data');
+            continue;
+          }
+
+          final content = data['content'];
+          final role = data['role'];
+
+          // Ensure content is a string
+          if (content == null) {
+            debugPrint('Skipping message with null content');
+            continue;
+          }
+
+          final contentStr = content.toString();
+          if (contentStr.isEmpty) {
+            debugPrint('Skipping message with empty content');
+            continue;
+          }
+
+          // Parse timestamp safely
+          DateTime timestamp = DateTime.now();
+          if (data.containsKey('created_at') && data['created_at'] != null) {
+            final parsedTime = DateTime.tryParse(data['created_at'].toString());
+            if (parsedTime != null) {
+              timestamp = parsedTime;
+            }
+          }
+
+          messages.add(Message(
+            id: data['id']?.toString() ??
+                DateTime.now().millisecondsSinceEpoch.toString(),
+            text: contentStr,
+            isUser: role.toString() == 'user',
+            timestamp: timestamp,
+          ));
+        } catch (e) {
+          debugPrint('Error parsing message: $e, data: $data');
+          // Continue processing other messages
+        }
+      }
+
+      if (mounted) {
+        state = messages;
+      }
+    } catch (e, stackTrace) {
       // Log error for debugging but don't crash - chat can work without history
       debugPrint('Error loading chat history: $e');
+      debugPrint('Stack trace: $stackTrace');
+
+      // Initialize with empty state if loading fails
+      if (mounted) {
+        state = [];
+      }
     }
   }
 

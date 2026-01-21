@@ -152,66 +152,99 @@ class DeepResearchService {
 
       // Listen to the stream and yield updates
       await for (final event in stream) {
-        final step = event['step'] as int;
-        final message = event['message'] as String;
-        final type = event['type'] as String;
-        final data = event['data'] as Map<String, dynamic>?;
+        try {
+          // Safely extract fields with null checks and defaults
+          final step = event['step'] as int? ?? 0;
+          final message = event['message'] as String? ?? 'Processing...';
+          final type = event['type'] as String? ?? 'progress';
+          final data = event['data'] as Map<String, dynamic>?;
 
-        // Calculate progress based on step/type
-        // Steps: 1 (start), 2 (search), 3 (results), 4 (extract), 5 (analyzed), 6 (summary), 7 (complete)
-        double progress = 0.1;
-        if (step > 0) {
-          progress = (step / 8.0).clamp(0.1, 0.95);
-        }
+          // Calculate progress based on step/type
+          // Steps: 1 (start), 2 (search), 3 (results), 4 (extract), 5 (analyzed), 6 (summary), 7 (complete)
+          double progress = 0.1;
+          if (step > 0) {
+            progress = (step / 8.0).clamp(0.1, 0.95);
+          }
 
-        if (type == 'complete') {
-          progress = 1.0;
+          if (type == 'complete') {
+            progress = 1.0;
 
-          // Parse final results
-          final summary = data?['summary'] as String?;
-          final sourcesData =
-              (data?['sources'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+            // Parse final results safely
+            final summary = data?['summary'] as String? ?? '';
+            final sourcesData =
+                (data?['sources'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
-          final sources = sourcesData
-              .map((s) => ResearchSource(
-                    title: s['title'] ?? 'Source',
-                    url: s['url'] ?? '',
-                    content: s['snippet'] ??
-                        '', // Content is usually large, backend sends snippet in summary source list
-                    snippet: s['snippet'],
-                    credibility: SourceCredibility
-                        .unknown, // Backend doesn't compute this yet?
-                  ))
-              .toList();
+            final sources = sourcesData
+                .map((s) {
+                  try {
+                    return ResearchSource(
+                      title: s['title'] as String? ?? 'Source',
+                      url: s['url'] as String? ?? '',
+                      content: s['snippet'] as String? ?? '',
+                      snippet: s['snippet'] as String?,
+                      credibility: SourceCredibility.unknown,
+                    );
+                  } catch (e) {
+                    debugPrint('[DeepResearch] Error parsing source: $e');
+                    return null;
+                  }
+                })
+                .whereType<ResearchSource>()
+                .toList();
 
-          // Collect images if available in sources
-          final images = <String>[]; // Backend needs to pass these through
+            // Collect images if available in sources
+            final images = <String>[]; // Backend needs to pass these through
 
-          // Track gamification locally for now
-          try {
-            ref.read(gamificationProvider.notifier).trackDeepResearch();
-          } catch (_) {}
+            // Track gamification locally for now
+            try {
+              ref.read(gamificationProvider.notifier).trackDeepResearch();
+            } catch (e) {
+              debugPrint('[DeepResearch] Gamification tracking error: $e');
+            }
 
+            yield ResearchUpdate(
+              status: 'Research complete!',
+              progress: 1.0,
+              result: summary.isNotEmpty ? summary : null,
+              sources: sources,
+              images: images,
+              isComplete: true,
+            );
+          } else {
+            yield ResearchUpdate(
+              status: message,
+              progress: progress,
+              isComplete: false,
+            );
+          }
+        } catch (e) {
+          debugPrint('[DeepResearch] Error processing stream event: $e');
+          // Continue processing other events instead of crashing
           yield ResearchUpdate(
-            status: 'Research complete!',
-            progress: 1.0,
-            result: summary,
-            sources: sources,
-            images: images,
-            isComplete: true,
-          );
-        } else {
-          yield ResearchUpdate(
-            status: message,
-            progress: progress,
+            status: 'Processing...',
+            progress: 0.5,
             isComplete: false,
           );
         }
       }
-    } catch (e) {
-      debugPrint('[Research] Error: $e');
+    } catch (e, stackTrace) {
+      debugPrint('[DeepResearch] Error: $e');
+      debugPrint('[DeepResearch] Stack trace: $stackTrace');
+
+      // Provide a user-friendly error message
+      String errorMessage = 'An error occurred during research';
+      if (e.toString().contains('401') ||
+          e.toString().contains('Unauthorized')) {
+        errorMessage = 'Authentication error. Please log in again.';
+      } else if (e.toString().contains('network') ||
+          e.toString().contains('connection')) {
+        errorMessage = 'Network error. Please check your connection.';
+      } else if (e.toString().contains('timeout')) {
+        errorMessage = 'Request timed out. Please try again.';
+      }
+
       yield ResearchUpdate(
-        status: 'Error: ${e.toString()}',
+        status: errorMessage,
         progress: 0.0,
         isComplete: true,
         error: e.toString(),

@@ -14,10 +14,12 @@ const pool = new Pool({
     },
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 30000, // Increased to 30s for Neon cold starts
+    connectionTimeoutMillis: 60000, // Increased to 60s for Neon cold starts and heavy operations
     // Keep connections alive
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,
+    // Query timeout for long-running operations
+    query_timeout: 60000, // 60 seconds
 });
 
 // Helper function to execute query with retry for connection issues
