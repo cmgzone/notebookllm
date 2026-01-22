@@ -486,7 +486,7 @@ router.post('/change-password', async (req: Request, res: Response) => {
 router.post('/refresh', async (req: Request, res: Response) => {
     try {
         const { refreshToken } = req.body;
-        
+
         if (!refreshToken) {
             return res.status(400).json({ error: 'Refresh token required' });
         }
@@ -496,7 +496,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
         // Verify refresh token (using same secret for now, can be different in production)
         const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || JWT_SECRET;
         const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as any;
-        
+
         // Verify user still exists and is active
         const userResult = await pool.query(
             'SELECT id, email, role FROM users WHERE id = $1',
@@ -508,7 +508,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
         }
 
         const user = userResult.rows[0];
-        
+
         // Generate new access token
         const newAccessToken = jwt.sign(
             { userId: user.id, email: user.email, role: user.role },
@@ -523,9 +523,10 @@ router.post('/refresh', async (req: Request, res: Response) => {
             accessToken: newAccessToken,
             expiresIn: 15 * 60 // 15 minutes in seconds
         });
-    } catch (error) {
+    } catch (error: unknown) {
         console.error('Token refresh error:', error);
-        if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+        const err = error as Error;
+        if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
             return res.status(401).json({ error: 'Invalid or expired refresh token' });
         }
         res.status(500).json({ error: 'Token refresh failed' });
