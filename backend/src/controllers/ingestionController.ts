@@ -26,10 +26,25 @@ export const processSource = async (req: Request, res: Response) => {
         }
 
         // 1. Fetch source content and metadata
-        const sourceResult = await pool.query(
-            `SELECT title, content, type, mime_type FROM sources WHERE id = $1`,
-            [sourceId]
-        );
+        // Try with mime_type first, fallback to without if column doesn't exist
+        let sourceResult;
+        try {
+            sourceResult = await pool.query(
+                `SELECT title, content, type, mime_type FROM sources WHERE id = $1`,
+                [sourceId]
+            );
+        } catch (queryError: any) {
+            // If mime_type column doesn't exist, fallback to query without it
+            if (queryError.code === '42703') { // undefined_column error
+                console.warn('mime_type column not found, using fallback query');
+                sourceResult = await pool.query(
+                    `SELECT title, content, type, NULL as mime_type FROM sources WHERE id = $1`,
+                    [sourceId]
+                );
+            } else {
+                throw queryError;
+            }
+        }
 
         if (sourceResult.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Source not found' });
@@ -40,14 +55,14 @@ export const processSource = async (req: Request, res: Response) => {
         // Validate source content
         if (!source.content) {
             console.warn(`Source ${sourceId} has no content`);
-            return res.status(400).json({ 
-                success: false, 
-                error: 'Source content is empty' 
+            return res.status(400).json({
+                success: false,
+                error: 'Source content is empty'
             });
         }
 
         // Log source info for debugging
-        console.log(`Processing source ${sourceId}: ${source.title} (type: ${source.type}, mime: ${source.mime_type})`);
+        console.log(`Processing source ${sourceId}: ${source.title} (type: ${source.type}, mime: ${source.mime_type || 'unknown'})`);
 
         // 2. Determine processing strategy based on source type
         let chunks: string[];
@@ -57,12 +72,12 @@ export const processSource = async (req: Request, res: Response) => {
             } else {
                 chunks = processTextSource(source, sourceId);
             }
-            
+
             console.log(`Generated ${chunks.length} chunks for source ${sourceId}`);
         } catch (error) {
             console.error(`Error processing source ${sourceId}:`, error);
-            return res.status(500).json({ 
-                success: false, 
+            return res.status(500).json({
+                success: false,
                 error: 'Failed to process source content',
                 details: error instanceof Error ? error.message : 'Unknown error'
             });
@@ -108,8 +123,8 @@ export const processSource = async (req: Request, res: Response) => {
 
         } catch (embeddingError: any) {
             console.error(`Error storing embeddings for source ${sourceId}:`, embeddingError.message);
-            return res.status(500).json({ 
-                success: false, 
+            return res.status(500).json({
+                success: false,
                 error: 'Failed to store embeddings',
                 details: embeddingError.message
             });
@@ -117,8 +132,8 @@ export const processSource = async (req: Request, res: Response) => {
 
     } catch (error: any) {
         console.error('Ingestion error:', error);
-        return res.status(500).json({ 
-            success: false, 
+        return res.status(500).json({
+            success: false,
             error: error.message || 'Unknown ingestion error'
         });
     }
@@ -128,9 +143,9 @@ export const processSource = async (req: Request, res: Response) => {
  * Check if source is a PDF
  */
 function isPdfSource(source: any): boolean {
-    return source.type === 'pdf' || 
-           source.mime_type === 'application/pdf' ||
-           (typeof source.content === 'string' && source.content.startsWith('JVBERi0x'));
+    return source.type === 'pdf' ||
+        source.mime_type === 'application/pdf' ||
+        (typeof source.content === 'string' && source.content.startsWith('JVBERi0x'));
 }
 
 /**
@@ -138,9 +153,9 @@ function isPdfSource(source: any): boolean {
  */
 async function processPdfSource(source: any, sourceId: string): Promise<string[]> {
     console.log(`Processing PDF source ${sourceId}`);
-    
+
     let pdfBuffer: Buffer;
-    
+
     // Handle different content formats
     if (typeof source.content === 'string') {
         // Check if it's base64 encoded
@@ -184,10 +199,10 @@ async function processPdfSource(source: any, sourceId: string): Promise<string[]
                 const midPoint = Math.floor(cleanText.length / 2);
                 const breakPoint = cleanText.lastIndexOf(' ', midPoint);
                 const actualBreak = breakPoint > midPoint - 1000 ? breakPoint : midPoint;
-                
+
                 const part1 = cleanText.substring(0, actualBreak);
                 const part2 = cleanText.substring(actualBreak);
-                
+
                 allChunks.push(...bulletproofSplitText(part1, 1000, 200));
                 allChunks.push(...bulletproofSplitText(part2, 1000, 200));
             } else {
@@ -216,17 +231,17 @@ async function processPdfSource(source: any, sourceId: string): Promise<string[]
  */
 function extractPdfPages(pdfData: any): PDFPage[] {
     const pages: PDFPage[] = [];
-    
+
     // pdf-parse doesn't give us individual pages, so we need to split the text
     // This is a simplified approach - in production you might want to use a more sophisticated PDF library
     const fullText = pdfData.text || '';
     const lines = fullText.split('\n');
-    
+
     // Simple heuristic: split by form feed characters or large gaps
     let currentPage = 1;
     let currentPageText = '';
     let currentPageLines = 0;
-    
+
     for (const line of lines) {
         // Check for page break indicators
         if (line.includes('\f') || line.includes('Page ') || currentPageLines > 100) {
@@ -241,11 +256,11 @@ function extractPdfPages(pdfData: any): PDFPage[] {
                 currentPageLines = 0;
             }
         }
-        
+
         currentPageText += line + '\n';
         currentPageLines++;
     }
-    
+
     // Add the last page
     if (currentPageText.trim()) {
         pages.push({
@@ -254,29 +269,29 @@ function extractPdfPages(pdfData: any): PDFPage[] {
             lines: currentPageLines
         });
     }
-    
+
     // If we only got one "page", split it artificially
     if (pages.length === 1 && pages[0].text.length > 10000) {
         const text = pages[0].text;
         const chunks = Math.ceil(text.length / 5000);
         const newPages: PDFPage[] = [];
-        
+
         for (let i = 0; i < chunks; i++) {
             const start = i * 5000;
             const end = Math.min(start + 5000, text.length);
             const breakPoint = i === chunks - 1 ? end : text.lastIndexOf(' ', end);
             const actualEnd = breakPoint > start ? breakPoint : end;
-            
+
             newPages.push({
                 pageNumber: i + 1,
                 text: text.substring(start, actualEnd),
                 lines: text.substring(start, actualEnd).split('\n').length
             });
         }
-        
+
         return newPages;
     }
-    
+
     return pages;
 }
 
@@ -285,7 +300,7 @@ function extractPdfPages(pdfData: any): PDFPage[] {
  */
 function processTextSource(source: any, sourceId: string): string[] {
     console.log(`Processing text source ${sourceId}`);
-    
+
     const cleanText = normalizeText(source.content);
     if (!cleanText) {
         console.warn(`Text source ${sourceId} has no valid content after cleaning`);
@@ -345,11 +360,11 @@ function bulletproofSplitText(text: string, chunkSize: number = 1000, overlap: n
     while (start < text.length) {
         const end = Math.min(start + chunkSize, text.length);
         const chunk = text.slice(start, end).trim();
-        
+
         if (chunk.length > 0) {
             chunks.push(chunk);
         }
-        
+
         start += step;
 
         // HARD safety guard

@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS sources (
     title TEXT NOT NULL,
     content TEXT,
     url TEXT,
+    mime_type TEXT,
     media_data BYTEA,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
