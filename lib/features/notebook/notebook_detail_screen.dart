@@ -10,6 +10,7 @@ import '../../ui/widgets/source_card.dart';
 import '../sources/source_detail_screen.dart';
 import '../sources/edit_text_note_sheet.dart';
 import 'notebook_provider.dart';
+import 'notebook.dart';
 import 'notebook_cover_sheet.dart';
 import '../mindmap/mind_map_provider.dart';
 import '../../theme/app_theme.dart';
@@ -38,10 +39,43 @@ class NotebookDetailScreen extends ConsumerWidget {
     }
 
     // Find the notebook
-    final notebook = notebooks.firstWhere(
-      (n) => n.id == notebookId,
-      orElse: () => notebooks.first,
-    );
+    Notebook? notebook;
+    try {
+      notebook = notebooks.firstWhere((n) => n.id == notebookId);
+    } catch (_) {
+      notebook = null;
+    }
+
+    if (notebook == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Notebook Not Found'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              const Text(
+                'Notebook not found or has been deleted',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: () => context.pop(),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Go Back'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     // Filter sources by notebook
     final sources =
@@ -117,7 +151,7 @@ class NotebookDetailScreen extends ConsumerWidget {
                   context,
                   contentType: 'notebook',
                   contentId: notebookId,
-                  contentTitle: notebook.title,
+                  contentTitle: notebook!.title,
                 ),
                 icon: const Icon(Icons.share, color: Colors.white),
                 tooltip: 'Share notebook',

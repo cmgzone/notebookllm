@@ -202,55 +202,60 @@ class _BentoCard extends StatelessWidget {
                 ),
 
                 Padding(
-                  padding: const EdgeInsets.all(20),
+                  padding: EdgeInsets.all(compact ? 12 : 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisSize: MainAxisSize.max,
                     children: [
                       // Icon
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: EdgeInsets.all(compact ? 8 : 12),
                         decoration: BoxDecoration(
                           color: color.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius:
+                              BorderRadius.circular(compact ? 12 : 16),
                         ),
-                        child: Icon(icon, color: color, size: 24),
+                        child:
+                            Icon(icon, color: color, size: compact ? 20 : 24),
                       ),
 
-                      const Spacer(),
-
-                      // Text
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: compact ? 14 : 16,
-                                ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (subtitle != null && !compact) ...[
-                            const SizedBox(height: 4),
+                      // Text - pushed to bottom by spaceBetween
+                      Flexible(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
                             Text(
-                              subtitle!,
+                              title,
                               style: Theme.of(context)
                                   .textTheme
-                                  .bodySmall
+                                  .titleMedium
                                   ?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: compact ? 13 : 16,
                                   ),
-                              maxLines: 2,
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (subtitle != null && !compact) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                subtitle!,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ],
                   ),

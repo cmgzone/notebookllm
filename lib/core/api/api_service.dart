@@ -131,14 +131,34 @@ class ApiService {
   // ============ GENERIC METHODS ============
 
   Future<T> get<T>(String endpoint,
-      {Map<String, dynamic>? queryParameters, Options? options}) async {
+      {Map<String, dynamic>? queryParameters,
+      Options? options,
+      int retries = 2}) async {
     try {
       final response = await _dio.get(endpoint,
           queryParameters: queryParameters, options: options);
       return _handleResponse<T>(response);
     } catch (e) {
+      if (retries > 0 && _isConnectionError(e)) {
+        developer.log(
+            '[API] Connection error for $endpoint, retrying... ($retries retries left)',
+            name: 'ApiService');
+        await Future.delayed(const Duration(seconds: 1));
+        return get<T>(endpoint,
+            queryParameters: queryParameters,
+            options: options,
+            retries: retries - 1);
+      }
       throw _handleError(e);
     }
+  }
+
+  bool _isConnectionError(dynamic error) {
+    return error is DioException &&
+        (error.type == DioExceptionType.connectionError ||
+            error.type == DioExceptionType.connectionTimeout ||
+            error.type == DioExceptionType.receiveTimeout ||
+            error.type == DioExceptionType.sendTimeout);
   }
 
   Future<T> post<T>(String endpoint, dynamic data, {Options? options}) async {

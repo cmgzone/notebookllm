@@ -94,12 +94,22 @@ router.post('/signup', async (req: Request, res: Response) => {
         const token = jwt.sign(
             { userId, email: normalizedEmail, role: 'user' },
             JWT_SECRET,
+            { expiresIn: '15m' }
+        );
+
+        const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || JWT_SECRET;
+        const refreshToken = jwt.sign(
+            { userId, email: normalizedEmail, role: 'user' },
+            JWT_REFRESH_SECRET,
             { expiresIn: JWT_EXPIRES_LONG }
         );
 
         res.status(201).json({
             success: true,
             token,
+            accessToken: token,
+            refreshToken,
+            expiresIn: 15 * 60,
             user: {
                 id: userId,
                 email: normalizedEmail,
@@ -150,17 +160,28 @@ router.post('/login', async (req: Request, res: Response) => {
         // Use longer expiry if rememberMe is true
         const tokenExpiry = rememberMe ? JWT_EXPIRES_LONG : JWT_EXPIRES_SHORT;
 
-        const token = jwt.sign(
+        const accessToken = jwt.sign(
             { userId: user.id, email: user.email, role: user.role },
             JWT_SECRET,
-            { expiresIn: tokenExpiry }
+            { expiresIn: '15m' } // Always 15 minutes for access token
         );
 
-        console.log(`[AUTH] Login successful for: ${normalizedEmail} (token expires: ${tokenExpiry})`);
+        // Generate refresh token with longer expiry
+        const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || JWT_SECRET;
+        const refreshToken = jwt.sign(
+            { userId: user.id, email: user.email, role: user.role },
+            JWT_REFRESH_SECRET,
+            { expiresIn: tokenExpiry } // Use rememberMe logic for refresh token
+        );
+
+        console.log(`[AUTH] Login successful for: ${normalizedEmail} (access token: 15m, refresh token: ${tokenExpiry})`);
 
         res.json({
             success: true,
-            token,
+            token: accessToken, // Keep for backward compatibility
+            accessToken,
+            refreshToken,
+            expiresIn: 15 * 60, // Access token expiry in seconds
             user: {
                 id: user.id,
                 email: user.email,
@@ -458,6 +479,56 @@ router.post('/change-password', async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Change password error:', error);
         res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Token Refresh Endpoint
+router.post('/refresh', async (req: Request, res: Response) => {
+    try {
+        const { refreshToken } = req.body;
+        
+        if (!refreshToken) {
+            return res.status(400).json({ error: 'Refresh token required' });
+        }
+
+        console.log('[AUTH] Token refresh attempt');
+
+        // Verify refresh token (using same secret for now, can be different in production)
+        const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || JWT_SECRET;
+        const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as any;
+        
+        // Verify user still exists and is active
+        const userResult = await pool.query(
+            'SELECT id, email, role FROM users WHERE id = $1',
+            [decoded.userId]
+        );
+
+        if (userResult.rows.length === 0) {
+            return res.status(401).json({ error: 'User not found' });
+        }
+
+        const user = userResult.rows[0];
+        
+        // Generate new access token
+        const newAccessToken = jwt.sign(
+            { userId: user.id, email: user.email, role: user.role },
+            JWT_SECRET,
+            { expiresIn: '15m' }
+        );
+
+        console.log(`[AUTH] Token refreshed successfully for user: ${user.email}`);
+
+        res.json({
+            success: true,
+            accessToken: newAccessToken,
+            expiresIn: 15 * 60 // 15 minutes in seconds
+        });
+    } catch (error) {
+        console.error('Token refresh error:', error);
+        if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+            return res.status(401).json({ error: 'Invalid or expired refresh token' });
+        }
+        res.status(500).json({ error: 'Token refresh failed' });
     }
 });
 

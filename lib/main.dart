@@ -6,6 +6,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:go_router/go_router.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
+import 'package:flutter/foundation.dart'; // Import for PlatformDispatcher
 import 'core/router.dart';
 import 'core/audio/audio_service.dart';
 import 'core/audio/audio_handler.dart';
@@ -19,6 +20,21 @@ import 'core/theme/theme_provider.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Capture errors in the framework
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint('🔥 Flutter Error: ${details.exception}');
+    debugPrint('Stack trace: ${details.stack}');
+  };
+
+  // Capture errors outside the framework (async errors)
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('🔥 Platform Error: $error');
+    debugPrint('Stack trace: $stack');
+    return true;
+  };
+
   runApp(const _BootstrapApp());
 }
 
@@ -72,7 +88,12 @@ class _BootstrapAppState extends State<_BootstrapApp> {
 
     // 4. Initialize background service
     _currentStep = 'Initializing background service';
-    await backgroundAIService.initialize();
+    try {
+      await backgroundAIService.initialize();
+    } catch (e) {
+      debugPrint('⚠️ Background service init error: $e');
+      // Continue initialization even if background service fails
+    }
 
     _currentStep = 'Complete';
     return _InitResult(

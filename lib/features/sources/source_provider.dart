@@ -35,12 +35,18 @@ class SourceNotifier extends StateNotifier<List<Source>> {
       // Get all notebooks first
       final notebooks = await apiService.getNotebooks();
 
-      // Get sources for each notebook
-      List<Map<String, dynamic>> allSources = [];
-      for (final notebook in notebooks) {
-        final sources = await apiService.getSourcesForNotebook(notebook['id']);
-        allSources.addAll(sources);
-      }
+      // Get sources for each notebook in parallel
+      final sourcesFutures = notebooks.map((notebook) async {
+        try {
+          return await apiService.getSourcesForNotebook(notebook['id']);
+        } catch (e) {
+          debugPrint('⚠️ Error loading sources for notebook ${notebook['id']}: $e');
+          return <Map<String, dynamic>>[];
+        }
+      });
+
+      final sourcesLists = await Future.wait(sourcesFutures);
+      List<Map<String, dynamic>> allSources = sourcesLists.expand((i) => i).toList();
 
       debugPrint('📊 Loaded ${allSources.length} sources');
 
