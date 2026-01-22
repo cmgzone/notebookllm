@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../core/auth/custom_auth_service.dart';
+import '../../ui/components/glass_container.dart';
+import '../../ui/components/premium_button.dart';
+import '../../theme/app_theme.dart';
 
 class EmailVerificationScreen extends ConsumerStatefulWidget {
   final String token;
@@ -50,19 +54,10 @@ class _EmailVerificationScreenState
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [const Color(0xFF1A1A2E), const Color(0xFF16213E)]
-                : [const Color(0xFFF0F4F8), const Color(0xFFD9E2EC)],
-          ),
+        decoration: const BoxDecoration(
+          gradient: AppTheme.premiumGradient,
         ),
         child: SafeArea(
           child: Center(
@@ -70,14 +65,9 @@ class _EmailVerificationScreenState
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
-                child: Card(
-                  elevation: 12,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: _buildContent(theme),
-                  ),
+                child: GlassContainer(
+                  padding: const EdgeInsets.all(32),
+                  child: _buildContent(Theme.of(context)),
                 ),
               ),
             ),
@@ -92,9 +82,12 @@ class _EmailVerificationScreenState
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const CircularProgressIndicator(),
+          const CircularProgressIndicator(color: Colors.white),
           const SizedBox(height: 24),
-          Text('Verifying your email...', style: theme.textTheme.titleMedium),
+          Text(
+            'Verifying your email...',
+            style: theme.textTheme.titleMedium,
+          ),
         ],
       );
     }
@@ -108,8 +101,10 @@ class _EmailVerificationScreenState
             decoration: BoxDecoration(
               color: Colors.green.withValues(alpha: 0.1),
               shape: BoxShape.circle,
+              border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
             ),
-            child: const Icon(Icons.verified, size: 64, color: Colors.green),
+            child: const Icon(LucideIcons.checkCircle,
+                size: 64, color: Colors.green),
           ),
           const SizedBox(height: 24),
           Text('Email Verified!', style: theme.textTheme.headlineSmall),
@@ -121,14 +116,9 @@ class _EmailVerificationScreenState
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
-          FilledButton(
+          PremiumButton(
             onPressed: () => context.go('/home'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(50),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text('Continue to App'),
+            label: 'Continue to App',
           ),
         ],
       );
@@ -142,8 +132,10 @@ class _EmailVerificationScreenState
           decoration: BoxDecoration(
             color: Colors.red.withValues(alpha: 0.1),
             shape: BoxShape.circle,
+            border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
           ),
-          child: const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          child:
+              const Icon(LucideIcons.alertCircle, size: 64, color: Colors.red),
         ),
         const SizedBox(height: 24),
         Text('Verification Failed', style: theme.textTheme.headlineSmall),
@@ -155,14 +147,10 @@ class _EmailVerificationScreenState
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),
-        FilledButton(
+        PremiumButton(
           onPressed: () => context.go('/login'),
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(50),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-          child: const Text('Back to Login'),
+          label: 'Back to Login',
+          isSecondary: true, // Use secondary style for failure backing out
         ),
       ],
     );

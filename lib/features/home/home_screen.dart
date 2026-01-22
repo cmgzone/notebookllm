@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'dashboard_grid.dart';
 
 import '../../ui/widgets/notebook_card.dart';
@@ -291,11 +292,21 @@ class HomeScreen extends ConsumerWidget {
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 220,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: ResponsiveValue<int>(
+                context,
+                defaultValue: 4,
+                conditionalValues: [
+                  const Condition.smallerThan(name: MOBILE, value: 1),
+                  const Condition.equals(name: MOBILE, value: 1),
+                  const Condition.equals(name: TABLET, value: 2),
+                  const Condition.equals(name: DESKTOP, value: 4),
+                  const Condition.largerThan(name: DESKTOP, value: 5),
+                ],
+              ).value,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
-              childAspectRatio: 0.8,
+              childAspectRatio: 0.85,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {

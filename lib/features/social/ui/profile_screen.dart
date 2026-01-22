@@ -10,6 +10,8 @@ import '../../notebook/notebook_provider.dart';
 import '../social_provider.dart';
 import 'edit_profile_screen.dart';
 import '../../../theme/app_theme.dart';
+import '../../../ui/components/premium_card.dart';
+import '../../../ui/components/glass_container.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final String? userId;
@@ -73,7 +75,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             SliverAppBar(
               expandedHeight: 280,
               pinned: true,
+              stretch: true,
               flexibleSpace: FlexibleSpaceBar(
+                stretchModes: const [StretchMode.zoomBackground],
                 background: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -95,7 +99,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           end: Alignment.bottomCenter,
                           colors: [
                             Colors.transparent,
-                            Colors.black.withValues(alpha: 0.7),
+                            Colors.black.withValues(alpha: 0.8),
                           ],
                         ),
                       ),
@@ -110,13 +114,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: scheme.surface,
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.2),
-                                  blurRadius: 15,
-                                  offset: const Offset(0, 5),
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
                                 ),
                               ],
                             ),
@@ -164,14 +168,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               actions: [
                 if (isMe)
-                  IconButton(
-                    icon: const Icon(LucideIcons.edit2, color: Colors.white),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const EditProfileScreen()),
+                  Container(
+                    margin: const EdgeInsets.only(right: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(
+                          alpha: 0.2), // Subtle background for visibility
+                      shape: BoxShape.circle,
                     ),
-                    tooltip: 'Edit Profile',
+                    child: IconButton(
+                      icon: const Icon(LucideIcons.edit2,
+                          color: Colors.white, size: 20),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const EditProfileScreen()),
+                      ),
+                      tooltip: 'Edit Profile',
+                    ),
                   ),
               ],
             ),
@@ -181,22 +194,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildStat(context, '${notebooks.length}', 'Notebooks',
-                            LucideIcons.book),
-                        _buildStat(context, '${friendsState.friends.length}',
-                            'Friends', LucideIcons.users),
-                        _buildStat(context, '${groupsState.groups.length}',
-                            'Groups', LucideIcons.layers),
-                      ],
+                    // Stats Row
+                    GlassContainer(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 24, horizontal: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildStat(context, '${notebooks.length}',
+                              'Notebooks', LucideIcons.book),
+                          _buildStat(context, '${friendsState.friends.length}',
+                              'Friends', LucideIcons.users),
+                          _buildStat(context, '${groupsState.groups.length}',
+                              'Groups', LucideIcons.layers),
+                        ],
+                      ),
                     ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1),
+
                     const SizedBox(height: 32),
+
                     Text(
                       'Recent Activity',
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
+                        color: scheme.primary,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -204,7 +225,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         activityState.activities.isEmpty)
                       const Center(child: CircularProgressIndicator())
                     else if (activityState.activities.isEmpty)
-                      _buildEmptyActivity(scheme)
+                      _buildEmptyActivity(theme)
                     else
                       ListView.builder(
                         padding: EdgeInsets.zero,
@@ -216,12 +237,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           return _buildActivityItem(context, activity);
                         },
                       ).animate().fadeIn(delay: 400.ms),
+
                     const SizedBox(height: 32),
+
                     if (isMe) ...[
                       Text(
                         'Account Settings',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
+                          color: scheme.primary,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -260,32 +284,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildEmptyActivity(ColorScheme scheme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: scheme.outline.withValues(alpha: 0.1),
-        ),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            LucideIcons.activity,
-            size: 48,
-            color: scheme.onSurfaceVariant.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No recent activity',
-            style: TextStyle(
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
+  Widget _buildEmptyActivity(ThemeData theme) {
+    return PremiumCard(
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          children: [
+            Icon(
+              LucideIcons.activity,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            Text(
+              'No recent activity',
+              style: TextStyle(
+                color:
+                    theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -294,54 +314,54 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    return Container(
+    return PremiumCard(
+      padding: EdgeInsets.zero,
+      onTap: () {},
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: scheme.primary.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _getActivityIcon(activity.activityType),
+                size: 20,
+                color: scheme.primary,
+              ),
             ),
-            child: Icon(
-              _getActivityIcon(activity.activityType),
-              size: 16,
-              color: scheme.primary,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  activity.title,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    activity.title,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                Text(
-                  DateFormat.yMMMd().add_jm().format(activity.createdAt),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
+                  const SizedBox(height: 4),
+                  Text(
+                    DateFormat.yMMMd().add_jm().format(activity.createdAt),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   IconData _getActivityIcon(dynamic type) {
-    // This is simplified, actual ActivityType should be used if accessible
     final typeStr = type.toString().toLowerCase();
     if (typeStr.contains('notebook')) return LucideIcons.book;
     if (typeStr.contains('friend')) return LucideIcons.userPlus;
@@ -360,10 +380,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: scheme.primary.withValues(alpha: 0.05),
+            color: scheme.primary.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, color: scheme.primary, size: 20),
+          child: Icon(icon, color: scheme.primary, size: 24),
         ),
         const SizedBox(height: 8),
         Text(
@@ -377,6 +397,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           label,
           style: theme.textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
@@ -394,19 +415,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
+      child: PremiumCard(
+        padding: EdgeInsets.zero,
         onTap: onTap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        tileColor: scheme.surfaceContainerLow,
-        leading: Icon(icon, color: color ?? scheme.primary, size: 20),
-        title: Text(
-          title,
-          style: TextStyle(
-            color: color ?? scheme.onSurface,
-            fontWeight: FontWeight.w500,
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: (color ?? scheme.primary).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color ?? scheme.primary, size: 20),
           ),
+          title: Text(
+            title,
+            style: TextStyle(
+              color: color ?? scheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          trailing: Icon(LucideIcons.chevronRight,
+              size: 16, color: scheme.onSurfaceVariant),
         ),
-        trailing: const Icon(LucideIcons.chevronRight, size: 16),
       ),
     );
   }

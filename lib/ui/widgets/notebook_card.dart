@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../components/premium_card.dart';
 import 'agent_notebook_badge.dart';
 
 class NotebookCard extends StatelessWidget {
@@ -14,7 +15,6 @@ class NotebookCard extends StatelessWidget {
     this.coverImage,
     this.onPlay,
     this.onCoverTap,
-    // Agent notebook fields (Requirements 1.4, 4.1)
     this.isAgentNotebook = false,
     this.agentName,
     this.agentStatus = 'active',
@@ -26,7 +26,6 @@ class NotebookCard extends StatelessWidget {
   final String? coverImage;
   final VoidCallback? onPlay;
   final VoidCallback? onCoverTap;
-  // Agent notebook fields
   final bool isAgentNotebook;
   final String? agentName;
   final String agentStatus;
@@ -36,7 +35,7 @@ class NotebookCard extends StatelessWidget {
 
     try {
       if (coverImage!.startsWith('data:image/svg+xml')) {
-        return null;
+        return null; // SVG data URIs not supported by default Image.memory
       } else if (coverImage!.startsWith('data:')) {
         final base64Data = coverImage!.split(',').last;
         return Image.memory(
@@ -70,232 +69,187 @@ class NotebookCard extends StatelessWidget {
     final coverWidget = _buildCoverImage();
     final hasCover = coverWidget != null;
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => context.go('/notebook/$notebookId'),
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: hasCover
-                ? null
-                : LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      scheme.primary.withValues(alpha: 0.1),
-                      scheme.secondary.withValues(alpha: 0.05),
-                    ],
-                  ),
-          ),
-          child: Stack(
-            children: [
-              // Cover image background
-              if (hasCover) Positioned.fill(child: coverWidget),
-
-              // Overlay gradient for readability when cover exists
-              if (hasCover)
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.1),
-                          Colors.black.withValues(alpha: 0.7),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-              // Premium background pattern (only when no cover)
-              if (!hasCover)
-                Positioned(
-                  right: -20,
-                  top: -20,
-                  child: Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: scheme.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(40),
-                    ),
-                  ),
-                ).animate().scale(duration: 1000.ms).fadeIn(),
-
-              // Glassmorphism effect (only when no cover)
-              if (!hasCover)
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Colors.white.withValues(alpha: 0.1),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleLarge
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: hasCover
-                                      ? Colors.white
-                                      : scheme.onSurface,
-                                  shadows: hasCover
-                                      ? [
-                                          Shadow(
-                                            color: Colors.black
-                                                .withValues(alpha: 0.5),
-                                            blurRadius: 4,
-                                          ),
-                                        ]
-                                      : null,
-                                ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: hasCover
-                                ? Colors.white.withValues(alpha: 0.2)
-                                : scheme.primary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: IconButton(
-                            tooltip: 'Play Audio Overview',
-                            onPressed:
-                                onPlay ?? () => _showAudioPreview(context),
-                            icon: Icon(
-                              Icons.play_circle_fill,
-                              color: hasCover ? Colors.white : scheme.primary,
-                              size: 28,
-                            ),
-                          ),
-                        ).animate().scale(duration: 500.ms).fadeIn(),
+    return PremiumCard(
+      onTap: () => context.go('/notebook/$notebookId'),
+      padding: EdgeInsets.zero,
+      child: SizedBox(
+        height: 250, // Enforce height
+        child: Stack(
+          children: [
+            // Background (if no cover)
+            if (!hasCover)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        scheme.primary.withValues(alpha: 0.1),
+                        scheme.secondary.withValues(alpha: 0.05),
                       ],
                     ),
-                    const Spacer(),
+                  ),
+                ),
+              ),
 
-                    // Premium stats row
-                    Row(
-                      children: [
+            // Cover Image
+            if (hasCover) Positioned.fill(child: coverWidget),
+
+            // Gradient Overlay for text readability on images
+            if (hasCover)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.1),
+                        Colors.black.withValues(alpha: 0.7),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color:
+                                    hasCover ? Colors.white : scheme.onSurface,
+                                shadows: hasCover
+                                    ? const [
+                                        Shadow(
+                                            color: Colors.black54,
+                                            blurRadius: 4)
+                                      ]
+                                    : null,
+                              ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      // Play Button
+                      Container(
+                        decoration: BoxDecoration(
+                          color: hasCover
+                              ? Colors.white.withValues(alpha: 0.2)
+                              : scheme.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: IconButton(
+                          tooltip: 'Play Audio Overview',
+                          onPressed: onPlay ?? () => _showAudioPreview(context),
+                          icon: Icon(
+                            Icons.play_circle_fill,
+                            color: hasCover ? Colors.white : scheme.primary,
+                            size: 28,
+                          ),
+                        ),
+                      ).animate().scale(duration: 500.ms).fadeIn(),
+                    ],
+                  ),
+                  const Spacer(),
+                  // Footer Stats
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: hasCover
+                              ? Colors.white.withValues(alpha: 0.2)
+                              : scheme.secondary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.source,
+                                size: 16,
+                                color:
+                                    hasCover ? Colors.white : scheme.secondary),
+                            const SizedBox(width: 6),
+                            Text(
+                              '$sourceCount',
+                              style: TextStyle(
+                                color:
+                                    hasCover ? Colors.white : scheme.secondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      // AI/Agent Badge
+                      if (isAgentNotebook && agentName != null)
+                        AgentNotebookBadge(
+                          agentName: agentName!,
+                          status: agentStatus,
+                          compact: true,
+                          onCoverImage: hasCover,
+                        )
+                      else
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
+                              horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
                             color: hasCover
                                 ? Colors.white.withValues(alpha: 0.2)
-                                : scheme.secondary.withValues(alpha: 0.1),
+                                : scheme.tertiary.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                Icons.source,
-                                size: 16,
-                                color:
-                                    hasCover ? Colors.white : scheme.secondary,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '$sourceCount',
-                                style: TextStyle(
+                              Icon(Icons.auto_awesome,
+                                  size: 14,
                                   color: hasCover
                                       ? Colors.white
-                                      : scheme.secondary,
+                                      : scheme.tertiary),
+                              const SizedBox(width: 4),
+                              Text(
+                                'AI',
+                                style: TextStyle(
+                                  color:
+                                      hasCover ? Colors.white : scheme.tertiary,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
                           ),
-                        ).animate().slideX(begin: -0.2).fadeIn(),
-
-                        const Spacer(),
-
-                        // Agent badge or AI indicator (Requirements 1.4, 4.1)
-                        if (isAgentNotebook && agentName != null)
-                          AgentNotebookBadge(
-                            agentName: agentName!,
-                            status: agentStatus,
-                            compact: true,
-                            onCoverImage: hasCover,
-                          )
-                        else
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: hasCover
-                                  ? Colors.white.withValues(alpha: 0.2)
-                                  : scheme.tertiary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.auto_awesome,
-                                  size: 14,
-                                  color:
-                                      hasCover ? Colors.white : scheme.tertiary,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'AI',
-                                  style: TextStyle(
-                                    color: hasCover
-                                        ? Colors.white
-                                        : scheme.tertiary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ).animate().slideX(begin: 0.2).fadeIn(),
-                      ],
-                    ),
-                  ],
-                ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    ).animate().scale(duration: 600.ms).fadeIn();
+    );
   }
 
   void _showAudioPreview(BuildContext context) {
+    // (Kept existing visual logic but simplified)
     final scheme = Theme.of(context).colorScheme;
-
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,

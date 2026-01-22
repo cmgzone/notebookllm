@@ -29,7 +29,7 @@ class ChatNotifier extends StateNotifier<List<Message>> {
 
     try {
       final history =
-          await ref.read(apiServiceProvider).getChatHistory(notebookId: null);
+          await ref.read(apiServiceProvider).getChatHistory('global');
 
       final messages = <Message>[];
 
@@ -126,6 +126,7 @@ class ChatNotifier extends StateNotifier<List<Message>> {
       ref
           .read(apiServiceProvider)
           .saveChatMessage(
+            notebookId: 'global',
             role: 'user',
             content: text,
           )
@@ -199,6 +200,7 @@ class ChatNotifier extends StateNotifier<List<Message>> {
         ref
             .read(apiServiceProvider)
             .saveChatMessage(
+              notebookId: 'global',
               role: 'model',
               content: buffer.toString(),
             )
@@ -310,6 +312,7 @@ class ChatNotifier extends StateNotifier<List<Message>> {
     if (state.isNotEmpty && !state.last.isUser) {
       try {
         await ref.read(apiServiceProvider).saveChatMessage(
+              notebookId: 'global',
               role: 'model',
               content: state.last.text,
             );

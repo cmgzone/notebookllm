@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import '../features/studio/mini_audio_player.dart';
 import 'quick_ai_model_selector.dart';
 
@@ -9,26 +10,36 @@ class AppScaffold extends StatelessWidget {
   final Widget child;
 
   static const _destinations = [
-    NavigationDestination(
-        icon: Icon(Icons.home_outlined),
-        selectedIcon: Icon(Icons.home),
-        label: 'Home'),
-    NavigationDestination(
-        icon: Icon(Icons.search_outlined),
-        selectedIcon: Icon(Icons.search),
-        label: 'Search'),
-    NavigationDestination(
-        icon: Icon(Icons.description_outlined),
-        selectedIcon: Icon(Icons.description),
-        label: 'Sources'),
-    NavigationDestination(
-        icon: Icon(Icons.chat_outlined),
-        selectedIcon: Icon(Icons.chat),
-        label: 'Chat'),
-    NavigationDestination(
-        icon: Icon(Icons.mic_none),
-        selectedIcon: Icon(Icons.mic),
-        label: 'Studio'),
+    _NavDestination(
+      icon: Icons.home_outlined,
+      selectedIcon: Icons.home,
+      label: 'Home',
+      route: '/home',
+    ),
+    _NavDestination(
+      icon: Icons.search_outlined,
+      selectedIcon: Icons.search,
+      label: 'Search',
+      route: '/search',
+    ),
+    _NavDestination(
+      icon: Icons.description_outlined,
+      selectedIcon: Icons.description,
+      label: 'Sources',
+      route: '/sources',
+    ),
+    _NavDestination(
+      icon: Icons.chat_outlined,
+      selectedIcon: Icons.chat,
+      label: 'Chat',
+      route: '/chat',
+    ),
+    _NavDestination(
+      icon: Icons.mic_none,
+      selectedIcon: Icons.mic,
+      label: 'Studio',
+      route: '/studio',
+    ),
   ];
 
   int _indexForLocation(String location) {
@@ -40,12 +51,77 @@ class AppScaffold extends StatelessWidget {
     return 0;
   }
 
+  void _onDestinationSelected(BuildContext context, int index) {
+    context.go(_destinations[index].route);
+  }
+
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
     final index = _indexForLocation(location);
-    final scheme = Theme.of(context).colorScheme;
+    final isDesktop = ResponsiveBreakpoints.of(context).largerThan(TABLET);
+    final theme = Theme.of(context);
 
+    if (isDesktop) {
+      return Scaffold(
+        body: Row(
+          children: [
+            // Side Navigation Rail for Desktop
+            NavigationRail(
+              backgroundColor: theme.colorScheme.surface,
+              selectedIndex: index,
+              onDestinationSelected: (i) => _onDestinationSelected(context, i),
+              labelType: NavigationRailLabelType.all,
+              destinations: _destinations.map((d) {
+                return NavigationRailDestination(
+                  icon: Icon(d.icon),
+                  selectedIcon: Icon(d.selectedIcon),
+                  label: Text(d.label),
+                );
+              }).toList(),
+              leading: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24.0),
+                child: FlutterLogo(size: 32), // Placeholder for App Logo
+              ),
+              trailing: Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    // Quick Model Selector in Rail
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 16),
+                      child: QuickAIModelSelector(compact: true),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.settings),
+                      onPressed: () => context.push('/settings'),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ),
+            const VerticalDivider(thickness: 1, width: 1),
+            // Main Content Area
+            Expanded(
+              child: Stack(
+                children: [
+                  child,
+                  const Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: MiniAudioPlayer(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Mobile / Tablet Layout (Bottom Navigation)
     return Scaffold(
       body: Stack(
         children: [
@@ -53,7 +129,7 @@ class AppScaffold extends StatelessWidget {
           // Quick AI Model Selector (bottom-left, above nav bar)
           const Positioned(
             left: 8,
-            bottom: 80, // Above the NavigationBar
+            bottom: 80,
             child: SafeArea(
               child: QuickAIModelSelector(),
             ),
@@ -67,29 +143,30 @@ class AppScaffold extends StatelessWidget {
         ],
       ),
       bottomNavigationBar: NavigationBar(
-        backgroundColor: scheme.surfaceContainer,
         selectedIndex: index,
-        destinations: _destinations,
-        onDestinationSelected: (i) {
-          switch (i) {
-            case 0:
-              context.go('/home');
-              break;
-            case 1:
-              context.go('/search');
-              break;
-            case 2:
-              context.go('/sources');
-              break;
-            case 3:
-              context.go('/chat');
-              break;
-            case 4:
-              context.go('/studio');
-              break;
-          }
-        },
+        onDestinationSelected: (i) => _onDestinationSelected(context, i),
+        destinations: _destinations.map((d) {
+          return NavigationDestination(
+            icon: Icon(d.icon),
+            selectedIcon: Icon(d.selectedIcon),
+            label: d.label,
+          );
+        }).toList(),
       ),
     );
   }
+}
+
+class _NavDestination {
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final String route;
+
+  const _NavDestination({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.route,
+  });
 }

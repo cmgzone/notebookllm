@@ -57,7 +57,7 @@ class SerperService {
     try {
       final api = ref.read(apiServiceProvider);
       final data = await api.searchProxy(
-        query: query,
+        query,
         type: type,
         num: num,
         page: page,

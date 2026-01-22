@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../core/auth/custom_auth_service.dart';
+import '../../ui/components/glass_container.dart';
+import '../../ui/components/premium_button.dart';
+import '../../ui/components/premium_input.dart';
+import '../../theme/app_theme.dart';
 
 class PasswordResetScreen extends ConsumerStatefulWidget {
   final String token;
@@ -66,28 +71,27 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Row(
+          children: [
+            const Icon(LucideIcons.alertCircle, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
         backgroundColor: Colors.red.shade400,
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [const Color(0xFF1A1A2E), const Color(0xFF16213E)]
-                : [const Color(0xFFF0F4F8), const Color(0xFFD9E2EC)],
-          ),
+        decoration: const BoxDecoration(
+          gradient: AppTheme.premiumGradient,
         ),
         child: SafeArea(
           child: Center(
@@ -95,16 +99,11 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
-                child: Card(
-                  elevation: 12,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: _resetComplete
-                        ? _buildSuccessContent(theme)
-                        : _buildResetForm(theme),
-                  ),
+                child: GlassContainer(
+                  padding: const EdgeInsets.all(32),
+                  child: _resetComplete
+                      ? _buildSuccessContent(Theme.of(context))
+                      : _buildResetForm(Theme.of(context)),
                 ),
               ),
             ),
@@ -120,7 +119,8 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.lock_reset, size: 64, color: theme.colorScheme.primary),
+          Icon(LucideIcons.refreshCw,
+              size: 64, color: theme.colorScheme.primary),
           const SizedBox(height: 24),
           Text('Create New Password', style: theme.textTheme.headlineSmall),
           const SizedBox(height: 8),
@@ -128,24 +128,22 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
             'Enter your new password below',
             style: theme.textTheme.bodyMedium
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
-          TextFormField(
+          PremiumInput(
             controller: _passwordController,
+            label: 'New Password',
+            icon: LucideIcons.lock,
             obscureText: _obscurePassword,
             onChanged: _checkPasswordStrength,
-            decoration: InputDecoration(
-              labelText: 'New Password',
-              prefixIcon: const Icon(Icons.lock_outline),
-              suffixIcon: IconButton(
-                icon: Icon(_obscurePassword
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined),
-                onPressed: () =>
-                    setState(() => _obscurePassword = !_obscurePassword),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              onPressed: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
             ),
             validator: (value) {
               if (value?.isEmpty ?? true) return 'Please enter a password';
@@ -160,24 +158,21 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
           ),
           if (_passwordStrength != null) ...[
             const SizedBox(height: 8),
-            _buildPasswordStrengthIndicator(),
+            _buildPasswordStrengthIndicator(theme),
           ],
           const SizedBox(height: 16),
-          TextFormField(
+          PremiumInput(
             controller: _confirmController,
+            label: 'Confirm Password',
+            icon: LucideIcons.lock,
             obscureText: _obscureConfirm,
-            decoration: InputDecoration(
-              labelText: 'Confirm Password',
-              prefixIcon: const Icon(Icons.lock_outline),
-              suffixIcon: IconButton(
-                icon: Icon(_obscureConfirm
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined),
-                onPressed: () =>
-                    setState(() => _obscureConfirm = !_obscureConfirm),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscureConfirm ? LucideIcons.eye : LucideIcons.eyeOff,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              onPressed: () =>
+                  setState(() => _obscureConfirm = !_obscureConfirm),
             ),
             validator: (value) {
               if (value != _passwordController.text) {
@@ -187,19 +182,10 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
             },
           ),
           const SizedBox(height: 24),
-          FilledButton(
-            onPressed: _isLoading ? null : _resetPassword,
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(50),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            child: _isLoading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Reset Password'),
+          PremiumButton(
+            onPressed: () => _resetPassword(),
+            label: 'Reset Password',
+            isLoading: _isLoading,
           ),
           const SizedBox(height: 16),
           TextButton(
@@ -211,8 +197,7 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
     );
   }
 
-  Widget _buildPasswordStrengthIndicator() {
-    final theme = Theme.of(context);
+  Widget _buildPasswordStrengthIndicator(ThemeData theme) {
     final strength = _passwordStrength!;
     final colors = [
       Colors.red,
@@ -232,7 +217,8 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   value: (strength.score + 1) / 5,
-                  backgroundColor: theme.colorScheme.outline,
+                  backgroundColor:
+                      theme.colorScheme.outline.withValues(alpha: 0.3),
                   valueColor: AlwaysStoppedAnimation(colors[strength.score]),
                   minHeight: 6,
                 ),
@@ -267,8 +253,10 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
           decoration: BoxDecoration(
             color: Colors.green.withValues(alpha: 0.1),
             shape: BoxShape.circle,
+            border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
           ),
-          child: const Icon(Icons.check_circle, size: 64, color: Colors.green),
+          child: const Icon(LucideIcons.checkCircle,
+              size: 64, color: Colors.green),
         ),
         const SizedBox(height: 24),
         Text('Password Reset!', style: theme.textTheme.headlineSmall),
@@ -280,14 +268,9 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),
-        FilledButton(
+        PremiumButton(
           onPressed: () => context.go('/login'),
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(50),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-          child: const Text('Go to Login'),
+          label: 'Go to Login',
         ),
       ],
     );

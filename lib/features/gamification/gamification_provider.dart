@@ -150,7 +150,7 @@ class GamificationNotifier extends StateNotifier<GamificationState> {
   Future<void> _syncStat(String field, dynamic value) async {
     try {
       final api = ref.read(apiServiceProvider);
-      await api.trackActivity(field: field, value: value);
+      await api.trackActivity(type: 'stat_update', field: field, value: value);
       // We don't refresh the whole state here to avoid loops, but update local state
       state = state.copyWith(
         stats: _updateStatsLocally(state.stats, field, value),
@@ -327,7 +327,8 @@ class GamificationNotifier extends StateNotifier<GamificationState> {
   Future<void> _trackIncrement(String field, int amount) async {
     try {
       final api = ref.read(apiServiceProvider);
-      await api.trackActivity(field: field, increment: amount);
+      await api.trackActivity(
+          type: 'increment', field: field, increment: amount);
     } catch (e) {
       debugPrint('Error incrementing $field: $e');
     }

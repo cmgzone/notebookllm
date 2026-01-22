@@ -53,7 +53,7 @@ class AgentSkillsNotifier extends StateNotifier<AsyncValue<List<AgentSkill>>> {
     try {
       final api = ref.read(apiServiceProvider);
       await api.updateAgentSkill(
-        id: id,
+        id,
         name: name,
         content: content,
         description: description,

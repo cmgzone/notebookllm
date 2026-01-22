@@ -7,42 +7,56 @@ const router = express.Router();
 router.use(authenticateToken);
 
 // Get all notebooks for the authenticated user
+import { getOrSetCache, CacheKeys, CacheTTL } from '../services/cacheService.js';
+
+// ... (imports)
+
+// Get all notebooks for the authenticated user
 router.get('/', async (req: AuthRequest, res: Response) => {
     try {
         console.log(`[Notebooks] GET / - userId: ${req.userId}`);
+        const userId = req.userId!;
 
-        // First try with agent session info, fall back to simple query if agent_sessions table doesn't exist
-        let result;
-        try {
-            result = await pool.query(
-                `SELECT n.*, 
-                        COALESCE(n.is_agent_notebook, false) as is_agent_notebook,
-                        n.agent_session_id,
-                        (SELECT COUNT(*) FROM sources WHERE notebook_id = n.id) as source_count,
-                        (SELECT agent_name FROM agent_sessions WHERE id = n.agent_session_id) as agent_name,
-                        (SELECT agent_identifier FROM agent_sessions WHERE id = n.agent_session_id) as agent_identifier,
-                        (SELECT status FROM agent_sessions WHERE id = n.agent_session_id) as agent_status
-                 FROM notebooks n 
-                 WHERE n.user_id = $1 
-                 ORDER BY n.updated_at DESC`,
-                [req.userId]
-            );
-        } catch (subqueryError: any) {
-            // If agent_sessions table doesn't exist, use simpler query
-            console.log('Falling back to simple notebooks query:', subqueryError.message);
-            result = await pool.query(
-                `SELECT n.*, 
-                        COALESCE(n.is_agent_notebook, false) as is_agent_notebook,
-                        (SELECT COUNT(*) FROM sources WHERE notebook_id = n.id) as source_count
-                 FROM notebooks n 
-                 WHERE n.user_id = $1 
-                 ORDER BY n.updated_at DESC`,
-                [req.userId]
-            );
-        }
+        // Use cache to optimize performance
+        const notebooks = await getOrSetCache(
+            CacheKeys.userNotebooks(userId),
+            async () => {
+                // First try with agent session info
+                try {
+                    const result = await pool.query(
+                        `SELECT n.*, 
+                                COALESCE(n.is_agent_notebook, false) as is_agent_notebook,
+                                n.agent_session_id,
+                                (SELECT COUNT(*) FROM sources WHERE notebook_id = n.id) as source_count,
+                                (SELECT agent_name FROM agent_sessions WHERE id = n.agent_session_id) as agent_name,
+                                (SELECT agent_identifier FROM agent_sessions WHERE id = n.agent_session_id) as agent_identifier,
+                                (SELECT status FROM agent_sessions WHERE id = n.agent_session_id) as agent_status
+                         FROM notebooks n 
+                         WHERE n.user_id = $1 
+                         ORDER BY n.updated_at DESC`,
+                        [userId]
+                    );
+                    return result.rows;
+                } catch (subqueryError: any) {
+                    // Fallback if agent_sessions doesn't exist
+                    console.log('Falling back to simple notebooks query:', subqueryError.message);
+                    const result = await pool.query(
+                        `SELECT n.*, 
+                                COALESCE(n.is_agent_notebook, false) as is_agent_notebook,
+                                (SELECT COUNT(*) FROM sources WHERE notebook_id = n.id) as source_count
+                         FROM notebooks n 
+                         WHERE n.user_id = $1 
+                         ORDER BY n.updated_at DESC`,
+                        [userId]
+                    );
+                    return result.rows;
+                }
+            },
+            CacheTTL.SHORT // Cache for 5 minutes
+        );
 
-        console.log(`[Notebooks] Found ${result.rows.length} notebooks for user ${req.userId}`);
-        res.json({ success: true, notebooks: result.rows });
+        console.log(`[Notebooks] Found ${notebooks.length} notebooks for user ${userId}`);
+        res.json({ success: true, notebooks });
     } catch (error) {
         console.error('Get notebooks error:', error);
         res.status(500).json({ error: 'Failed to fetch notebooks' });

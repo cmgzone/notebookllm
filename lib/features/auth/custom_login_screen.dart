@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../core/auth/custom_auth_service.dart';
+import '../../ui/components/glass_container.dart';
+import '../../ui/components/premium_button.dart';
+import '../../ui/components/premium_input.dart';
+import '../../theme/app_theme.dart';
 
 class CustomLoginScreen extends ConsumerStatefulWidget {
   const CustomLoginScreen({super.key});
@@ -152,6 +157,7 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
   }
 
   void _showError(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -170,6 +176,7 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
   }
 
   void _showSuccess(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -201,18 +208,11 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [const Color(0xFF1A1A2E), const Color(0xFF16213E)]
-                : [const Color(0xFFF0F4F8), const Color(0xFFD9E2EC)],
-          ),
+        decoration: const BoxDecoration(
+          gradient: AppTheme.premiumGradient,
         ),
         child: SafeArea(
           child: Center(
@@ -222,7 +222,7 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
                 opacity: _fadeAnimation,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 420),
-                  child: _buildContent(theme, isDark),
+                  child: _buildContent(theme),
                 ),
               ),
             ),
@@ -232,40 +232,39 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
     );
   }
 
-  Widget _buildContent(ThemeData theme, bool isDark) {
-    if (_showTwoFactor) return _buildTwoFactorCard(theme, isDark);
-    if (_showForgotPassword) return _buildForgotPasswordCard(theme, isDark);
-    return _buildMainCard(theme, isDark);
+  Widget _buildContent(ThemeData theme) {
+    if (_showTwoFactor) return _buildTwoFactorCard(theme);
+    if (_showForgotPassword) return _buildForgotPasswordCard(theme);
+    return _buildMainCard(theme);
   }
 
-  Widget _buildMainCard(ThemeData theme, bool isDark) {
-    return Card(
-      elevation: 12,
-      shadowColor: isDark ? Colors.black54 : Colors.black26,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildHeader(theme),
-              const SizedBox(height: 32),
-              _buildForm(theme),
-              if (!_isSignUp) ...[
-                const SizedBox(height: 8),
-                _buildRememberMeAndForgot(theme),
-              ],
-              const SizedBox(height: 24),
-              _buildSubmitButton(theme),
-              const SizedBox(height: 16),
-              _buildToggleMode(theme),
-              const SizedBox(height: 24),
-              _buildLegalLinks(theme),
+  Widget _buildMainCard(ThemeData theme) {
+    return GlassContainer(
+      padding: const EdgeInsets.all(32),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildHeader(theme),
+            const SizedBox(height: 32),
+            _buildForm(theme),
+            if (!_isSignUp) ...[
+              const SizedBox(height: 8),
+              _buildRememberMeAndForgot(theme),
             ],
-          ),
+            const SizedBox(height: 24),
+            PremiumButton(
+              onPressed: _submit,
+              label: _isSignUp ? 'Create Account' : 'Sign In',
+              isLoading: _isLoading,
+            ),
+            const SizedBox(height: 16),
+            _buildToggleMode(theme),
+            const SizedBox(height: 24),
+            _buildLegalLinks(theme),
+          ],
         ),
       ),
     );
@@ -277,13 +276,14 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: theme.colorScheme.primary.withValues(alpha: 0.1),
+            color: Colors.white.withValues(alpha: 0.1),
             shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
           ),
-          child: Icon(
-            Icons.auto_stories_rounded,
+          child: const Icon(
+            LucideIcons.bookOpenCheck, // Using lucide for modern feel
             size: 48,
-            color: theme.colorScheme.primary,
+            color: Colors.white,
           ),
         ),
         const SizedBox(height: 24),
@@ -292,6 +292,7 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
           style: theme.textTheme.headlineMedium?.copyWith(
             fontWeight: FontWeight.bold,
             letterSpacing: -0.5,
+            color: Colors.white,
           ),
           textAlign: TextAlign.center,
         ),
@@ -299,7 +300,7 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
         Text(
           _isSignUp ? 'Create your account' : 'Welcome back',
           style: theme.textTheme.bodyLarge?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+            color: Colors.white.withValues(alpha: 0.8),
           ),
           textAlign: TextAlign.center,
         ),
@@ -314,10 +315,10 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
       child: Column(
         children: [
           if (_isSignUp) ...[
-            _buildTextField(
+            PremiumInput(
               controller: _nameController,
               label: 'Full Name',
-              icon: Icons.person_outline,
+              icon: LucideIcons.user,
               textInputAction: TextInputAction.next,
               validator: (value) {
                 if (_isSignUp && (value?.isEmpty ?? true)) {
@@ -328,10 +329,10 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
             ),
             const SizedBox(height: 16),
           ],
-          _buildTextField(
+          PremiumInput(
             controller: _emailController,
             label: 'Email',
-            icon: Icons.email_outlined,
+            icon: LucideIcons.mail,
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
             validator: (value) {
@@ -344,19 +345,20 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
             },
           ),
           const SizedBox(height: 16),
-          _buildTextField(
+          PremiumInput(
             controller: _passwordController,
             label: 'Password',
-            icon: Icons.lock_outline,
+            icon: LucideIcons.lock,
             obscureText: _obscurePassword,
             textInputAction:
                 _isSignUp ? TextInputAction.next : TextInputAction.done,
             onChanged: _checkPasswordStrength,
             onFieldSubmitted: (_) => _isSignUp ? null : _submit(),
             suffixIcon: IconButton(
-              icon: Icon(_obscurePassword
-                  ? Icons.visibility_outlined
-                  : Icons.visibility_off_outlined),
+              icon: Icon(
+                _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
               onPressed: () =>
                   setState(() => _obscurePassword = !_obscurePassword),
             ),
@@ -370,21 +372,24 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
           ),
           if (_passwordStrength != null) ...[
             const SizedBox(height: 8),
-            _buildPasswordStrengthIndicator(),
+            _buildPasswordStrengthIndicator(theme),
           ],
           if (_isSignUp) ...[
             const SizedBox(height: 16),
-            _buildTextField(
+            PremiumInput(
               controller: _confirmPasswordController,
               label: 'Confirm Password',
-              icon: Icons.lock_outline,
+              icon: LucideIcons.lock,
               obscureText: _obscureConfirmPassword,
               textInputAction: TextInputAction.done,
               onFieldSubmitted: (_) => _submit(),
               suffixIcon: IconButton(
-                icon: Icon(_obscureConfirmPassword
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined),
+                icon: Icon(
+                  _obscureConfirmPassword
+                      ? LucideIcons.eye
+                      : LucideIcons.eyeOff,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
                 onPressed: () => setState(
                     () => _obscureConfirmPassword = !_obscureConfirmPassword),
               ),
@@ -401,39 +406,9 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    bool obscureText = false,
-    TextInputType? keyboardType,
-    TextInputAction? textInputAction,
-    Widget? suffixIcon,
-    String? Function(String?)? validator,
-    void Function(String)? onChanged,
-    void Function(String)? onFieldSubmitted,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscureText,
-      keyboardType: keyboardType,
-      textInputAction: textInputAction,
-      autocorrect: false,
-      onChanged: onChanged,
-      onFieldSubmitted: onFieldSubmitted,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
-        suffixIcon: suffixIcon,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        filled: true,
-      ),
-      validator: validator,
-    );
-  }
+  Widget _buildPasswordStrengthIndicator(ThemeData theme) {
+    if (_passwordStrength == null) return const SizedBox.shrink();
 
-  Widget _buildPasswordStrengthIndicator() {
-    final theme = Theme.of(context);
     final strength = _passwordStrength!;
     final colors = [
       Colors.red,
@@ -453,7 +428,8 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   value: (strength.score + 1) / 5,
-                  backgroundColor: theme.colorScheme.outline,
+                  backgroundColor:
+                      theme.colorScheme.outline.withValues(alpha: 0.3),
                   valueColor: AlwaysStoppedAnimation(colors[strength.score]),
                   minHeight: 6,
                 ),
@@ -485,14 +461,20 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
   Widget _buildRememberMeAndForgot(ThemeData theme) {
     return Row(
       children: [
-        Checkbox(
-          value: _rememberMe,
-          onChanged: (v) => setState(() => _rememberMe = v ?? false),
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        Theme(
+          data: theme.copyWith(
+              checkboxTheme: CheckboxThemeData(
+            side: BorderSide(color: theme.colorScheme.onSurfaceVariant),
+          )),
+          child: Checkbox(
+            value: _rememberMe,
+            onChanged: (v) => setState(() => _rememberMe = v ?? false),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
         ),
         Text('Remember me',
             style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurface,
+              color: theme.colorScheme.onSurfaceVariant,
             )),
         const Spacer(),
         TextButton(
@@ -500,30 +482,10 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
           child: Text('Forgot password?',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.primary,
+                fontWeight: FontWeight.bold,
               )),
         ),
       ],
-    );
-  }
-
-  Widget _buildSubmitButton(ThemeData theme) {
-    return FilledButton(
-      onPressed: _isLoading ? null : _submit,
-      style: FilledButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: _isLoading
-          ? const SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Colors.white),
-            )
-          : Text(
-              _isSignUp ? 'Create Account' : 'Sign In',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
     );
   }
 
@@ -534,6 +496,10 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
         _isSignUp
             ? 'Already have an account? Sign In'
             : "Don't have an account? Sign Up",
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.9),
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -547,7 +513,7 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
         Text(
           'By continuing, you agree to our',
           style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+            color: Colors.white.withValues(alpha: 0.6),
             fontSize: 11,
           ),
         ),
@@ -556,16 +522,17 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
           child: Text(
             'Privacy Policy',
             style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.primary,
+              color: Colors.white,
               fontSize: 11,
               decoration: TextDecoration.underline,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ),
         Text(
           'and',
           style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+            color: Colors.white.withValues(alpha: 0.6),
             fontSize: 11,
           ),
         ),
@@ -574,9 +541,10 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
           child: Text(
             'Terms of Service',
             style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.primary,
+              color: Colors.white,
               fontSize: 11,
               decoration: TextDecoration.underline,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ),
@@ -584,131 +552,108 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
     );
   }
 
-  Widget _buildTwoFactorCard(ThemeData theme, bool isDark) {
-    return Card(
-      elevation: 12,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.security, size: 64, color: theme.colorScheme.primary),
-            const SizedBox(height: 24),
-            Text('Two-Factor Authentication',
-                style: theme.textTheme.headlineSmall),
-            const SizedBox(height: 8),
-            Text(
-              'Enter the 6-digit code sent to your email',
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              textAlign: TextAlign.center,
+  Widget _buildTwoFactorCard(ThemeData theme) {
+    return GlassContainer(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.shieldCheck,
+              size: 64, color: theme.colorScheme.primary),
+          const SizedBox(height: 24),
+          Text('Two-Factor Auth', style: theme.textTheme.headlineSmall),
+          const SizedBox(height: 8),
+          Text(
+            'Enter the 6-digit code sent to your email',
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          TextField(
+            controller: _twoFactorController,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            maxLength: 6,
+            style: TextStyle(
+                fontSize: 24,
+                letterSpacing: 8,
+                color: theme.colorScheme.onSurface),
+            decoration: InputDecoration(
+              counterText: '',
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              filled: true,
+              fillColor: theme.inputDecorationTheme.fillColor,
             ),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _twoFactorController,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              maxLength: 6,
-              style: TextStyle(
-                  fontSize: 24,
-                  letterSpacing: 8,
-                  color: theme.colorScheme.onSurface),
-              decoration: InputDecoration(
-                counterText: '',
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _isLoading ? null : _submit,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Verify'),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () async {
-                final state = ref.read(customAuthStateProvider);
-                if (state.pendingUserId != null) {
-                  await ref
-                      .read(customAuthServiceProvider)
-                      .resendTwoFactorCode(state.pendingUserId!);
-                  _showSuccess('New code sent');
-                }
-              },
-              child: const Text('Resend Code'),
-            ),
-            TextButton(
-              onPressed: () => setState(() {
-                _showTwoFactor = false;
-                _twoFactorController.clear();
-              }),
-              child: const Text('Back to Login'),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 24),
+          PremiumButton(
+            onPressed: _submit,
+            label: 'Verify',
+            isLoading: _isLoading,
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () async {
+              final state = ref.read(customAuthStateProvider);
+              if (state.pendingUserId != null) {
+                await ref
+                    .read(customAuthServiceProvider)
+                    .resendTwoFactorCode(state.pendingUserId!);
+                _showSuccess('New code sent');
+              }
+            },
+            child: const Text('Resend Code'),
+          ),
+          TextButton(
+            onPressed: () => setState(() {
+              _showTwoFactor = false;
+              _twoFactorController.clear();
+            }),
+            child: const Text('Back to Login'),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildForgotPasswordCard(ThemeData theme, bool isDark) {
-    return Card(
-      elevation: 12,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.lock_reset, size: 64, color: theme.colorScheme.primary),
-            const SizedBox(height: 24),
-            Text('Reset Password', style: theme.textTheme.headlineSmall),
-            const SizedBox(height: 8),
-            Text(
-              'Enter your email to receive a reset link',
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            _buildTextField(
-              controller: _emailController,
-              label: 'Email',
-              icon: Icons.email_outlined,
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _isLoading ? null : _requestPasswordReset,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Send Reset Link'),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () => setState(() => _showForgotPassword = false),
-              child: const Text('Back to Login'),
-            ),
-          ],
-        ),
+  Widget _buildForgotPasswordCard(ThemeData theme) {
+    return GlassContainer(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.keyRound,
+              size: 64, color: theme.colorScheme.primary),
+          const SizedBox(height: 24),
+          Text('Reset Password', style: theme.textTheme.headlineSmall),
+          const SizedBox(height: 8),
+          Text(
+            'Enter your email to receive a reset link',
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          PremiumInput(
+            controller: _emailController,
+            label: 'Email',
+            icon: LucideIcons.mail,
+            keyboardType: TextInputType.emailAddress,
+          ),
+          const SizedBox(height: 24),
+          PremiumButton(
+            onPressed: _requestPasswordReset,
+            label: 'Send Reset Link',
+            isLoading: _isLoading,
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () => setState(() => _showForgotPassword = false),
+            child: const Text('Back to Login'),
+          ),
+        ],
       ),
     );
   }

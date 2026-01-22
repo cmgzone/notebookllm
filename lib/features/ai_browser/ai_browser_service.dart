@@ -239,9 +239,11 @@ class AIBrowserService {
                   "Describe what you see on this page relevant to: $query";
               final visionResponse =
                   await ref.read(apiServiceProvider).chatWithVision(
-                        prompt: visionPrompt,
-                        base64Image: base64Image,
-                      );
+                messages: [
+                  {'role': 'user', 'content': visionPrompt}
+                ],
+                imageBase64: base64Image,
+              );
 
               history.add('Analyzed Screenshot: $visionResponse');
 

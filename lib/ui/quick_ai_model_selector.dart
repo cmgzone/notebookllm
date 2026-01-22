@@ -5,7 +5,9 @@ import '../core/ai/ai_settings_service.dart';
 
 /// Compact AI model selector that appears on every page
 class QuickAIModelSelector extends ConsumerWidget {
-  const QuickAIModelSelector({super.key});
+  final bool compact;
+
+  const QuickAIModelSelector({super.key, this.compact = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -31,8 +33,12 @@ class QuickAIModelSelector extends ConsumerWidget {
         final displayName = currentModel?.name ?? 'Select Model';
 
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          margin: compact
+              ? const EdgeInsets.symmetric(vertical: 4)
+              : const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: compact
+              ? const EdgeInsets.all(8)
+              : const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(20),
@@ -45,25 +51,29 @@ class QuickAIModelSelector extends ConsumerWidget {
             value: allModels.any((m) => m.id == selectedModel)
                 ? selectedModel
                 : null,
-            hint: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.auto_awesome, size: 16, color: scheme.primary),
-                const SizedBox(width: 6),
-                Text(
-                  displayName,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: scheme.onSurface,
-                    fontWeight: FontWeight.w500,
+            hint: compact
+                ? Icon(Icons.auto_awesome, size: 20, color: scheme.primary)
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.auto_awesome, size: 16, color: scheme.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        displayName,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurface,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
             underline: const SizedBox.shrink(),
             isDense: true,
-            icon: Icon(Icons.arrow_drop_down, size: 18, color: scheme.primary),
+            icon: compact
+                ? const SizedBox.shrink()
+                : Icon(Icons.arrow_drop_down, size: 18, color: scheme.primary),
             dropdownColor: scheme.surfaceContainer,
             borderRadius: BorderRadius.circular(12),
             items: [

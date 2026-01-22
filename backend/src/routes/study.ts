@@ -30,25 +30,25 @@ router.get('/flashcards/decks', async (req: AuthRequest, res: Response) => {
 router.post('/flashcards/decks', async (req: AuthRequest, res: Response) => {
     try {
         const { id, notebookId, sourceId, title, cards } = req.body;
-        
+
         if (!title) {
             return res.status(400).json({ error: 'Title is required' });
         }
         if (!notebookId) {
             return res.status(400).json({ error: 'Notebook ID is required' });
         }
-        
+
         const deckId = id || uuidv4();
-        
+
         await pool.query('BEGIN');
-        
+
         const result = await pool.query(
             `INSERT INTO flashcard_decks (id, user_id, notebook_id, source_id, title)
              VALUES ($1, $2, $3, $4, $5) 
              RETURNING *`,
             [deckId, req.userId, notebookId, sourceId || null, title]
         );
-        
+
         // Save cards if provided
         if (cards && Array.isArray(cards) && cards.length > 0) {
             for (const card of cards) {
@@ -59,7 +59,7 @@ router.post('/flashcards/decks', async (req: AuthRequest, res: Response) => {
                     difficulty = difficulty === 1 ? 'easy' : difficulty === 2 ? 'medium' : 'hard';
                 }
                 difficulty = difficulty || 'medium';
-                
+
                 await pool.query(
                     `INSERT INTO flashcards (id, deck_id, question, answer, difficulty)
                      VALUES ($1, $2, $3, $4, $5)`,
@@ -67,14 +67,14 @@ router.post('/flashcards/decks', async (req: AuthRequest, res: Response) => {
                 );
             }
         }
-        
+
         await pool.query('COMMIT');
-        
+
         res.status(201).json({ success: true, deck: result.rows[0] });
     } catch (error: any) {
         await pool.query('ROLLBACK');
         console.error('Create flashcard deck error:', error);
-        
+
         // Provide more specific error messages
         if (error.code === '23503') {
             // Foreign key violation
@@ -84,7 +84,7 @@ router.post('/flashcards/decks', async (req: AuthRequest, res: Response) => {
             // Table doesn't exist
             return res.status(500).json({ error: 'Database table not found. Please run migrations.' });
         }
-        
+
         res.status(500).json({ error: `Failed to create deck: ${error.message || 'Unknown error'}` });
     }
 });
@@ -108,7 +108,7 @@ router.get('/flashcards/decks/:deckId', async (req: AuthRequest, res: Response) 
 router.post('/flashcards/batch', async (req: AuthRequest, res: Response) => {
     try {
         const { deckId, flashcards } = req.body;
-        
+
         if (!deckId || !flashcards) {
             return res.status(400).json({ error: 'deckId and flashcards required' });
         }
@@ -122,7 +122,7 @@ router.post('/flashcards/batch', async (req: AuthRequest, res: Response) => {
                 difficulty = difficulty === 1 ? 'easy' : difficulty === 2 ? 'medium' : 'hard';
             }
             difficulty = difficulty || 'medium';
-            
+
             const result = await pool.query(
                 `INSERT INTO flashcards (id, deck_id, question, answer, difficulty)
                  VALUES ($1, $2, $3, $4, $5)
@@ -203,7 +203,7 @@ router.get('/quizzes', async (req: AuthRequest, res: Response) => {
              ORDER BY q.updated_at DESC`,
             [req.userId]
         );
-        
+
         // Fetch questions for each quiz
         const quizzes = await Promise.all(quizzesResult.rows.map(async (quiz) => {
             const questionsResult = await pool.query(
@@ -215,7 +215,7 @@ router.get('/quizzes', async (req: AuthRequest, res: Response) => {
                 questions: questionsResult.rows
             };
         }));
-        
+
         res.json({ success: true, quizzes });
     } catch (error) {
         console.error('Get quizzes error:', error);
@@ -396,6 +396,63 @@ router.post('/infographics', async (req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error('Save infographic error:', error);
         res.status(500).json({ error: 'Failed to save infographic' });
+    }
+});
+
+// ==================== TUTOR SESSIONS ====================
+
+// Get all tutor sessions
+router.get('/tutor/sessions', async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await pool.query(
+            'SELECT * FROM tutor_sessions WHERE user_id = $1 ORDER BY updated_at DESC',
+            [req.userId]
+        );
+        res.json({ success: true, sessions: result.rows });
+    } catch (error) {
+        console.error('Get tutor sessions error:', error);
+        res.status(500).json({ error: 'Failed to fetch tutor sessions' });
+    }
+});
+
+// Save tutor session
+router.post('/tutor/sessions', async (req: AuthRequest, res: Response) => {
+    try {
+        const { id, notebookId, sourceId, topic, style, difficulty, exchanges, exchangeCount, totalScore, summary } = req.body;
+        const sessionId = id || uuidv4();
+
+        const result = await pool.query(
+            `INSERT INTO tutor_sessions (id, user_id, notebook_id, source_id, topic, style, difficulty, exchanges, exchange_count, total_score, summary, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+             ON CONFLICT (id) DO UPDATE SET 
+                exchanges = $8, 
+                exchange_count = $9, 
+                total_score = $10, 
+                summary = $11, 
+                updated_at = NOW()
+             RETURNING *`,
+            [sessionId, req.userId, notebookId, sourceId, topic, style, difficulty, JSON.stringify(exchanges), exchangeCount, totalScore || 0, summary]
+        );
+
+        res.json({ success: true, session: result.rows[0] });
+    } catch (error) {
+        console.error('Save tutor session error:', error);
+        res.status(500).json({ error: 'Failed to save tutor session' });
+    }
+});
+
+// Delete tutor session
+router.delete('/tutor/sessions/:id', async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        await pool.query(
+            'DELETE FROM tutor_sessions WHERE id = $1 AND user_id = $2',
+            [id, req.userId]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete tutor session error:', error);
+        res.status(500).json({ error: 'Failed to delete tutor session' });
     }
 });
 
