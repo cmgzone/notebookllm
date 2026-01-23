@@ -9,6 +9,11 @@ import { processSource } from '../controllers/ingestionController.js';
 
 const router = express.Router();
 
+// Health check for RAG routes
+router.get('/health', (req, res) => {
+    res.json({ status: 'ok', service: 'rag' });
+});
+
 // All routes require authentication
 router.use(authenticateToken);
 

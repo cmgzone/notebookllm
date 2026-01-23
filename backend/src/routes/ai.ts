@@ -68,7 +68,7 @@ router.get('/models', authenticateToken, async (req: AuthRequest, res: Response)
         const hasPremiumAccess = userId ? await userHasPremiumAccess(userId) : false;
 
         const result = await pool.query(
-            'SELECT id, name, model_id, provider, description, context_window, is_active, is_premium FROM ai_models WHERE is_active = true ORDER BY provider, name'
+            'SELECT id, name, model_id, provider, description, context_window, is_active, is_premium, is_default FROM ai_models WHERE is_active = true ORDER BY is_default DESC NULLS LAST, provider, name'
         );
 
         // Cache the models list for 1 hour
@@ -88,6 +88,34 @@ router.get('/models', authenticateToken, async (req: AuthRequest, res: Response)
     } catch (error) {
         console.error('Error listing AI models:', error);
         res.status(500).json({ error: 'Failed to list AI models' });
+    }
+});
+
+// Get default AI model (public endpoint)
+router.get('/models/default', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await pool.query(
+            'SELECT id, name, model_id, provider, description, context_window, is_active, is_premium FROM ai_models WHERE is_default = TRUE AND is_active = TRUE LIMIT 1'
+        );
+        
+        if (result.rows.length === 0) {
+            // If no default set, return gemini-2.0-flash or first active model
+            const fallback = await pool.query(
+                `SELECT id, name, model_id, provider, description, context_window, is_active, is_premium 
+                 FROM ai_models 
+                 WHERE is_active = TRUE 
+                 ORDER BY 
+                   CASE WHEN model_id = 'gemini-2.0-flash' THEN 0 ELSE 1 END,
+                   created_at ASC 
+                 LIMIT 1`
+            );
+            return res.json({ success: true, model: fallback.rows[0] || null });
+        }
+        
+        res.json({ success: true, model: result.rows[0] });
+    } catch (error) {
+        console.error('Error getting default model:', error);
+        res.status(500).json({ error: 'Failed to get default model' });
     }
 });
 

@@ -28,7 +28,7 @@ final apiServiceProvider = Provider<ApiService>((ref) {
 
 class ApiService {
   final Ref ref;
-  static const String _baseUrl = 'https://notebookllm-ufj7.onrender.com/api/';
+  static const String _baseUrl = 'https://backend.taskiumnetwork.com/api/';
   static const String _tokenKey = 'auth_token';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _tokenBackupKey = 'auth_token_backup';
@@ -805,30 +805,60 @@ class ApiService {
     final token = await getToken();
     if (token == null) throw Exception('Not authenticated');
     try {
+      // Map maxResults to depth
+      String depth = 'standard';
+      if (maxResults != null) {
+        if (maxResults <= 5) {
+          depth = 'quick';
+        } else if (maxResults >= 15) {
+          depth = 'deep';
+        }
+      }
+
       final response = await _dio.post(
-        '/ai/deep-research-stream',
+        '/research/stream',
         data: {
           'query': query,
+          'depth': depth,
+          'template': 'general',
           if (notebookId != null) 'notebookId': notebookId,
-          if (maxResults != null) 'maxResults': maxResults,
-          if (includeImages != null) 'includeImages': includeImages,
-          if (provider != null) 'provider': provider,
-          if (model != null) 'model': model,
         },
         options: Options(
           responseType: ResponseType.stream,
           headers: {'Accept': 'text/event-stream'},
         ),
       );
-      final stream = response.data.stream as Stream<List<int>>;
-      await for (final chunk in stream.transform(utf8.decoder)) {
-        if (chunk.startsWith('data: ')) {
-          final data = chunk.substring(6).trim();
-          if (data == '[DONE]') break;
-          try {
-            yield jsonDecode(data) as Map<String, dynamic>;
-          } catch (e) {
-            debugPrint('[ApiService] Error decoding research event: $e');
+
+      // Get the response stream
+      final responseStream = response.data.stream as Stream<Uint8List>;
+
+      // Buffer to accumulate incomplete lines
+      String buffer = '';
+
+      await for (final chunk in responseStream) {
+        // Decode bytes to string
+        final text = utf8.decode(chunk, allowMalformed: true);
+        buffer += text;
+
+        // Process complete lines
+        final lines = buffer.split('\n');
+        buffer = lines.last; // Keep incomplete line in buffer
+
+        for (int i = 0; i < lines.length - 1; i++) {
+          final line = lines[i].trim();
+          if (line.isEmpty) continue;
+
+          if (line.startsWith('data: ')) {
+            final data = line.substring(6).trim();
+            if (data == '[DONE]') break;
+
+            try {
+              final json = jsonDecode(data) as Map<String, dynamic>;
+              yield json;
+            } catch (e) {
+              debugPrint('[ApiService] Error decoding research event: $e');
+              debugPrint('[ApiService] Data: $data');
+            }
           }
         }
       }

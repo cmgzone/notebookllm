@@ -84,6 +84,19 @@ class ResearchSource {
   }
 }
 
+// Helper function at module level for parsing credibility
+SourceCredibility _parseCredibility(String? value) {
+  if (value == null) return SourceCredibility.unknown;
+  try {
+    return SourceCredibility.values.firstWhere(
+      (e) => e.name == value,
+      orElse: () => SourceCredibility.unknown,
+    );
+  } catch (_) {
+    return SourceCredibility.unknown;
+  }
+}
+
 /// Research update for progress tracking
 class ResearchUpdate {
   final String status;
@@ -153,26 +166,17 @@ class DeepResearchService {
       // Listen to the stream and yield updates
       await for (final event in stream) {
         try {
-          // Safely extract fields with null checks and defaults
-          final step = event['step'] as int? ?? 0;
-          final message = event['message'] as String? ?? 'Processing...';
-          final type = event['type'] as String? ?? 'progress';
-          final data = event['data'] as Map<String, dynamic>?;
+          // Backend sends progress updates with status, progress, sources, etc.
+          final status = event['status'] as String? ?? 'Processing...';
+          final progress = (event['progress'] as num?)?.toDouble() ?? 0.0;
+          final isComplete = event['isComplete'] as bool? ?? false;
 
-          // Calculate progress based on step/type
-          // Steps: 1 (start), 2 (search), 3 (results), 4 (extract), 5 (analyzed), 6 (summary), 7 (complete)
-          double progress = 0.1;
-          if (step > 0) {
-            progress = (step / 8.0).clamp(0.1, 0.95);
-          }
-
-          if (type == 'complete') {
-            progress = 1.0;
-
-            // Parse final results safely
-            final summary = data?['summary'] as String? ?? '';
+          if (isComplete) {
+            // Parse final results
+            final result = event['result'] as String? ?? '';
             final sourcesData =
-                (data?['sources'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                (event['sources'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+            final imagesData = (event['images'] as List?)?.cast<String>() ?? [];
 
             final sources = sourcesData
                 .map((s) {
@@ -180,9 +184,15 @@ class DeepResearchService {
                     return ResearchSource(
                       title: s['title'] as String? ?? 'Source',
                       url: s['url'] as String? ?? '',
-                      content: s['snippet'] as String? ?? '',
+                      content: s['content'] as String? ??
+                          s['snippet'] as String? ??
+                          '',
                       snippet: s['snippet'] as String?,
-                      credibility: SourceCredibility.unknown,
+                      credibility:
+                          _parseCredibility(s['credibility'] as String?),
+                      credibilityScore: s['credibilityScore'] as int? ??
+                          s['credibility_score'] as int? ??
+                          60,
                     );
                   } catch (e) {
                     debugPrint('[DeepResearch] Error parsing source: $e');
@@ -192,10 +202,7 @@ class DeepResearchService {
                 .whereType<ResearchSource>()
                 .toList();
 
-            // Collect images if available in sources
-            final images = <String>[]; // Backend needs to pass these through
-
-            // Track gamification locally for now
+            // Track gamification
             try {
               ref.read(gamificationProvider.notifier).trackDeepResearch();
             } catch (e) {
@@ -203,17 +210,47 @@ class DeepResearchService {
             }
 
             yield ResearchUpdate(
-              status: 'Research complete!',
+              status: status,
               progress: 1.0,
-              result: summary.isNotEmpty ? summary : null,
+              result: result.isNotEmpty ? result : null,
               sources: sources,
-              images: images,
+              images: imagesData,
               isComplete: true,
             );
           } else {
+            // Progress update
+            final sourcesData =
+                (event['sources'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+            final imagesData = (event['images'] as List?)?.cast<String>() ?? [];
+
+            final sources = sourcesData
+                .map((s) {
+                  try {
+                    return ResearchSource(
+                      title: s['title'] as String? ?? 'Source',
+                      url: s['url'] as String? ?? '',
+                      content: s['content'] as String? ??
+                          s['snippet'] as String? ??
+                          '',
+                      snippet: s['snippet'] as String?,
+                      credibility:
+                          _parseCredibility(s['credibility'] as String?),
+                      credibilityScore: s['credibilityScore'] as int? ??
+                          s['credibility_score'] as int? ??
+                          60,
+                    );
+                  } catch (e) {
+                    return null;
+                  }
+                })
+                .whereType<ResearchSource>()
+                .toList();
+
             yield ResearchUpdate(
-              status: message,
+              status: status,
               progress: progress,
+              sources: sources.isNotEmpty ? sources : null,
+              images: imagesData.isNotEmpty ? imagesData : null,
               isComplete: false,
             );
           }

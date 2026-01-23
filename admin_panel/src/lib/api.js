@@ -193,6 +193,14 @@ class ApiService {
         return this.delete(`/admin/models/${id}`);
     }
 
+    async setDefaultAIModel(id) {
+        return this.put(`/admin/models/${id}/set-default`, {});
+    }
+
+    async getDefaultAIModel() {
+        return this.get('/admin/models/default');
+    }
+
     // ============ ADMIN - API KEYS ============
     async getApiKeys() {
         return this.get('/admin/api-keys');

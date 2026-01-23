@@ -101,14 +101,17 @@ app.use((req, res, next) => {
 });
 
 // Health check
-app.get('/health', (req, res) => {
+const healthHandler = (req: express.Request, res: express.Response) => {
     res.json({
         status: 'ok',
         message: 'Backend is running',
         timestamp: new Date().toISOString(),
         version: '2.0.0'
     });
-});
+};
+
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
 
 // API Routes
 app.use('/api/auth', authRoutes);

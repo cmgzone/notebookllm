@@ -230,8 +230,10 @@ class AgentConnectionsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
+      body: RefreshIndicator(
+        onRefresh: () => ref.read(agentConnectionsProvider.notifier).refresh(),
+        child: ListView(
+          padding: EdgeInsets.zero,
           children: [
             // API Tokens Section - always visible
             const ApiTokensSection(),
@@ -246,7 +248,7 @@ class AgentConnectionsScreen extends ConsumerWidget {
             else if (state.sessions.isEmpty)
               _buildEmptyState(context, scheme)
             else
-              _buildSessionsList(context, ref, state, scheme),
+              ..._buildSessionsListItems(context, ref, state, scheme),
           ],
         ),
       ),
@@ -369,39 +371,34 @@ class AgentConnectionsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSessionsList(
+  List<Widget> _buildSessionsListItems(
     BuildContext context,
     WidgetRef ref,
     AgentConnectionsState state,
     ColorScheme scheme,
   ) {
-    return RefreshIndicator(
-      onRefresh: () => ref.read(agentConnectionsProvider.notifier).refresh(),
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Stats summary
-          _buildStatsSummary(context, state, scheme),
-          const SizedBox(height: 24),
-          // Sessions list
-          ...state.sessions.asMap().entries.map((entry) {
-            final index = entry.key;
-            final session = entry.value;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _AgentSessionCard(
-                session: session,
-                onDisconnect: () =>
-                    _showDisconnectDialog(context, ref, session),
-                onViewNotebook: session.notebookId != null
-                    ? () => context.push('/notebook/${session.notebookId}')
-                    : null,
-              ).animate().fadeIn(delay: Duration(milliseconds: index * 100)),
-            );
-          }),
-        ],
+    return [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: _buildStatsSummary(context, state, scheme),
       ),
-    );
+      const SizedBox(height: 24),
+      ...state.sessions.asMap().entries.map((entry) {
+        final index = entry.key;
+        final session = entry.value;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: _AgentSessionCard(
+            session: session,
+            onDisconnect: () => _showDisconnectDialog(context, ref, session),
+            onViewNotebook: session.notebookId != null
+                ? () => context.push('/notebook/${session.notebookId}')
+                : null,
+          ).animate().fadeIn(delay: Duration(milliseconds: index * 100)),
+        );
+      }),
+      const SizedBox(height: 32),
+    ];
   }
 
   Widget _buildStatsSummary(
@@ -424,25 +421,29 @@ class AgentConnectionsScreen extends ConsumerWidget {
         ),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _StatItem(
-            icon: LucideIcons.checkCircle,
-            label: 'Active',
-            value: state.activeCount.toString(),
-            color: const Color(0xFF22C55E),
+          Expanded(
+            child: _StatItem(
+              icon: LucideIcons.checkCircle,
+              label: 'Active',
+              value: state.activeCount.toString(),
+              color: const Color(0xFF22C55E),
+            ),
           ),
-          _StatItem(
-            icon: LucideIcons.clock,
-            label: 'Expired',
-            value: state.expiredCount.toString(),
-            color: const Color(0xFFF59E0B),
+          Expanded(
+            child: _StatItem(
+              icon: LucideIcons.clock,
+              label: 'Expired',
+              value: state.expiredCount.toString(),
+              color: const Color(0xFFF59E0B),
+            ),
           ),
-          _StatItem(
-            icon: LucideIcons.xCircle,
-            label: 'Disconnected',
-            value: state.disconnectedCount.toString(),
-            color: const Color(0xFFEF4444),
+          Expanded(
+            child: _StatItem(
+                icon: LucideIcons.xCircle,
+                label: 'Disconnected',
+                value: state.disconnectedCount.toString(),
+                color: const Color(0xFFEF4444)),
           ),
         ],
       ),

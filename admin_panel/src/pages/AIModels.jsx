@@ -102,6 +102,17 @@ export default function AIModels() {
         }
     }
 
+    async function handleSetDefault(id) {
+        try {
+            await api.setDefaultAIModel(id);
+            await fetchModels();
+            alert('Default model updated successfully');
+        } catch (error) {
+            console.error('Failed to set default model:', error);
+            alert('Failed to set default model: ' + error.message);
+        }
+    }
+
     if (loading) return (
         <div className="p-8 flex items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin" />
@@ -151,6 +162,11 @@ export default function AIModels() {
                                     <div className="flex items-center">
                                         <Bot className="mr-2 h-5 w-5 text-muted-foreground" />
                                         {model.name}
+                                        {model.is_default && (
+                                            <span className="ml-2 inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-600/20">
+                                                Default
+                                            </span>
+                                        )}
                                         {model.is_premium && (
                                             <span className="ml-2 inline-flex items-center rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
                                                 Premium
@@ -178,6 +194,15 @@ export default function AIModels() {
                                     )}
                                 </td>
                                 <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium">
+                                    {!model.is_default && model.is_active && (
+                                        <button 
+                                            onClick={() => handleSetDefault(model.id)} 
+                                            className="text-blue-600 hover:text-blue-800 mr-4"
+                                            title="Set as default"
+                                        >
+                                            Set Default
+                                        </button>
+                                    )}
                                     <button onClick={() => handleOpenModal(model)} className="text-primary hover:text-primary/80 mr-4">
                                         <Edit2 className="h-4 w-4" />
                                     </button>

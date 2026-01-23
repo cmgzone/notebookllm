@@ -225,10 +225,32 @@ Write the complete report:`
     }];
 
     try {
-        return await generateWithGemini(messages, 'gemini-1.5-pro');
-    } catch (error) {
-        // Fallback to OpenRouter
-        return await generateWithOpenRouter(messages);
+        console.log('[Research] Attempting to generate report with Gemini...');
+        const result = await generateWithGemini(messages, 'gemini-1.5-pro');
+        console.log('[Research] Report generated successfully with Gemini');
+        return result;
+    } catch (geminiError: any) {
+        console.error('[Research] Gemini failed:', geminiError.message);
+        try {
+            console.log('[Research] Falling back to OpenRouter...');
+            const result = await generateWithOpenRouter(messages);
+            console.log('[Research] Report generated successfully with OpenRouter');
+            return result;
+        } catch (openRouterError: any) {
+            console.error('[Research] OpenRouter also failed:', openRouterError.message);
+            // Return a basic summary if both AI services fail
+            return `# Research Report: ${query}
+
+## Summary
+Research completed with ${sources.length} sources found. However, AI synthesis is temporarily unavailable.
+
+## Sources Found
+
+${limitedSources.map((s, i) => `${i + 1}. [${s.title}](${s.url}) - ${s.credibility} (${s.credibilityScore}% credibility)`).join('\n')}
+
+## Note
+Please try again later or contact support if this issue persists.`;
+        }
     }
 }
 
