@@ -255,7 +255,16 @@ Create 3-5 main branches with 2-4 sub-topics each.
     return (textContent, rootNode);
   }
 
-  MindMapNode _parseNodeFromJson(Map<String, dynamic> json, int level) {
+  MindMapNode _parseNodeFromJson(dynamic json, int level) {
+    if (json is! Map<String, dynamic>) {
+      return MindMapNode(
+        id: const Uuid().v4(),
+        label: json.toString(),
+        level: level,
+        children: [],
+      );
+    }
+
     final children = (json['children'] as List<dynamic>?)
             ?.map((child) => _parseNodeFromJson(child, level + 1))
             .toList() ??

@@ -12,7 +12,7 @@ class RealIngestionService {
   Future<List<Chunk>> chunkSource(Source source) async {
     try {
       // Call backend to process source (chunk + embed + store)
-      await _api.post('/ingestion/process', {
+      await _api.post('/rag/ingestion/process', {
         'sourceId': source.id,
       });
 

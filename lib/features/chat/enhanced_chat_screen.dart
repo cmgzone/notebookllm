@@ -754,23 +754,26 @@ Sources to analyze:''';
           }),
 
           // Input area
-          _ChatInputArea(
-            controller: _controller,
-            onSend: _sendMessage,
-            onChanged: (text) {},
-            onMic: _toggleRecord,
-            isDeepSearchEnabled: _isDeepSearchEnabled,
-            onToggleDeepSearch: () =>
-                setState(() => _isDeepSearchEnabled = !_isDeepSearchEnabled),
-            isWebBrowsingEnabled: _isWebBrowsingEnabled,
-            onToggleWebBrowsing: () =>
-                setState(() => _isWebBrowsingEnabled = !_isWebBrowsingEnabled),
-            onPickImage: _pickImage,
-            onTakePhoto: _takePhoto,
-            onOpenAIBrowser: () => context.push('/ai-browser'),
-            selectedImage: _selectedImage,
-            onRemoveImage: _removeSelectedImage,
-            isRecording: _recording,
+          SafeArea(
+            top: false,
+            child: _ChatInputArea(
+              controller: _controller,
+              onSend: _sendMessage,
+              onChanged: (text) {},
+              onMic: _toggleRecord,
+              isDeepSearchEnabled: _isDeepSearchEnabled,
+              onToggleDeepSearch: () =>
+                  setState(() => _isDeepSearchEnabled = !_isDeepSearchEnabled),
+              isWebBrowsingEnabled: _isWebBrowsingEnabled,
+              onToggleWebBrowsing: () => setState(
+                  () => _isWebBrowsingEnabled = !_isWebBrowsingEnabled),
+              onPickImage: _pickImage,
+              onTakePhoto: _takePhoto,
+              onOpenAIBrowser: () => context.push('/ai-browser'),
+              selectedImage: _selectedImage,
+              onRemoveImage: _removeSelectedImage,
+              isRecording: _recording,
+            ),
           ),
         ],
       ),
@@ -1698,7 +1701,6 @@ class _ChatInputArea extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: scheme.surface,
         border: Border(
@@ -1708,258 +1710,268 @@ class _ChatInputArea extends StatelessWidget {
           ),
         ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Web Browsing indicator
-          if (isWebBrowsingEnabled)
-            Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Colors.orange.withValues(alpha: 0.3),
-                ),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.language, size: 16, color: Colors.orange),
-                  SizedBox(width: 6),
-                  Text(
-                    '🌐 Web Browsing - AI will search & show screenshots',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.orange,
-                      fontWeight: FontWeight.w500,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Web Browsing indicator
+              if (isWebBrowsingEnabled)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.3),
                     ),
                   ),
-                ],
-              ),
-            ).animate().fadeIn().slideY(begin: 0.2),
-
-          // Deep Search indicator
-          if (isDeepSearchEnabled && !isWebBrowsingEnabled)
-            Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: scheme.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: scheme.primary.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.public, size: 16, color: scheme.primary),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Deep Search enabled - will search the web',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: scheme.primary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().fadeIn().slideY(begin: 0.2),
-
-          // Image preview
-          if (selectedImage != null)
-            Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.file(
-                      File(selectedImage!.path),
-                      height: 100,
-                      width: 100,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: GestureDetector(
-                      onTap: onRemoveImage,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.close,
-                          size: 16,
-                          color: Colors.white,
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.language, size: 16, color: Colors.orange),
+                      SizedBox(width: 6),
+                      Text(
+                        '🌐 Web Browsing - AI will search & show screenshots',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
-            ).animate().scale(duration: Motion.short),
+                ).animate().fadeIn().slideY(begin: 0.2),
 
-          Row(
-            children: [
-              Expanded(
-                child: Container(
+              // Deep Search indicator
+              if (isDeepSearchEnabled && !isWebBrowsingEnabled)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color:
-                        scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(24),
+                    color: scheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: scheme.outline.withValues(alpha: 0.2),
-                      width: 1,
+                      color: scheme.primary.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Image picker button
-                      PopupMenuButton<String>(
-                        icon: Icon(
-                          LucideIcons.image,
-                          color: scheme.onSurface.withValues(alpha: 0.6),
-                          size: 20,
+                      Icon(Icons.public, size: 16, color: scheme.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Deep Search enabled - will search the web',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w500,
                         ),
-                        tooltip: 'Add image',
-                        onSelected: (value) {
-                          if (value == 'gallery') {
-                            onPickImage();
-                          } else if (value == 'camera') {
-                            onTakePhoto();
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            value: 'gallery',
-                            child: Row(
-                              children: [
-                                Icon(LucideIcons.image,
-                                    size: 18, color: scheme.primary),
-                                const SizedBox(width: 8),
-                                const Text('From Gallery'),
-                              ],
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn().slideY(begin: 0.2),
+
+              // Image preview
+              if (selectedImage != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          File(selectedImage!.path),
+                          height: 100,
+                          width: 100,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: GestureDetector(
+                          onTap: onRemoveImage,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                          ),
-                          PopupMenuItem(
-                            value: 'camera',
-                            child: Row(
-                              children: [
-                                Icon(LucideIcons.camera,
-                                    size: 18, color: scheme.primary),
-                                const SizedBox(width: 8),
-                                const Text('Take Photo'),
-                              ],
+                            child: const Icon(
+                              Icons.close,
+                              size: 16,
+                              color: Colors.white,
                             ),
-                          ),
-                        ],
-                      ),
-                      // Deep search toggle
-                      IconButton(
-                        onPressed: onToggleDeepSearch,
-                        icon: Icon(
-                          Icons.public,
-                          color: isDeepSearchEnabled
-                              ? scheme.primary
-                              : scheme.onSurface.withValues(alpha: 0.5),
-                          size: 20,
-                        ),
-                        tooltip: isDeepSearchEnabled
-                            ? 'Deep Search ON'
-                            : 'Enable Deep Search',
-                      ),
-                      // Web browsing toggle
-                      IconButton(
-                        onPressed: onToggleWebBrowsing,
-                        icon: Icon(
-                          Icons.language,
-                          color: isWebBrowsingEnabled
-                              ? Colors.orange
-                              : scheme.onSurface.withValues(alpha: 0.5),
-                          size: 20,
-                        ),
-                        tooltip: isWebBrowsingEnabled
-                            ? 'Web Browsing ON'
-                            : 'Enable Web Browsing (with screenshots)',
-                      ),
-                      // AI Browser button
-                      IconButton(
-                        onPressed: onOpenAIBrowser,
-                        icon: Icon(
-                          Icons.open_in_browser,
-                          color: scheme.tertiary,
-                          size: 20,
-                        ),
-                        tooltip: 'Open AI Browser (real browser control)',
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: controller,
-                          onChanged: onChanged,
-                          decoration: InputDecoration(
-                            hintText: selectedImage != null
-                                ? 'Ask about this image...'
-                                : 'Ask about your research...',
-                            hintStyle: TextStyle(
-                              color: scheme.onSurface.withValues(alpha: 0.5),
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          maxLines: null,
-                          textInputAction: TextInputAction.send,
-                          onSubmitted: (_) => onSend(),
-                        ),
-                      ),
-                      // Send button
-                      IconButton(
-                        onPressed: onSend,
-                        icon: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: scheme.primary,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Icon(
-                            Icons.send,
-                            color: scheme.onPrimary,
-                            size: 18,
-                          ),
-                        ),
-                      ),
-                      // Mic button
-                      IconButton(
-                        onPressed: onMic,
-                        icon: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isRecording ? Colors.red : scheme.secondary,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Icon(
-                            isRecording ? Icons.stop : Icons.mic,
-                            color: scheme.onSecondary,
-                            size: 18,
                           ),
                         ),
                       ),
                     ],
                   ),
-                ),
+                ).animate().scale(duration: Motion.short),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: scheme.outline.withValues(alpha: 0.2),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          // Image picker button
+                          PopupMenuButton<String>(
+                            icon: Icon(
+                              LucideIcons.image,
+                              color: scheme.onSurface.withValues(alpha: 0.6),
+                              size: 20,
+                            ),
+                            tooltip: 'Add image',
+                            onSelected: (value) {
+                              if (value == 'gallery') {
+                                onPickImage();
+                              } else if (value == 'camera') {
+                                onTakePhoto();
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              PopupMenuItem(
+                                value: 'gallery',
+                                child: Row(
+                                  children: [
+                                    Icon(LucideIcons.image,
+                                        size: 18, color: scheme.primary),
+                                    const SizedBox(width: 8),
+                                    const Text('From Gallery'),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'camera',
+                                child: Row(
+                                  children: [
+                                    Icon(LucideIcons.camera,
+                                        size: 18, color: scheme.primary),
+                                    const SizedBox(width: 8),
+                                    const Text('Take Photo'),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Deep search toggle
+                          IconButton(
+                            onPressed: onToggleDeepSearch,
+                            icon: Icon(
+                              Icons.public,
+                              color: isDeepSearchEnabled
+                                  ? scheme.primary
+                                  : scheme.onSurface.withValues(alpha: 0.5),
+                              size: 20,
+                            ),
+                            tooltip: isDeepSearchEnabled
+                                ? 'Deep Search ON'
+                                : 'Enable Deep Search',
+                          ),
+                          // Web browsing toggle
+                          IconButton(
+                            onPressed: onToggleWebBrowsing,
+                            icon: Icon(
+                              Icons.language,
+                              color: isWebBrowsingEnabled
+                                  ? Colors.orange
+                                  : scheme.onSurface.withValues(alpha: 0.5),
+                              size: 20,
+                            ),
+                            tooltip: isWebBrowsingEnabled
+                                ? 'Web Browsing ON'
+                                : 'Enable Web Browsing (with screenshots)',
+                          ),
+                          // AI Browser button
+                          IconButton(
+                            onPressed: onOpenAIBrowser,
+                            icon: Icon(
+                              Icons.open_in_browser,
+                              color: scheme.tertiary,
+                              size: 20,
+                            ),
+                            tooltip: 'Open AI Browser (real browser control)',
+                          ),
+                          Expanded(
+                            child: TextField(
+                              controller: controller,
+                              onChanged: onChanged,
+                              decoration: InputDecoration(
+                                hintText: selectedImage != null
+                                    ? 'Ask about this image...'
+                                    : 'Ask about your research...',
+                                hintStyle: TextStyle(
+                                  color:
+                                      scheme.onSurface.withValues(alpha: 0.5),
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                              maxLines: null,
+                              textInputAction: TextInputAction.send,
+                              onSubmitted: (_) => onSend(),
+                            ),
+                          ),
+                          // Send button
+                          IconButton(
+                            onPressed: onSend,
+                            icon: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: scheme.primary,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Icon(
+                                Icons.send,
+                                color: scheme.onPrimary,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                          // Mic button
+                          IconButton(
+                            onPressed: onMic,
+                            icon: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color:
+                                    isRecording ? Colors.red : scheme.secondary,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Icon(
+                                isRecording ? Icons.stop : Icons.mic,
+                                color: scheme.onSecondary,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

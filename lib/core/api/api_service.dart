@@ -28,9 +28,11 @@ final apiServiceProvider = Provider<ApiService>((ref) {
 
 class ApiService {
   final Ref ref;
-  static const String _baseUrl = 'https://backend.taskiumnetwork.com/api';
+  static const String _baseUrl = 'https://notebookllm-ufj7.onrender.com/api/';
   static const String _tokenKey = 'auth_token';
+  static const String _refreshTokenKey = 'refresh_token';
   static const String _tokenBackupKey = 'auth_token_backup';
+  static const String _refreshTokenBackupKey = 'refresh_token_backup';
 
   static const _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -39,6 +41,8 @@ class ApiService {
 
   late final Dio _dio;
   String? _token;
+  String? _refreshToken;
+  bool _isRefreshing = false;
 
   ApiService(this.ref) {
     _dio = Dio(BaseOptions(
@@ -70,12 +74,44 @@ class ApiService {
       },
       onError: (DioException e, handler) async {
         developer.log(
-            '[API] Error ${e.type} for ${e.requestOptions.path}: ${e.message}',
+            '[API] Error ${e.type} for ${e.requestOptions.path}: ${e.message} (Status: ${e.response?.statusCode})',
             name: 'ApiService');
+
+        // Handle 401 Unauthorized - attempt token refresh
         if (e.response?.statusCode == 401 &&
-            (e.requestOptions.extra['clearTokenOn401'] ?? true)) {
-          await clearToken();
+            !e.requestOptions.path.contains('/auth/refresh') &&
+            !e.requestOptions.path.contains('/auth/login')) {
+          final refreshToken = await getRefreshToken();
+          if (refreshToken != null && !_isRefreshing) {
+            _isRefreshing = true;
+            try {
+              developer.log('[API] Access token expired, attempting refresh...',
+                  name: 'ApiService');
+              final success = await refreshAccessToken();
+              _isRefreshing = false;
+
+              if (success) {
+                // Retry the original request with the new token
+                final newToken = await getToken();
+                final options = e.requestOptions;
+                options.headers['Authorization'] = 'Bearer $newToken';
+
+                final response = await _dio.fetch(options);
+                return handler.resolve(response);
+              }
+            } catch (refreshError) {
+              _isRefreshing = false;
+              developer.log('[API] Token refresh failed: $refreshError',
+                  name: 'ApiService');
+            }
+          }
+
+          // If refresh failed or no refresh token, log out
+          if (e.requestOptions.extra['clearTokenOn401'] ?? true) {
+            await clearTokens();
+          }
         }
+
         return handler.next(e);
       },
     ));
@@ -106,26 +142,87 @@ class ApiService {
     return null;
   }
 
-  Future<void> setToken(String token) async {
-    _token = token;
+  Future<String?> getRefreshToken() async {
+    if (_refreshToken != null) return _refreshToken;
     try {
-      await _storage.write(key: _tokenKey, value: token);
+      final storedToken = await _storage.read(key: _refreshTokenKey);
+      if (storedToken != null && storedToken.isNotEmpty) {
+        _refreshToken = storedToken;
+        return _refreshToken;
+      }
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_tokenBackupKey, token);
+      final backupToken = prefs.getString(_refreshTokenBackupKey);
+      if (backupToken != null && backupToken.isNotEmpty) {
+        _refreshToken = backupToken;
+        try {
+          await _storage.write(key: _refreshTokenKey, value: backupToken);
+        } catch (_) {}
+        return _refreshToken;
+      }
     } catch (e) {
-      developer.log('[API] Error storing token: $e', name: 'ApiService');
+      developer.log('[API] Error getting refresh token: $e',
+          name: 'ApiService');
+    }
+    return null;
+  }
+
+  Future<void> setTokens(String accessToken, String refreshToken) async {
+    _token = accessToken;
+    _refreshToken = refreshToken;
+    try {
+      await _storage.write(key: _tokenKey, value: accessToken);
+      await _storage.write(key: _refreshTokenKey, value: refreshToken);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_tokenBackupKey, accessToken);
+      await prefs.setString(_refreshTokenBackupKey, refreshToken);
+    } catch (e) {
+      developer.log('[API] Error storing tokens: $e', name: 'ApiService');
     }
   }
 
-  Future<void> clearToken() async {
+  Future<void> clearTokens() async {
     _token = null;
+    _refreshToken = null;
     try {
       await _storage.delete(key: _tokenKey);
+      await _storage.delete(key: _refreshTokenKey);
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_tokenBackupKey);
+      await prefs.remove(_refreshTokenBackupKey);
     } catch (e) {
-      developer.log('[API] Error clearing token: $e', name: 'ApiService');
+      developer.log('[API] Error clearing tokens: $e', name: 'ApiService');
     }
+  }
+
+  Future<bool> refreshAccessToken() async {
+    try {
+      final refreshToken = await getRefreshToken();
+      if (refreshToken == null) return false;
+
+      final response = await _dio.post(
+        '/auth/refresh',
+        data: {'refreshToken': refreshToken},
+        options: Options(extra: {'clearTokenOn401': false}),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final newAccessToken = response.data['accessToken'];
+        if (newAccessToken != null) {
+          _token = newAccessToken;
+          await _storage.write(key: _tokenKey, value: newAccessToken);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_tokenBackupKey, newAccessToken);
+          developer.log('[API] Access token refreshed successfully',
+              name: 'ApiService');
+          return true;
+        }
+      }
+    } catch (e) {
+      developer.log('[API] Refresh token expired or invalid, logging out',
+          name: 'ApiService');
+      await clearTokens();
+    }
+    return false;
   }
 
   // ============ GENERIC METHODS ============
@@ -135,8 +232,10 @@ class ApiService {
       Options? options,
       int retries = 2}) async {
     try {
-      final response = await _dio.get(endpoint,
-          queryParameters: queryParameters, options: options);
+      final response = await _dio.get(
+          endpoint.startsWith('/') ? endpoint.substring(1) : endpoint,
+          queryParameters: queryParameters,
+          options: options);
       return _handleResponse<T>(response);
     } catch (e) {
       if (retries > 0 && _isConnectionError(e)) {
@@ -163,7 +262,10 @@ class ApiService {
 
   Future<T> post<T>(String endpoint, dynamic data, {Options? options}) async {
     try {
-      final response = await _dio.post(endpoint, data: data, options: options);
+      final response = await _dio.post(
+          endpoint.startsWith('/') ? endpoint.substring(1) : endpoint,
+          data: data,
+          options: options);
       return _handleResponse<T>(response);
     } catch (e) {
       throw _handleError(e);
@@ -172,7 +274,10 @@ class ApiService {
 
   Future<T> put<T>(String endpoint, dynamic data, {Options? options}) async {
     try {
-      final response = await _dio.put(endpoint, data: data, options: options);
+      final response = await _dio.put(
+          endpoint.startsWith('/') ? endpoint.substring(1) : endpoint,
+          data: data,
+          options: options);
       return _handleResponse<T>(response);
     } catch (e) {
       throw _handleError(e);
@@ -181,7 +286,10 @@ class ApiService {
 
   Future<T> patch<T>(String endpoint, dynamic data, {Options? options}) async {
     try {
-      final response = await _dio.patch(endpoint, data: data, options: options);
+      final response = await _dio.patch(
+          endpoint.startsWith('/') ? endpoint.substring(1) : endpoint,
+          data: data,
+          options: options);
       return _handleResponse<T>(response);
     } catch (e) {
       throw _handleError(e);
@@ -190,8 +298,10 @@ class ApiService {
 
   Future<T> delete<T>(String endpoint, {dynamic data, Options? options}) async {
     try {
-      final response =
-          await _dio.delete(endpoint, data: data, options: options);
+      final response = await _dio.delete(
+          endpoint.startsWith('/') ? endpoint.substring(1) : endpoint,
+          data: data,
+          options: options);
       return _handleResponse<T>(response);
     } catch (e) {
       throw _handleError(e);
@@ -240,7 +350,12 @@ class ApiService {
       'password': password,
       if (displayName != null) 'displayName': displayName,
     });
-    if (response['token'] != null) await setToken(response['token']);
+    if (response['accessToken'] != null && response['refreshToken'] != null) {
+      await setTokens(response['accessToken'], response['refreshToken']);
+    } else if (response['token'] != null) {
+      // Fallback for old API response format
+      await setTokens(response['token'], response['refreshToken'] ?? '');
+    }
     return response;
   }
 
@@ -254,7 +369,12 @@ class ApiService {
       'password': password,
       'rememberMe': rememberMe,
     });
-    if (response['token'] != null) await setToken(response['token']);
+    if (response['accessToken'] != null && response['refreshToken'] != null) {
+      await setTokens(response['accessToken'], response['refreshToken']);
+    } else if (response['token'] != null) {
+      // Fallback for old API response format
+      await setTokens(response['token'], response['refreshToken'] ?? '');
+    }
     return response;
   }
 
@@ -397,12 +517,12 @@ class ApiService {
   // ============ AGENTS ============
 
   Future<List<Map<String, dynamic>>> getAgentNotebooks() async {
-    final response = await get<Map<String, dynamic>>('/agents/notebooks');
+    final response = await get<Map<String, dynamic>>('/coding-agent/notebooks');
     return List<Map<String, dynamic>>.from(response['notebooks'] ?? []);
   }
 
   Future<void> disconnectAgent(String sessionId) async {
-    await post('/agents/disconnect', {'sessionId': sessionId});
+    await post('/coding-agent/sessions/$sessionId/disconnect', {});
   }
 
   // ============ SOURCES ============
@@ -495,7 +615,8 @@ class ApiService {
   // ============ SOURCE CONVERSATIONS ============
 
   Future<Map<String, dynamic>> getSourceConversation(String sourceId) async {
-    return await get<Map<String, dynamic>>('/sources/$sourceId/conversation');
+    return await get<Map<String, dynamic>>(
+        '/coding-agent/conversations/$sourceId');
   }
 
   Future<Map<String, dynamic>> sendFollowupMessage(
@@ -503,7 +624,8 @@ class ApiService {
     String message, {
     Map<String, dynamic>? githubContext,
   }) async {
-    return await post<Map<String, dynamic>>('/sources/$sourceId/message', {
+    return await post<Map<String, dynamic>>('/coding-agent/followups/send', {
+      'sourceId': sourceId,
       'message': message,
       if (githubContext != null) 'githubContext': githubContext,
     });

@@ -403,13 +403,6 @@ class CustomAuthService {
         final user = AppUser.fromMap(response['user']);
         await _cacheUser(user);
 
-        // Store refresh token securely if provided
-        if (response['refreshToken'] != null) {
-          await _secureStorage.write(
-              key: 'refresh_token', value: response['refreshToken']);
-          developer.log('Refresh token stored', name: 'CustomAuthService');
-        }
-
         return AuthResult(success: true, user: user);
       } else {
         throw AuthException(response['error'] ?? 'Sign in failed');
@@ -541,45 +534,22 @@ class CustomAuthService {
 
   Future<AuthTokens?> refreshTokens() async {
     try {
-      // Get stored refresh token
-      final refreshToken = await _secureStorage.read(key: 'refresh_token');
-      if (refreshToken == null) {
-        developer.log('No refresh token found', name: 'CustomAuthService');
-        return null;
-      }
-
       developer.log('Attempting to refresh token', name: 'CustomAuthService');
+      final success = await _api.refreshAccessToken();
 
-      final response = await _api.post<Map<String, dynamic>>('/auth/refresh', {
-        'refreshToken': refreshToken,
-      });
+      if (success) {
+        final accessToken = await _api.getToken();
+        final refreshToken = await _api.getRefreshToken();
 
-      if (response['success'] == true) {
-        final newAccessToken = response['accessToken'] as String;
-        final expiresIn = response['expiresIn'] as int;
-
-        // Calculate expiry time
-        final accessTokenExpiry =
-            DateTime.now().add(Duration(seconds: expiresIn));
-        final refreshTokenExpiry = DateTime.now().add(const Duration(days: 30));
-
-        final tokens = AuthTokens(
-          accessToken: newAccessToken,
-          refreshToken: refreshToken, // Keep existing refresh token
-          accessTokenExpiry: accessTokenExpiry,
-          refreshTokenExpiry: refreshTokenExpiry,
-        );
-
-        // Store new access token
-        await _api.setToken(newAccessToken);
-
-        developer.log('Token refreshed successfully',
-            name: 'CustomAuthService');
-        return tokens;
+        if (accessToken != null && refreshToken != null) {
+          return AuthTokens(
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            accessTokenExpiry: DateTime.now().add(const Duration(minutes: 15)),
+            refreshTokenExpiry: DateTime.now().add(const Duration(days: 30)),
+          );
+        }
       }
-
-      developer.log('Token refresh failed: ${response['error']}',
-          name: 'CustomAuthService');
       return null;
     } catch (e) {
       developer.log('Token refresh error: $e', name: 'CustomAuthService');
@@ -600,9 +570,8 @@ class CustomAuthService {
   // ============================================================================
 
   Future<void> signOut() async {
-    await _api.clearToken();
+    await _api.clearTokens();
     await _secureStorage.delete(key: _userDataKey);
-    await _secureStorage.delete(key: 'refresh_token'); // Clear refresh token
     developer.log('User signed out, tokens cleared', name: 'CustomAuthService');
   }
 

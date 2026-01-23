@@ -74,6 +74,7 @@ import '../features/social/ui/public_plan_screen.dart';
 import '../features/social/ui/profile_screen.dart';
 import '../features/social/ui/edit_profile_screen.dart';
 import '../features/notifications/notifications_screen.dart';
+import '../core/error/not_found_screen.dart';
 
 String getInitialLocation(bool hasSeenOnboarding) {
   return hasSeenOnboarding ? '/home' : '/onboarding';
@@ -86,6 +87,7 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
     initialLocation: getInitialLocation(hasSeenOnboarding),
     refreshListenable: authNotifier,
     redirect: createCustomAuthRedirect(container),
+    errorBuilder: (context, state) => NotFoundScreen(state: state),
     routes: [
       // Public routes
       GoRoute(
@@ -198,22 +200,22 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             },
           ),
           GoRoute(
-            path: '/notebook/:id/chat',
-            name: 'notebook-chat',
-            pageBuilder: (context, state) {
-              final id = state.pathParameters['id'] ?? '';
-              return buildTransitionPage(
-                child: NotebookChatScreen(notebookId: id),
-              );
-            },
-          ),
-          GoRoute(
             path: '/notebook/:id/studio',
             name: 'notebook-studio',
             pageBuilder: (context, state) {
               final id = state.pathParameters['id'] ?? '';
               return buildTransitionPage(
                 child: StudioScreen(notebookId: id),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/notebook/:id/chat',
+            name: 'notebook-chat',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return buildTransitionPage(
+                child: NotebookChatScreen(notebookId: id),
               );
             },
           ),

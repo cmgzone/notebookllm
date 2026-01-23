@@ -73,7 +73,15 @@ class _WebSearchScreenState extends ConsumerState<WebSearchScreen> {
       );
       if (!hasCredits) return;
 
-      ref.read(searchProvider.notifier).search(query, type: _searchType);
+      try {
+        await ref.read(searchProvider.notifier).search(query, type: _searchType);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Search failed: ${_getFriendlyErrorMessage(e.toString())}')),
+          );
+        }
+      }
     }
   }
 
@@ -188,11 +196,22 @@ $content''',
       }
     } catch (e) {
       if (mounted) {
+        final errorMessage = _getFriendlyErrorMessage(e.toString());
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error adding source: $e')),
+          SnackBar(content: Text('Error adding source: $errorMessage')),
         );
       }
     }
+  }
+
+  String _getFriendlyErrorMessage(String? error) {
+    if (error == null) return 'Unknown error occurred';
+    if (error.contains('404')) {
+      return 'Page not found (404). The source might be unavailable.';
+    } else if (error.contains('403')) {
+      return 'Access denied (403). The source might be protected.';
+    }
+    return error.replaceAll('Exception:', '').trim();
   }
 
   @override

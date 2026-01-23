@@ -214,24 +214,31 @@ export interface Source {
 
 class ApiService {
     private token: string | null = null;
+    private refreshToken: string | null = null;
+    private isRefreshing = false;
 
     constructor() {
         if (typeof window !== 'undefined') {
             this.token = localStorage.getItem('auth_token');
+            this.refreshToken = localStorage.getItem('refresh_token');
         }
     }
 
-    setToken(token: string) {
-        this.token = token;
+    setTokens(accessToken: string, refreshToken: string) {
+        this.token = accessToken;
+        this.refreshToken = refreshToken;
         if (typeof window !== 'undefined') {
-            localStorage.setItem('auth_token', token);
+            localStorage.setItem('auth_token', accessToken);
+            localStorage.setItem('refresh_token', refreshToken);
         }
     }
 
-    clearToken() {
+    clearTokens() {
         this.token = null;
+        this.refreshToken = null;
         if (typeof window !== 'undefined') {
             localStorage.removeItem('auth_token');
+            localStorage.removeItem('refresh_token');
         }
     }
 
@@ -240,16 +247,37 @@ class ApiService {
     }
 
     private async fetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+        const url = `${API_BASE}${endpoint}`;
         const headers: HeadersInit = {
             'Content-Type': 'application/json',
             ...(this.token && { 'Authorization': `Bearer ${this.token}` }),
             ...options.headers,
         };
 
-        const response = await fetch(`${API_BASE}${endpoint}`, {
+        const response = await fetch(url, {
             ...options,
             headers,
         });
+
+        if (response.status === 401 && this.refreshToken && !this.isRefreshing && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
+            console.log('[API] Access token expired, attempting refresh...');
+            const refreshed = await this.refreshTokens();
+            if (refreshed) {
+                // Retry the original request with the new token
+                const retryHeaders: HeadersInit = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`,
+                    ...options.headers,
+                };
+                const retryResponse = await fetch(url, {
+                    ...options,
+                    headers: retryHeaders,
+                });
+                if (retryResponse.ok) {
+                    return retryResponse.json();
+                }
+            }
+        }
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({ error: 'Request failed' }));
@@ -259,22 +287,55 @@ class ApiService {
         return response.json();
     }
 
+    async refreshTokens(): Promise<boolean> {
+        if (!this.refreshToken) return false;
+        this.isRefreshing = true;
+
+        try {
+            const response = await fetch(`${API_BASE}/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken: this.refreshToken }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.accessToken) {
+                    this.token = data.accessToken;
+                    if (typeof window !== 'undefined') {
+                        localStorage.setItem('auth_token', data.accessToken);
+                    }
+                    console.log('[API] Token refreshed successfully');
+                    return true;
+                }
+            } else {
+                console.warn('[API] Token refresh failed, logging out');
+                this.logout();
+            }
+        } catch (e) {
+            console.error('[API] Error refreshing token:', e);
+        } finally {
+            this.isRefreshing = false;
+        }
+        return false;
+    }
+
     // Auth
-    async login(email: string, password: string, rememberMe = false): Promise<{ token: string; user: User }> {
-        const data = await this.fetch<{ token: string; user: User }>('/auth/login', {
+    async login(email: string, password: string, rememberMe = false): Promise<{ accessToken: string; refreshToken: string; user: User }> {
+        const data = await this.fetch<{ accessToken: string; refreshToken: string; user: User }>('/auth/login', {
             method: 'POST',
             body: JSON.stringify({ email, password, rememberMe }),
         });
-        this.setToken(data.token);
+        this.setTokens(data.accessToken, data.refreshToken);
         return data;
     }
 
-    async signup(email: string, password: string, displayName?: string): Promise<{ token: string; user: User }> {
-        const data = await this.fetch<{ token: string; user: User }>('/auth/signup', {
+    async signup(email: string, password: string, displayName?: string): Promise<{ accessToken: string; refreshToken: string; user: User }> {
+        const data = await this.fetch<{ accessToken: string; refreshToken: string; user: User }>('/auth/signup', {
             method: 'POST',
             body: JSON.stringify({ email, password, displayName }),
         });
-        this.setToken(data.token);
+        this.setTokens(data.accessToken, data.refreshToken);
         return data;
     }
 
@@ -284,7 +345,7 @@ class ApiService {
     }
 
     logout() {
-        this.clearToken();
+        this.clearTokens();
     }
 
     // Notebooks

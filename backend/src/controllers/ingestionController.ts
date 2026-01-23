@@ -96,7 +96,7 @@ export const processSource = async (req: Request, res: Response) => {
         // 3. Call embedding service to store chunks
         try {
             const response = await axios.post(
-                `http://localhost:${process.env.PORT || 3000}/api/embeddings/store`,
+                `http://localhost:${process.env.PORT || 3000}/api/rag/embeddings/store`,
                 {
                     chunks: chunks.map(text => ({
                         sourceId,

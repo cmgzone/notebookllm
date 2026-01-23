@@ -6,14 +6,22 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 class ApiService {
     constructor() {
         this.token = localStorage.getItem('admin_token');
+        this.refreshToken = localStorage.getItem('admin_refresh_token');
+        this.isRefreshing = false;
     }
 
-    setToken(token) {
-        this.token = token;
-        if (token) {
-            localStorage.setItem('admin_token', token);
+    setTokens(accessToken, refreshToken) {
+        this.token = accessToken;
+        this.refreshToken = refreshToken;
+        if (accessToken) {
+            localStorage.setItem('admin_token', accessToken);
         } else {
             localStorage.removeItem('admin_token');
+        }
+        if (refreshToken) {
+            localStorage.setItem('admin_refresh_token', refreshToken);
+        } else {
+            localStorage.removeItem('admin_refresh_token');
         }
     }
 
@@ -21,9 +29,11 @@ class ApiService {
         return this.token || localStorage.getItem('admin_token');
     }
 
-    clearToken() {
+    clearTokens() {
         this.token = null;
+        this.refreshToken = null;
         localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin_refresh_token');
     }
 
     async request(endpoint, options = {}) {
@@ -44,11 +54,29 @@ class ApiService {
                 headers,
             });
 
+            // Handle 401 Unauthorized - attempt token refresh
+            if (response.status === 401 && this.refreshToken && !this.isRefreshing && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
+                console.log('[API] Access token expired, attempting refresh...');
+                const refreshed = await this.refreshTokens();
+                if (refreshed) {
+                    // Retry original request
+                    const retryHeaders = {
+                        ...headers,
+                        'Authorization': `Bearer ${this.token}`
+                    };
+                    const retryResponse = await fetch(url, {
+                        ...options,
+                        headers: retryHeaders
+                    });
+                    if (retryResponse.ok) return await retryResponse.json();
+                }
+            }
+
             const data = await response.json();
 
             if (!response.ok) {
                 if (response.status === 401) {
-                    this.clearToken();
+                    this.clearTokens();
                     window.location.href = '/login';
                 }
                 throw new Error(data.error || `Request failed: ${response.status}`);
@@ -59,6 +87,38 @@ class ApiService {
             console.error(`API Error [${endpoint}]:`, error);
             throw error;
         }
+    }
+
+    async refreshTokens() {
+        if (!this.refreshToken) return false;
+        this.isRefreshing = true;
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken: this.refreshToken }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.accessToken) {
+                    this.token = data.accessToken;
+                    localStorage.setItem('admin_token', this.token);
+                    console.log('[API] Token refreshed successfully');
+                    return true;
+                }
+            } else {
+                console.warn('[API] Token refresh failed, logging out');
+                this.clearTokens();
+                window.location.href = '/login';
+            }
+        } catch (e) {
+            console.error('[API] Error refreshing token:', e);
+        } finally {
+            this.isRefreshing = false;
+        }
+        return false;
     }
 
     // GET request
@@ -90,8 +150,11 @@ class ApiService {
     // ============ AUTH ============
     async login(email, password) {
         const data = await this.post('/auth/login', { email, password });
-        if (data.token) {
-            this.setToken(data.token);
+        if (data.accessToken && data.refreshToken) {
+            this.setTokens(data.accessToken, data.refreshToken);
+        } else if (data.token) {
+            // Fallback
+            this.setTokens(data.token, data.refreshToken || '');
         }
         return data;
     }

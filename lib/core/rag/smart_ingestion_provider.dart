@@ -2,16 +2,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'real_ingestion_service.dart';
 import 'chunk.dart';
-import '../../features/sources/source_provider.dart';
+import '../../features/sources/source.dart';
 import 'rag_provider.dart';
 
 final useRealIngestionProvider =
     StateProvider<bool>((ref) => true); // Enable real ingestion by default
 
 final ingestionProvider =
-    FutureProvider.family<List<Chunk>, String>((ref, sourceId) async {
-  final sources = ref.watch(sourceProvider);
-  final source = sources.firstWhere((s) => s.id == sourceId);
+    FutureProvider.family<List<Chunk>, Source>((ref, source) async {
   final real = ref.watch(realIngestionProvider);
 
   try {
@@ -21,7 +19,7 @@ final ingestionProvider =
     return chunks;
   } catch (e) {
     if (kDebugMode) {
-      debugPrint('Ingestion failed for source $sourceId: $e');
+      debugPrint('Ingestion failed for source ${source.id}: $e');
     }
     // Fallback to mock ingestion if real ingestion fails
     final service = ref.read(ingestionServiceProvider);

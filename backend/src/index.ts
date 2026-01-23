@@ -118,6 +118,8 @@ app.use('/api/chunks', chunksRoutes);
 app.use('/api/tags', tagsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/subscriptions', subscriptionsRoutes);
+app.use('/api/rag', ragRoutes); // Moved up and given specific prefix
+app.use('/api/agent-skills', agentSkillsRoutes); // Moved up
 app.use('/api/admin', adminRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/media', mediaRoutes);
@@ -126,6 +128,7 @@ app.use('/api/recommendations', recommendationsRoutes);
 app.use('/api/gamification', gamificationRoutes);
 app.use('/api/study', studyRoutes);
 app.use('/api/ebooks', ebookRoutes);
+app.use('/api/research/deep', deepResearchRoutes); // Specific subpath
 app.use('/api/research', researchRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/features', featuresRoutes);
@@ -141,9 +144,6 @@ app.use('/api/messaging', messagingRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/google-drive', googleDriveRoutes);
 app.use('/api/content', contentRoutes);
-app.use('/api/research', deepResearchRoutes);
-app.use('/api', ragRoutes); // Register under /api base as it defines specific paths like /api/embeddings/*
-app.use('/api/agent-skills', agentSkillsRoutes);
 
 // 404 handler
 app.use((req, res) => {

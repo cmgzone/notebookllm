@@ -91,7 +91,7 @@ class AuthService {
 
   /// Logout user
   Future<void> logout() async {
-    await _apiService.clearToken();
+    await _apiService.clearTokens();
   }
 
   /// Initialize auth state

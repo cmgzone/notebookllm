@@ -40,13 +40,15 @@ class SourceNotifier extends StateNotifier<List<Source>> {
         try {
           return await apiService.getSourcesForNotebook(notebook['id']);
         } catch (e) {
-          debugPrint('⚠️ Error loading sources for notebook ${notebook['id']}: $e');
+          debugPrint(
+              '⚠️ Error loading sources for notebook ${notebook['id']}: $e');
           return <Map<String, dynamic>>[];
         }
       });
 
       final sourcesLists = await Future.wait(sourcesFutures);
-      List<Map<String, dynamic>> allSources = sourcesLists.expand((i) => i).toList();
+      List<Map<String, dynamic>> allSources =
+          sourcesLists.expand((i) => i).toList();
 
       debugPrint('📊 Loaded ${allSources.length} sources');
 
@@ -76,7 +78,7 @@ class SourceNotifier extends StateNotifier<List<Source>> {
       debugPrint('✅ Loaded ${state.length} sources successfully');
 
       // Ingest all sources into vector store for RAG and artifacts
-      _ingestAllSources();
+      Future.microtask(() => _ingestAllSources());
     } catch (e, stackTrace) {
       debugPrint('❌ Error loading sources: $e');
       debugPrint('Stack trace: $stackTrace');
@@ -135,7 +137,7 @@ class SourceNotifier extends StateNotifier<List<Source>> {
     for (final source in state) {
       try {
         // This triggers the ingestion provider which adds chunks to vector store
-        ref.read(ingestionProvider(source.id));
+        ref.read(ingestionProvider(source));
       } catch (e) {
         debugPrint('⚠️ Failed to ingest source ${source.id}: $e');
       }
@@ -229,7 +231,7 @@ class SourceNotifier extends StateNotifier<List<Source>> {
       try {
         debugPrint('Triggering ingestion for source: ${source.id}');
         if (source.notebookId.isNotEmpty) {
-          ref.read(ingestionProvider(source.id));
+          Future.microtask(() => ref.read(ingestionProvider(source)));
         }
       } catch (e) {
         debugPrint('Warning: Ingestion failed for source ${source.id}: $e');

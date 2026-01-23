@@ -1,4 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:uuid/uuid.dart';
 
 part 'mind_map_node.freezed.dart';
 part 'mind_map_node.g.dart';
@@ -18,17 +19,27 @@ class MindMapNode with _$MindMapNode {
 
   const MindMapNode._();
 
-  factory MindMapNode.fromBackendJson(Map<String, dynamic> json) => MindMapNode(
-        id: json['id'],
-        label: json['label'],
-        children: (json['children'] as List? ?? [])
-            .map((c) => MindMapNode.fromBackendJson(c))
-            .toList(),
-        level: json['level'] ?? 0,
-        colorValue: json['colorValue'],
-        x: (json['x'] as num?)?.toDouble(),
-        y: (json['y'] as num?)?.toDouble(),
+  factory MindMapNode.fromBackendJson(dynamic json) {
+    if (json is! Map<String, dynamic>) {
+      return MindMapNode(
+        id: const Uuid().v4(),
+        label: json?.toString() ?? 'New Node',
+        level: 0,
+        children: [],
       );
+    }
+    return MindMapNode(
+      id: json['id'] ?? const Uuid().v4(),
+      label: json['label'] ?? 'New Node',
+      children: (json['children'] as List? ?? [])
+          .map((c) => MindMapNode.fromBackendJson(c))
+          .toList(),
+      level: json['level'] ?? 0,
+      colorValue: json['colorValue'],
+      x: (json['x'] as num?)?.toDouble(),
+      y: (json['y'] as num?)?.toDouble(),
+    );
+  }
 
   Map<String, dynamic> toBackendJson() => {
         'id': id,

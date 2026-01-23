@@ -46,7 +46,7 @@ export const authenticateToken = async (
     if (isApiToken(token)) {
         try {
             const result = await tokenService.validateToken(token);
-            
+
             if (!result.valid) {
                 // Map error messages to appropriate HTTP status codes
                 if (result.error === 'Token expired') {
@@ -75,7 +75,7 @@ export const authenticateToken = async (
                 const endpoint = `${req.method} ${req.originalUrl || req.url}`;
                 const ipAddress = req.ip || req.socket?.remoteAddress;
                 const userAgent = req.headers['user-agent'];
-                
+
                 tokenService.logTokenUsage(
                     result.tokenId,
                     endpoint,
@@ -108,9 +108,12 @@ export const authenticateToken = async (
         req.authMethod = 'jwt';
         if (decoded.role) req.userRole = decoded.role;
         next();
-    } catch (error) {
+    } catch (error: any) {
         console.log(`[Auth] JWT validation failed:`, error);
-        return res.status(403).json({ error: 'Invalid or expired token' });
+
+        // Return 401 for expired or invalid tokens so clients know to refresh
+        const message = error.name === 'TokenExpiredError' ? 'Token expired' : 'Invalid token';
+        return res.status(401).json({ error: message });
     }
 };
 
@@ -169,7 +172,7 @@ export const optionalAuth = async (
     if (isApiToken(token)) {
         try {
             const result = await tokenService.validateToken(token);
-            
+
             if (result.valid) {
                 req.userId = result.userId;
                 req.authMethod = 'api_token';
@@ -187,7 +190,7 @@ export const optionalAuth = async (
                     const endpoint = `${req.method} ${req.originalUrl || req.url}`;
                     const ipAddress = req.ip || req.socket?.remoteAddress;
                     const userAgent = req.headers['user-agent'];
-                    
+
                     tokenService.logTokenUsage(
                         result.tokenId,
                         endpoint,

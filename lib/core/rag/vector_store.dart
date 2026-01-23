@@ -18,7 +18,7 @@ class VectorStore {
   Future<List<(Chunk, double)>> search(String query,
       {int topK = 5, String? notebookId}) async {
     try {
-      final response = await _api.post('/embeddings/search', {
+      final response = await _api.post('/rag/embeddings/search', {
         'query': query,
         'limit': topK,
         if (notebookId != null) 'notebookId': notebookId,
