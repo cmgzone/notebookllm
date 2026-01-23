@@ -15,7 +15,7 @@ async function checkDefaultModel() {
         console.log('─'.repeat(80));
         
         result.rows.forEach(model => {
-            const badges = [];
+            const badges: string[] = [];
             if (model.is_default) badges.push('DEFAULT');
             if (model.is_premium) badges.push('PREMIUM');
             if (!model.is_active) badges.push('INACTIVE');
