@@ -83,22 +83,19 @@ class AppScaffold extends StatelessWidget {
                 padding: EdgeInsets.symmetric(vertical: 24.0),
                 child: FlutterLogo(size: 32), // Placeholder for App Logo
               ),
-              trailing: Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    // Quick Model Selector in Rail
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 16),
-                      child: QuickAIModelSelector(compact: true),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.settings),
-                      onPressed: () => context.push('/settings'),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                ),
+              trailing: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 16),
+                    child: QuickAIModelSelector(compact: true),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings),
+                    onPressed: () => context.push('/settings'),
+                  ),
+                  const SizedBox(height: 16),
+                ],
               ),
             ),
             const VerticalDivider(thickness: 1, width: 1),

@@ -140,24 +140,11 @@ class DeepResearchService {
       final settings =
           await AISettingsService.getSettingsWithProviderDetection(ref);
 
-      // Calculate max results based on depth
-      int maxResults = 10;
-      switch (depth) {
-        case ResearchDepth.quick:
-          maxResults = 5;
-          break;
-        case ResearchDepth.standard:
-          maxResults = 10;
-          break;
-        case ResearchDepth.deep:
-          maxResults = 20;
-          break;
-      }
-
       final stream = api.performDeepResearchStream(
         query: query,
         notebookId: notebookId,
-        maxResults: maxResults,
+        depth: depth.name,
+        template: template.name,
         includeImages: true,
         provider: settings.provider,
         model: settings.model,

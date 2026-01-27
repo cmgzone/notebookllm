@@ -43,11 +43,13 @@ class AuthService {
   Future<Map<String, dynamic>> login({
     required String email,
     required String password,
+    bool rememberMe = false,
   }) async {
     try {
       final response = await _apiService.login(
         email: email,
         password: password,
+        rememberMe: rememberMe,
       );
 
       if (response['success'] == true && response['user'] != null) {
@@ -63,7 +65,7 @@ class AuthService {
   /// Get current user from backend
   Future<Map<String, dynamic>> getCurrentUser() async {
     try {
-      final response = await _apiService.getCurrentUser();
+      final response = await _apiService.getCurrentUser(clearTokenOn401: false);
 
       if (response['success'] == true && response['user'] != null) {
         return response['user'];
@@ -82,7 +84,7 @@ class AuthService {
       if (token == null) return false;
 
       // Try to get current user to verify token is valid
-      await getCurrentUser();
+      await _apiService.getCurrentUser(clearTokenOn401: false);
       return true;
     } catch (e) {
       return false;

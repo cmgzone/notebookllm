@@ -29,7 +29,7 @@ class ChatNotifier extends StateNotifier<List<Message>> {
 
     try {
       final history =
-          await ref.read(apiServiceProvider).getChatHistory('global');
+          await ref.read(apiServiceProvider).getChatHistory();
 
       final messages = <Message>[];
 
@@ -122,16 +122,16 @@ class ChatNotifier extends StateNotifier<List<Message>> {
     state = [...state, userMsg];
 
     // 2. Save user message to backend in background (non-blocking)
-    unawaited(
-      ref
-          .read(apiServiceProvider)
-          .saveChatMessage(
-            notebookId: 'global',
-            role: 'user',
-            content: text,
-          )
-          .catchError((_) => <String, dynamic>{}),
-    );
+      unawaited(
+        ref
+            .read(apiServiceProvider)
+            .saveChatMessage(
+              notebookId: null,
+              role: 'user',
+              content: text,
+            )
+            .catchError((_) => <String, dynamic>{}),
+      );
 
     // Use web browsing mode if enabled
     if (useWebBrowsing) {
@@ -200,7 +200,7 @@ class ChatNotifier extends StateNotifier<List<Message>> {
         ref
             .read(apiServiceProvider)
             .saveChatMessage(
-              notebookId: 'global',
+              notebookId: null,
               role: 'model',
               content: buffer.toString(),
             )

@@ -218,9 +218,28 @@ class ApiService {
         }
       }
     } catch (e) {
-      developer.log('[API] Refresh token expired or invalid, logging out',
-          name: 'ApiService');
-      await clearTokens();
+      if (e is DioException) {
+        // Only clear tokens if refresh token is invalid/expired
+        final status = e.response?.statusCode;
+        if (status == 401) {
+          developer.log('[API] Refresh token invalid/expired. Clearing tokens.',
+              name: 'ApiService');
+          await clearTokens();
+        } else if (_isConnectionError(e) ||
+            e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.receiveTimeout ||
+            e.type == DioExceptionType.sendTimeout) {
+          developer.log(
+              '[API] Network error during refresh – will keep tokens and retry later',
+              name: 'ApiService');
+        } else {
+          developer.log('[API] Unexpected refresh error: ${e.message}',
+              name: 'ApiService');
+        }
+      } else {
+        developer.log('[API] Non-network refresh error: $e',
+            name: 'ApiService');
+      }
     }
     return false;
   }
@@ -696,19 +715,22 @@ class ApiService {
 
   // ============ CHAT ============
 
-  Future<List<Map<String, dynamic>>> getChatHistory(String notebookId) async {
-    final response =
-        await get<Map<String, dynamic>>('/chat/$notebookId/history');
+  Future<List<Map<String, dynamic>>> getChatHistory({String? notebookId}) async {
+    final path = notebookId != null
+        ? '/ai/chat/history?notebookId=$notebookId'
+        : '/ai/chat/history';
+    final response = await get<Map<String, dynamic>>(path);
     return List<Map<String, dynamic>>.from(response['messages'] ?? []);
   }
 
   Future<Map<String, dynamic>> saveChatMessage({
-    required String notebookId,
+    String? notebookId,
     required String role,
     required String content,
     Map<String, dynamic>? metadata,
   }) async {
-    return await post<Map<String, dynamic>>('/chat/$notebookId/messages', {
+    return await post<Map<String, dynamic>>('/ai/chat/message', {
+      'notebookId': notebookId,
       'role': role,
       'content': content,
       if (metadata != null) 'metadata': metadata,
@@ -756,7 +778,7 @@ class ApiService {
     if (token == null) throw Exception('Not authenticated');
     try {
       final response = await _dio.post(
-        '/ai/chat-stream',
+        '/ai/chat/stream',
         data: {
           'messages': messages,
           'provider': provider,
@@ -765,6 +787,7 @@ class ApiService {
         },
         options: Options(
           responseType: ResponseType.stream,
+          extra: {'clearTokenOn401': false},
           headers: {
             'Accept': 'text/event-stream',
             'Cache-Control': 'no-cache',
@@ -772,20 +795,81 @@ class ApiService {
           },
         ),
       );
-      final stream = response.data.stream as Stream<List<int>>;
-      await for (final chunk in stream.transform(utf8.decoder)) {
-        if (chunk.startsWith('data: ')) {
-          final data = chunk.substring(6).trim();
-          if (data == '[DONE]') break;
-          try {
-            if (data.startsWith('{')) {
-              final json = jsonDecode(data);
-              if (json['content'] != null) yield json['content'];
-            } else {
-              yield data;
+      final rawStream = response.data.stream;
+      String buffer = '';
+
+      if (rawStream is Stream<Uint8List>) {
+        await for (final chunk in rawStream) {
+          final text = utf8.decode(chunk, allowMalformed: true);
+          buffer += text;
+          final lines = buffer.split('\n');
+          buffer = lines.last;
+          for (int i = 0; i < lines.length - 1; i++) {
+            final line = lines[i].trim();
+            if (line.isEmpty) continue;
+            if (line.startsWith('data: ')) {
+              final data = line.substring(6).trim();
+              if (data == '[DONE]') return;
+              try {
+                if (data.startsWith('{')) {
+                  final json = jsonDecode(data);
+                  if (json['content'] != null) yield json['content'];
+                } else {
+                  yield data;
+                }
+              } catch (_) {
+                yield data;
+              }
             }
-          } catch (_) {
-            yield data;
+          }
+        }
+      } else if (rawStream is Stream<List<int>>) {
+        await for (final bytes in rawStream) {
+          final text = utf8.decode(bytes, allowMalformed: true);
+          buffer += text;
+          final lines = buffer.split('\n');
+          buffer = lines.last;
+          for (int i = 0; i < lines.length - 1; i++) {
+            final line = lines[i].trim();
+            if (line.isEmpty) continue;
+            if (line.startsWith('data: ')) {
+              final data = line.substring(6).trim();
+              if (data == '[DONE]') return;
+              try {
+                if (data.startsWith('{')) {
+                  final json = jsonDecode(data);
+                  if (json['content'] != null) yield json['content'];
+                } else {
+                  yield data;
+                }
+              } catch (_) {
+                yield data;
+              }
+            }
+          }
+        }
+      } else if (rawStream is Stream<String>) {
+        await for (final chunk in rawStream) {
+          buffer += chunk;
+          final lines = buffer.split('\n');
+          buffer = lines.last;
+          for (int i = 0; i < lines.length - 1; i++) {
+            final line = lines[i].trim();
+            if (line.isEmpty) continue;
+            if (line.startsWith('data: ')) {
+              final data = line.substring(6).trim();
+              if (data == '[DONE]') return;
+              try {
+                if (data.startsWith('{')) {
+                  final json = jsonDecode(data);
+                  if (json['content'] != null) yield json['content'];
+                } else {
+                  yield data;
+                }
+              } catch (_) {
+                yield data;
+              }
+            }
           }
         }
       }
@@ -797,7 +881,8 @@ class ApiService {
   Stream<Map<String, dynamic>> performDeepResearchStream({
     required String query,
     String? notebookId,
-    int? maxResults,
+    required String depth,
+    required String template,
     bool? includeImages,
     String? provider,
     String? model,
@@ -805,23 +890,16 @@ class ApiService {
     final token = await getToken();
     if (token == null) throw Exception('Not authenticated');
     try {
-      // Map maxResults to depth
-      String depth = 'standard';
-      if (maxResults != null) {
-        if (maxResults <= 5) {
-          depth = 'quick';
-        } else if (maxResults >= 15) {
-          depth = 'deep';
-        }
-      }
-
       final response = await _dio.post(
         '/research/stream',
         data: {
           'query': query,
           'depth': depth,
-          'template': 'general',
-          if (notebookId != null) 'notebookId': notebookId,
+          'template': template,
+          if (notebookId != null && notebookId.isNotEmpty) 'notebookId': notebookId,
+          if (includeImages != null) 'includeImages': includeImages,
+          if (provider != null && provider.isNotEmpty) 'provider': provider,
+          if (model != null && model.isNotEmpty) 'model': model,
         },
         options: Options(
           responseType: ResponseType.stream,

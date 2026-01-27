@@ -1,7 +1,8 @@
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import axios from 'axios';
 import pool from '../config/database.js';
 import { generateResponse, ChatMessage } from '../services/aiService.js';
+import type { AuthRequest } from '../middleware/auth.js';
 
 interface DeepResearchRequest {
     query: string;
@@ -24,9 +25,9 @@ interface ResearchStep {
  * Deep Research Service - Backend powered
  * Performs multi-step autonomous research with streaming updates
  */
-export const performDeepResearch = async (req: Request, res: Response) => {
+export const performDeepResearch = async (req: AuthRequest, res: Response) => {
     const { query, notebookId, maxResults = 10, includeImages = true, provider = 'gemini', model } = req.body as DeepResearchRequest;
-    const userId = (req as any).user?.userId;
+    const userId = req.userId;
 
     if (!userId) {
         return res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -173,9 +174,9 @@ export const performDeepResearch = async (req: Request, res: Response) => {
 /**
  * Get research history for user
  */
-export const getResearchHistory = async (req: Request, res: Response) => {
+export const getResearchHistory = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = (req as any).user?.userId;
+        const userId = req.userId;
         const { notebookId, limit = 50, offset = 0 } = req.query;
 
         if (!userId) {
@@ -216,9 +217,9 @@ export const getResearchHistory = async (req: Request, res: Response) => {
 /**
  * Get specific research session details
  */
-export const getResearchSession = async (req: Request, res: Response) => {
+export const getResearchSession = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = (req as any).user?.userId;
+        const userId = req.userId;
         const { sessionId } = req.params;
 
         if (!userId) {

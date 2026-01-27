@@ -17,7 +17,7 @@ router.use(authenticateToken);
 // Start cloud research (synchronous - waits for completion)
 router.post('/cloud', async (req: AuthRequest, res: Response) => {
     try {
-        const { query, depth = 'standard', template = 'general', notebookId } = req.body;
+        const { query, depth = 'standard', template = 'general', notebookId, provider, model } = req.body;
 
         if (!query) {
             return res.status(400).json({ error: 'Query is required' });
@@ -26,7 +26,9 @@ router.post('/cloud', async (req: AuthRequest, res: Response) => {
         const config: ResearchConfig = {
             depth: depth as ResearchDepth,
             template: template as ResearchTemplate,
-            notebookId
+            notebookId,
+            provider: provider === 'openrouter' ? 'openrouter' : 'gemini',
+            model: typeof model === 'string' && model.length > 0 ? model : undefined
         };
 
         // Set longer timeout for research
@@ -49,7 +51,7 @@ router.post('/cloud', async (req: AuthRequest, res: Response) => {
 // Stream cloud research (SSE)
 router.post('/stream', async (req: AuthRequest, res: Response) => {
     try {
-        const { query, depth = 'standard', template = 'general', notebookId } = req.body;
+        const { query, depth = 'standard', template = 'general', notebookId, provider, model } = req.body;
 
         if (!query) {
             return res.status(400).json({ error: 'Query is required' });
@@ -58,7 +60,9 @@ router.post('/stream', async (req: AuthRequest, res: Response) => {
         const config: ResearchConfig = {
             depth: depth as ResearchDepth,
             template: template as ResearchTemplate,
-            notebookId
+            notebookId,
+            provider: provider === 'openrouter' ? 'openrouter' : 'gemini',
+            model: typeof model === 'string' && model.length > 0 ? model : undefined
         };
 
         // Set headers for SSE

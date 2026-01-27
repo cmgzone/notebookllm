@@ -12,6 +12,8 @@ export interface ResearchConfig {
     template: ResearchTemplate;
     notebookId?: string;
     useContextEngineering?: boolean;
+    provider?: 'gemini' | 'openrouter';
+    model?: string;
 }
 
 export interface ResearchSource {
@@ -171,7 +173,13 @@ async function fetchPageContent(url: string): Promise<string> {
     }
 }
 
-async function generateSubQueries(query: string, template: ResearchTemplate, count: number): Promise<string[]> {
+async function generateSubQueries(
+    query: string,
+    template: ResearchTemplate,
+    count: number,
+    provider?: 'gemini' | 'openrouter',
+    model?: string
+): Promise<string[]> {
     const messages: ChatMessage[] = [{
         role: 'user',
         content: `Generate ${count} specific search queries to research: "${query}"
@@ -180,11 +188,25 @@ Return only queries, one per line, no bullets or numbers.`
     }];
 
     try {
-        const response = await generateWithGemini(messages);
+        if (provider === 'openrouter') {
+            const response = model
+                ? await generateWithOpenRouter(messages, model)
+                : await generateWithOpenRouter(messages);
+            return response.split('\n').map(l => l.trim()).filter(l => l.length > 0).slice(0, count);
+        }
+        const response = model
+            ? await generateWithGemini(messages, model)
+            : await generateWithGemini(messages);
         return response.split('\n').map(l => l.trim()).filter(l => l.length > 0).slice(0, count);
-    } catch (error) {
-        // Fallback queries
-        return [query, `${query} explained`, `${query} examples`, `${query} benefits`, `${query} challenges`].slice(0, count);
+    } catch (error: any) {
+        try {
+            const response = model
+                ? await generateWithOpenRouter(messages, model)
+                : await generateWithOpenRouter(messages);
+            return response.split('\n').map(l => l.trim()).filter(l => l.length > 0).slice(0, count);
+        } catch (_) {
+            return [query, `${query} explained`, `${query} examples`, `${query} benefits`, `${query} challenges`].slice(0, count);
+        }
     }
 }
 
@@ -193,7 +215,9 @@ async function synthesizeReport(
     sources: ResearchSource[],
     images: string[],
     videos: string[],
-    template: ResearchTemplate
+    template: ResearchTemplate,
+    provider?: 'gemini' | 'openrouter',
+    model?: string
 ): Promise<string> {
     // Limit sources and content to prevent memory issues
     const limitedSources = sources.slice(0, 8).map((s, i) => ({
@@ -225,20 +249,41 @@ Write the complete report:`
     }];
 
     try {
-        console.log('[Research] Attempting to generate report with Gemini...');
-        const result = await generateWithGemini(messages, 'gemini-1.5-pro');
-        console.log('[Research] Report generated successfully with Gemini');
-        return result;
-    } catch (geminiError: any) {
-        console.error('[Research] Gemini failed:', geminiError.message);
-        try {
-            console.log('[Research] Falling back to OpenRouter...');
-            const result = await generateWithOpenRouter(messages);
+        if (provider === 'openrouter') {
+            console.log('[Research] Attempting to generate report with OpenRouter...');
+            const result = model
+                ? await generateWithOpenRouter(messages, model)
+                : await generateWithOpenRouter(messages);
             console.log('[Research] Report generated successfully with OpenRouter');
             return result;
-        } catch (openRouterError: any) {
-            console.error('[Research] OpenRouter also failed:', openRouterError.message);
-            // Return a basic summary if both AI services fail
+        }
+
+        console.log('[Research] Attempting to generate report with Gemini...');
+        const result = model
+            ? await generateWithGemini(messages, model)
+            : await generateWithGemini(messages);
+        console.log('[Research] Report generated successfully with Gemini');
+        return result;
+    } catch (primaryError: any) {
+        console.error('[Research] Primary provider failed:', primaryError.message);
+        try {
+            if (provider === 'openrouter') {
+                console.log('[Research] Falling back to Gemini...');
+                const result = model
+                    ? await generateWithGemini(messages, model)
+                    : await generateWithGemini(messages);
+                console.log('[Research] Report generated successfully with Gemini');
+                return result;
+            }
+
+            console.log('[Research] Falling back to OpenRouter...');
+            const result = model
+                ? await generateWithOpenRouter(messages, model)
+                : await generateWithOpenRouter(messages);
+            console.log('[Research] Report generated successfully with OpenRouter');
+            return result;
+        } catch (secondaryError: any) {
+            console.error('[Research] Secondary provider also failed:', secondaryError.message);
             return `# Research Report: ${query}
 
 ## Summary
@@ -273,7 +318,13 @@ export async function performCloudResearch(
 
         // Generate sub-queries
         onProgress?.({ status: 'Generating research angles...', progress: 0.15, isComplete: false });
-        const subQueries = await generateSubQueries(query, config.template, depthConfig.subQueryCount);
+        const subQueries = await generateSubQueries(
+            query,
+            config.template,
+            depthConfig.subQueryCount,
+            config.provider,
+            config.model
+        );
 
         // Initial media search
         const [images, videos] = await Promise.all([
@@ -377,7 +428,15 @@ export async function performCloudResearch(
         // Synthesize report
         onProgress?.({ status: 'Synthesizing report...', progress: 0.8, sources, images: uniqueImages, videos: uniqueVideos, isComplete: false });
         
-        const report = await synthesizeReport(query, sources, uniqueImages, uniqueVideos, config.template);
+        const report = await synthesizeReport(
+            query,
+            sources,
+            uniqueImages,
+            uniqueVideos,
+            config.template,
+            config.provider,
+            config.model
+        );
 
         // Save to database
         await pool.query('BEGIN');

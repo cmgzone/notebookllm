@@ -56,8 +56,9 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final history =
-          await ref.read(apiServiceProvider).getChatHistory(widget.notebookId);
+      final history = await ref
+          .read(apiServiceProvider)
+          .getChatHistory(notebookId: widget.notebookId);
 
       final messages = <ChatMessage>[];
 

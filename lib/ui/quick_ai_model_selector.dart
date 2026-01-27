@@ -4,6 +4,8 @@ import '../core/ai/ai_models_provider.dart';
 import '../core/ai/ai_settings_service.dart';
 
 /// Compact AI model selector that appears on every page
+final modelSelectorCollapsedProvider = StateProvider<bool>((ref) => false);
+
 class QuickAIModelSelector extends ConsumerWidget {
   final bool compact;
 
@@ -14,6 +16,7 @@ class QuickAIModelSelector extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final selectedModel = ref.watch(selectedAIModelProvider);
     final modelsAsync = ref.watch(availableModelsProvider);
+    final collapsed = ref.watch(modelSelectorCollapsedProvider);
 
     return modelsAsync.when(
       data: (models) {
@@ -28,8 +31,13 @@ class QuickAIModelSelector extends ConsumerWidget {
         }
 
         // Find the selected model to display its name
-        final currentModel =
-            allModels.where((m) => m.id == selectedModel).firstOrNull;
+        AIModelOption? currentModel;
+        for (final m in allModels) {
+          if (m.id == selectedModel) {
+            currentModel = m;
+            break;
+          }
+        }
         final displayName = currentModel?.name ?? 'Select Model';
 
         return Container(
@@ -47,36 +55,65 @@ class QuickAIModelSelector extends ConsumerWidget {
               width: 1,
             ),
           ),
-          child: DropdownButton<String>(
-            value: allModels.any((m) => m.id == selectedModel)
-                ? selectedModel
-                : null,
-            hint: compact
-                ? Icon(Icons.auto_awesome, size: 20, color: scheme.primary)
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.auto_awesome, size: 16, color: scheme.primary),
-                      const SizedBox(width: 6),
-                      Text(
-                        displayName,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: scheme.onSurface,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-            underline: const SizedBox.shrink(),
-            isDense: true,
-            icon: compact
-                ? const SizedBox.shrink()
-                : Icon(Icons.arrow_drop_down, size: 18, color: scheme.primary),
-            dropdownColor: scheme.surfaceContainer,
-            borderRadius: BorderRadius.circular(12),
-            items: [
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Expanded(
+                child: collapsed
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.auto_awesome,
+                              size: compact ? 20 : 16,
+                              color: scheme.primary),
+                          if (!compact) const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              displayName,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: scheme.onSurface,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      )
+                    : DropdownButton<String>(
+                        isExpanded: true,
+                        value: allModels.any((m) => m.id == selectedModel)
+                            ? selectedModel
+                            : null,
+                        hint: compact
+                            ? Icon(Icons.auto_awesome,
+                                size: 20, color: scheme.primary)
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.auto_awesome,
+                                      size: 16, color: scheme.primary),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    displayName,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: scheme.onSurface,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                        underline: const SizedBox.shrink(),
+                        isDense: true,
+                        icon: compact
+                            ? const SizedBox.shrink()
+                            : Icon(Icons.arrow_drop_down,
+                                size: 18, color: scheme.primary),
+                        dropdownColor: scheme.surfaceContainer,
+                        borderRadius: BorderRadius.circular(12),
+                        items: [
               // Gemini models
               if (models['gemini']?.isNotEmpty == true) ...[
                 DropdownMenuItem<String>(
@@ -158,40 +195,63 @@ class QuickAIModelSelector extends ConsumerWidget {
                   );
                 }),
               ],
-            ],
-            onChanged: (val) async {
-              if (val != null && !val.startsWith('__')) {
-                // Find the model to determine its provider
-                final model = allModels.where((m) => m.id == val).firstOrNull;
-                if (model != null) {
-                  // Update the state
-                  ref.read(selectedAIModelProvider.notifier).state = val;
+                        ],
+                        onChanged: (val) async {
+                          if (val != null && !val.startsWith('__')) {
+                            AIModelOption? model;
+                            for (final m in allModels) {
+                              if (m.id == val) {
+                                model = m;
+                                break;
+                              }
+                            }
+                            if (model != null) {
+                              ref
+                                  .read(selectedAIModelProvider.notifier)
+                                  .state = val;
+                              await AISettingsService.setModel(val);
 
-                  // Save to SharedPreferences
-                  await AISettingsService.setModel(val);
+                              final provider = model.provider;
+                              String mappedProvider = provider;
+                              if (provider == 'openai' ||
+                                  provider == 'anthropic') {
+                                mappedProvider = 'openrouter';
+                              }
+                              await AISettingsService.setProvider(mappedProvider);
 
-                  // Auto-detect and save provider
-                  final provider = model.provider;
-                  String mappedProvider = provider;
-                  if (provider == 'openai' || provider == 'anthropic') {
-                    mappedProvider = 'openrouter';
-                  }
-                  await AISettingsService.setProvider(mappedProvider);
-
-                  // Show confirmation
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('✓ Switched to ${model.name}'),
-                        duration: const Duration(seconds: 2),
-                        behavior: SnackBarBehavior.floating,
-                        backgroundColor: scheme.primary,
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('✓ Switched to ${model.name}'),
+                                    duration: const Duration(seconds: 2),
+                                    behavior: SnackBarBehavior.floating,
+                                    backgroundColor: scheme.primary,
+                                  ),
+                                );
+                              }
+                            }
+                          }
+                        },
                       ),
-                    );
-                  }
-                }
-              }
-            },
+            ),
+              const SizedBox(width: 4),
+              InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () {
+                  final notifier =
+                      ref.read(modelSelectorCollapsedProvider.notifier);
+                  notifier.state = !collapsed;
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(
+                    collapsed ? Icons.expand_more : Icons.expand_less,
+                    size: 18,
+                    color: scheme.primary,
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },

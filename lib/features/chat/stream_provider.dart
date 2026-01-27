@@ -401,29 +401,62 @@ Answer the user's question to the best of your ability.
         ];
       }
 
-      // Always use Backend Proxy Stream with credit flags
-      final stream = ref.read(apiServiceProvider).chatWithAIStream(
+      final api = ref.read(apiServiceProvider);
+      try {
+        final stream = api.chatWithAIStream(
+          messages: messages,
+          provider: provider,
+          model: model,
+          useDeepSearch: useDeepSearch,
+          hasImage: imageBytes != null,
+        );
+
+        await for (final chunk in stream) {
+          if (!mounted) break;
+          final tokens = [StreamToken.text(text: chunk)];
+          if (mounted) {
+            state = [...state, ...tokens];
+          }
+          yield tokens;
+        }
+
+        const doneToken = StreamToken.done();
+        if (mounted) state = [...state, doneToken];
+        yield [doneToken];
+      } catch (streamErr) {
+        final lower = streamErr.toString().toLowerCase();
+        final shouldFallback = kIsWeb ||
+            lower.contains('network') ||
+            lower.contains('connection') ||
+            lower.contains('timeout');
+
+        if (shouldFallback) {
+          final full = await api.chatWithAI(
             messages: messages,
             provider: provider,
             model: model,
-            useDeepSearch: useDeepSearch,
-            hasImage: imageBytes != null,
           );
 
-      await for (final chunk in stream) {
-        if (!mounted) break;
+          const chunkSize = 300;
+          int i = 0;
+          while (i < full.length) {
+            final next = (i + chunkSize > full.length) ? full.length : i + chunkSize;
+            final part = full.substring(i, next);
+            final tokens = [StreamToken.text(text: part)];
+            if (mounted) {
+              state = [...state, ...tokens];
+            }
+            yield tokens;
+            i = next;
+          }
 
-        final tokens = [StreamToken.text(text: chunk)];
-        if (mounted) {
-          state = [...state, ...tokens];
+          const doneToken = StreamToken.done();
+          if (mounted) state = [...state, doneToken];
+          yield [doneToken];
+        } else {
+          rethrow;
         }
-        yield tokens;
       }
-
-      // Signal completion
-      const doneToken = StreamToken.done();
-      if (mounted) state = [...state, doneToken];
-      yield [doneToken];
 
       // Track gamification
       try {
@@ -480,7 +513,9 @@ Answer the user's question to the best of your ability.
         errorMessage = '⚠️ **Network Error**\n\n'
             'Failed to connect to the AI service. Please check your internet connection and try again.';
       } else if (lowerError.contains('401') ||
-          lowerError.contains('unauthorized')) {
+          lowerError.contains('unauthorized') ||
+          lowerError.contains('not authenticated') ||
+          lowerError.contains('access token required')) {
         errorMessage = '⚠️ **Authentication Error**\n\n'
             'Your session has expired. Please log out and log back in.';
       } else {

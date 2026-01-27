@@ -436,6 +436,7 @@ export async function initializeDatabase() {
 }
 
 // Call initialization
-initializeDatabase().catch(console.error);
+// NOTE: Commented out to prevent multiple initializations when module is imported
+// initializeDatabase().catch(console.error);
 
 export default pool;

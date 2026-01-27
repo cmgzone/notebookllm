@@ -1,127 +1,293 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../notebook/notebook_provider.dart';
+import 'create_notebook_dialog.dart';
 
-class DashboardGrid extends StatelessWidget {
+class DashboardGrid extends ConsumerWidget {
   const DashboardGrid({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Premium Bento Grid Layout
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Industrial Dashboard Layout
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Explore AI Tools',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              'Research & Analysis',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
             ).animate().fadeIn().slideX(),
-            const SizedBox(height: 16),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                // simple responsive logic
-
-                return Column(
-                  children: [
-                    // Top Row: 2 Big Cards
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _BentoCard(
-                            title: 'Wellness AI',
-                            subtitle: 'Mental health & balance',
-                            icon: LucideIcons.heartHandshake,
-                            color: const Color(0xFFEC4899), // Pink
-                            onTap: () => context.push('/wellness'),
-                            height: 160,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _BentoCard(
-                            title: 'Ai Tutor',
-                            subtitle: 'Master any subject',
-                            icon: LucideIcons.graduationCap,
-                            color: const Color(0xFF6366F1), // Indigo
-                            onTap: () {
-                              // Navigate to a generic tutor selection or first notebook
-                              // For now, let's just go to language learning as a proxy or studio
-                              context.push('/language-learning');
-                            },
-                            height: 160,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // Middle Row: 3 Medium Cards
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _BentoCard(
-                            title: 'Code',
-                            icon: LucideIcons.code,
-                            color: const Color(0xFF22D3EE), // Cyan
-                            onTap: () => context.push('/code-review'),
-                            height: 120,
-                            compact: true,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _BentoCard(
-                            title: 'Plan',
-                            icon: LucideIcons.clipboardList,
-                            color: const Color(0xFFF472B6), // Pink 400
-                            onTap: () => context.push('/planning'),
-                            height: 120,
-                            compact: true,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _BentoCard(
-                            title: 'Social Hub',
-                            icon: LucideIcons.users,
-                            color: const Color(0xFF10B981), // Emerald
-                            onTap: () => context.push('/social'),
-                            height: 120,
-                            compact: true,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _BentoCard(
-                            title: 'Stats',
-                            icon: LucideIcons.trophy,
-                            color: const Color(0xFFFBBF24), // Amber
-                            onTap: () => context.push('/progress'),
-                            height: 120,
-                            compact: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // Bottom Row: Wide Banner
-                    _BentoCard(
-                      title: 'Deep Research Agent',
-                      subtitle: 'Analyze huge documents and web sources',
-                      icon: LucideIcons.search,
-                      color: const Color(0xFF8B5CF6), // Violet
-                      onTap: () => context.push('/search'),
-                      height: 100,
-                      isWide: true,
-                    ),
-                  ],
-                );
-              },
+            const SizedBox(height: 12),
+            
+            // 1. Deep Research (Top Priority)
+            _BentoCard(
+              title: 'Deep Research Agent',
+              subtitle: 'Analyze huge documents and web sources',
+              icon: LucideIcons.search,
+              color: const Color(0xFF8B5CF6), // Violet
+              onTap: () => context.push('/search'),
+              height: 140,
+              isWide: true,
             ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _BentoCard(
+                    title: 'AI Browser',
+                    subtitle: 'Browse pages with AI help',
+                    icon: LucideIcons.globe,
+                    color: const Color(0xFF60A5FA), // Blue 400
+                    onTap: () => context.push('/ai-browser'),
+                    height: 120,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _BentoCard(
+                    title: 'Sources',
+                    subtitle: 'Manage your imported content',
+                    icon: LucideIcons.fileText,
+                    color: const Color(0xFF34D399), // Emerald 400
+                    onTap: () => context.push('/sources'),
+                    height: 120,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            Text(
+              'Engineering & Development',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+            ).animate().fadeIn().slideX(delay: 100.ms),
+            const SizedBox(height: 12),
+
+            // 2. Coding Tools Section
+            Row(
+              children: [
+                Expanded(
+                  child: _BentoCard(
+                    title: 'Code Review',
+                    subtitle: 'AI-powered code analysis',
+                    icon: LucideIcons.code,
+                    color: const Color(0xFF22D3EE), // Cyan
+                    onTap: () => context.push('/code-review'),
+                    height: 140,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _BentoCard(
+                    title: 'Architecture Plan',
+                    subtitle: 'Design & structure projects',
+                    icon: LucideIcons.clipboardList,
+                    color: const Color(0xFFF472B6), // Pink 400
+                    onTap: () => context.push('/planning'),
+                    height: 140,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _BentoCard(
+                    title: 'GitHub',
+                    subtitle: 'Connect repos and browse projects',
+                    icon: LucideIcons.github,
+                    color: const Color(0xFF94A3B8), // Slate 400
+                    onTap: () => context.push('/github'),
+                    height: 120,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _BentoCard(
+                    title: 'Studio',
+                    subtitle: 'Generate and review AI artifacts',
+                    icon: LucideIcons.palette,
+                    color: const Color(0xFFF59E0B), // Amber 500
+                    onTap: () => context.push('/studio'),
+                    height: 120,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            Text(
+              'Learning & Growth',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+            ).animate().fadeIn().slideX(delay: 200.ms),
+            const SizedBox(height: 12),
+
+            // 3. Learning Section
+            Row(
+              children: [
+                Expanded(
+                  child: _BentoCard(
+                    title: 'Ai Tutor',
+                    subtitle: 'Master any subject',
+                    icon: LucideIcons.graduationCap,
+                    color: const Color(0xFF6366F1), // Indigo
+                    onTap: () {
+                      final notebooks = ref.read(notebookProvider);
+                      if (notebooks.isNotEmpty) {
+                        final id = notebooks.first.id;
+                        context.push('/notebook/$id/tutor-sessions');
+                      } else {
+                        showDialog(
+                          context: context,
+                          builder: (_) => const CreateNotebookDialog(),
+                        );
+                      }
+                    },
+                    height: 120,
+                    compact: true,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _BentoCard(
+                    title: 'Wellness AI',
+                    subtitle: 'Mental health & balance',
+                    icon: LucideIcons.heartHandshake,
+                    color: const Color(0xFFEC4899), // Pink
+                    onTap: () => context.push('/wellness'),
+                    height: 120,
+                    compact: true,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _BentoCard(
+                    title: 'Flashcards',
+                    subtitle: 'Study with spaced repetition',
+                    icon: LucideIcons.layers,
+                    color: const Color(0xFF0EA5E9), // Sky 500
+                    onTap: () {
+                      final notebooks = ref.read(notebookProvider);
+                      if (notebooks.isNotEmpty) {
+                        final id = notebooks.first.id;
+                        context.push('/notebook/$id/flashcards');
+                      } else {
+                        showDialog(
+                          context: context,
+                          builder: (_) => const CreateNotebookDialog(),
+                        );
+                      }
+                    },
+                    height: 120,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _BentoCard(
+                    title: 'Quizzes',
+                    subtitle: 'Test your knowledge quickly',
+                    icon: LucideIcons.checkCircle,
+                    color: const Color(0xFFFB7185), // Rose 400
+                    onTap: () {
+                      final notebooks = ref.read(notebookProvider);
+                      if (notebooks.isNotEmpty) {
+                        final id = notebooks.first.id;
+                        context.push('/notebook/$id/quizzes');
+                      } else {
+                        showDialog(
+                          context: context,
+                          builder: (_) => const CreateNotebookDialog(),
+                        );
+                      }
+                    },
+                    height: 120,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _BentoCard(
+                    title: 'Language Learning',
+                    subtitle: 'Practice daily sessions',
+                    icon: LucideIcons.languages,
+                    color: const Color(0xFF22C55E), // Green 500
+                    onTap: () => context.push('/language-learning'),
+                    height: 120,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _BentoCard(
+                    title: 'Ebook Creator',
+                    subtitle: 'Turn notes into ebooks',
+                    icon: LucideIcons.bookOpen,
+                    color: const Color(0xFFA855F7), // Purple 500
+                    onTap: () => context.push('/ebook-creator'),
+                    height: 120,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            Text(
+              'Community & Insights',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+            ).animate().fadeIn().slideX(delay: 300.ms),
+            const SizedBox(height: 12),
+
+            // 4. Community Section
+            Row(
+              children: [
+                Expanded(
+                  child: _BentoCard(
+                    title: 'Social Hub',
+                    icon: LucideIcons.users,
+                    color: const Color(0xFF10B981), // Emerald
+                    onTap: () => context.push('/social'),
+                    height: 100,
+                    compact: true,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _BentoCard(
+                    title: 'Progress Stats',
+                    icon: LucideIcons.trophy,
+                    color: const Color(0xFFFBBF24), // Amber
+                    onTap: () => context.push('/progress'),
+                    height: 100,
+                    compact: true,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
           ],
         ),
       ),
