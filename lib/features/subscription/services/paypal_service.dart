@@ -1,16 +1,11 @@
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter_paypal_payment/flutter_paypal_payment.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import '../models/credit_package_model.dart';
 import '../services/subscription_service.dart';
 
 class PayPalService {
   final SubscriptionService _subscriptionService;
-
-  // Backend API URL
-  static const String _baseUrl = 'https://notebookllm-ufj7.onrender.com/api';
 
   String? _clientId;
   String? _secretKey;
@@ -24,30 +19,20 @@ class PayPalService {
       developer.log('PayPal: Fetching config from backend...',
           name: 'PayPalService');
 
-      final response = await http.get(
-        Uri.parse('$_baseUrl/subscriptions/payment-config'),
-        headers: {'Content-Type': 'application/json'},
-      );
+      final data = await _subscriptionService.getPaymentConfig();
+      final paypalConfig = data['config']?['paypal'];
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final paypalConfig = data['config']?['paypal'];
+      if (paypalConfig != null) {
+        _clientId = paypalConfig['clientId'];
+        _secretKey = null;
+        _sandboxMode = paypalConfig['sandboxMode'] ?? true;
 
-        if (paypalConfig != null) {
-          _clientId = paypalConfig['clientId'];
-          _secretKey = paypalConfig['secretKey'];
-          _sandboxMode = paypalConfig['sandboxMode'] ?? true;
-
-          developer.log(
-            'PayPal initialized from backend: clientId=${_clientId != null && _clientId!.isNotEmpty}, secretKey=${_secretKey != null && _secretKey!.isNotEmpty}, sandbox=$_sandboxMode',
-            name: 'PayPalService',
-          );
-        } else {
-          developer.log('PayPal: No config in response', name: 'PayPalService');
-        }
+        developer.log(
+          'PayPal initialized from backend: clientId=${_clientId != null && _clientId!.isNotEmpty}, secretKey=${_secretKey != null && _secretKey!.isNotEmpty}, sandbox=$_sandboxMode',
+          name: 'PayPalService',
+        );
       } else {
-        developer.log('PayPal: Failed to fetch config - ${response.statusCode}',
-            name: 'PayPalService');
+        developer.log('PayPal: No config in response', name: 'PayPalService');
       }
     } catch (e) {
       developer.log('Failed to initialize PayPal: $e', name: 'PayPalService');

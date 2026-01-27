@@ -48,6 +48,10 @@ class PlanningWebSocketService {
       path: '/ws/planning',
     });
 
+    this.wss.on('error', (error) => {
+      console.error('Planning WebSocket server error:', error);
+    });
+
     this.wss.on('connection', (ws, req) => this.handleConnection(ws, req));
 
     // Set up ping interval to keep connections alive

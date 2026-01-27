@@ -12,13 +12,11 @@ router.get('/payment-config', async (_req: Request, res: Response) => {
             paypal: {
                 configured: !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_SECRET),
                 clientId: process.env.PAYPAL_CLIENT_ID || null,
-                secretKey: process.env.PAYPAL_SECRET || null,
                 sandboxMode: process.env.PAYPAL_SANDBOX_MODE !== 'false',
             },
             stripe: {
                 configured: !!(process.env.STRIPE_PUBLISHABLE_KEY && process.env.STRIPE_SECRET_KEY),
                 publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
-                secretKey: process.env.STRIPE_SECRET_KEY || null,
                 testMode: process.env.STRIPE_TEST_MODE !== 'false',
             }
         };
@@ -29,6 +27,79 @@ router.get('/payment-config', async (_req: Request, res: Response) => {
     } catch (error) {
         console.error('Error fetching payment config:', error);
         res.status(500).json({ error: 'Failed to fetch payment config' });
+    }
+});
+
+// Create Stripe PaymentIntent (requires auth)
+router.post('/create-payment-intent', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId!;
+        const { amount, currency, packageId, description } = req.body || {};
+
+        const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+        if (!stripeSecretKey) {
+            return res.status(500).json({ error: 'Stripe is not configured' });
+        }
+
+        let amountCents: number | null = null;
+        const normalizedCurrency = typeof currency === 'string' && currency.trim().length > 0
+            ? currency.trim().toLowerCase()
+            : 'usd';
+
+        if (packageId) {
+            const pkgResult = await pool.query(
+                'SELECT id, price FROM credit_packages WHERE id = $1 AND is_active = true',
+                [packageId]
+            );
+            if (pkgResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Credit package not found' });
+            }
+
+            const price = parseFloat(pkgResult.rows[0].price);
+            if (!Number.isFinite(price) || price <= 0) {
+                return res.status(500).json({ error: 'Invalid credit package price configuration' });
+            }
+
+            amountCents = Math.round(price * 100);
+        } else if (amount !== undefined && amount !== null) {
+            const parsedAmount = typeof amount === 'string' ? parseFloat(amount) : Number(amount);
+            if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+                return res.status(400).json({ error: 'Invalid amount' });
+            }
+            if (parsedAmount > 1000) {
+                return res.status(400).json({ error: 'Amount too large' });
+            }
+            amountCents = Math.round(parsedAmount * 100);
+        } else {
+            return res.status(400).json({ error: 'packageId or amount is required' });
+        }
+
+        const Stripe = (await import('stripe')).default;
+        const stripe = new Stripe(stripeSecretKey);
+
+        const paymentIntent = await stripe.paymentIntents.create({
+            amount: amountCents,
+            currency: normalizedCurrency,
+            automatic_payment_methods: { enabled: true },
+            description: typeof description === 'string' ? description : undefined,
+            metadata: {
+                userId,
+                ...(packageId ? { packageId: String(packageId) } : {}),
+            },
+        });
+
+        if (!paymentIntent.client_secret) {
+            return res.status(500).json({ error: 'Failed to create payment intent' });
+        }
+
+        res.json({
+            success: true,
+            paymentIntentId: paymentIntent.id,
+            clientSecret: paymentIntent.client_secret,
+        });
+    } catch (error: any) {
+        console.error('Stripe payment intent error:', error);
+        res.status(500).json({ error: 'Failed to create payment intent: ' + (error?.message || String(error)) });
     }
 });
 

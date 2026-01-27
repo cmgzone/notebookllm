@@ -56,6 +56,10 @@ class AgentWebSocketService {
       path: '/ws/agent',
     });
 
+    this.wss.on('error', (error) => {
+      console.error('Agent WebSocket server error:', error);
+    });
+
     this.wss.on('connection', this.handleConnection.bind(this));
 
     // Start ping interval to keep connections alive

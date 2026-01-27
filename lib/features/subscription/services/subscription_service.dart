@@ -16,6 +16,24 @@ class SubscriptionService {
 
   ApiService get _api => ref.read(apiServiceProvider);
 
+  Future<Map<String, dynamic>> getPaymentConfig() async {
+    return await _api.get<Map<String, dynamic>>('/subscriptions/payment-config');
+  }
+
+  Future<Map<String, dynamic>> createStripePaymentIntent({
+    String? packageId,
+    double? amount,
+    String currency = 'USD',
+    String? description,
+  }) async {
+    return await _api.createStripePaymentIntent(
+      packageId: packageId,
+      amount: amount,
+      currency: currency,
+      description: description,
+    );
+  }
+
   /// Fetch user's current subscription
   Future<SubscriptionModel?> getUserSubscription(String userId) async {
     try {

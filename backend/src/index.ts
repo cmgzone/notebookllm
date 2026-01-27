@@ -75,7 +75,13 @@ process.on('SIGINT', async () => {
 });
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const requestedPort = (() => {
+    const raw = process.env.PORT;
+    if (!raw) return 3000;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 3000;
+})();
+const maxPortAttempts = 20;
 
 // Middleware
 app.use(compression());
@@ -172,12 +178,41 @@ agentWebSocketService.initialize(server);
 // Initialize WebSocket service for real-time planning updates
 planningWebSocketService.initialize(server);
 
-server.listen(PORT, () => {
-    console.log(`🚀 Server is running on http://localhost:${PORT}`);
-    console.log(`🔌 WebSocket available at ws://localhost:${PORT}/ws/agent`);
-    console.log(`📋 Planning WebSocket available at ws://localhost:${PORT}/ws/planning`);
-    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`📅 Started at: ${new Date().toISOString()}`);
+let activePort = requestedPort;
+let portAttempts = 0;
+let isStartingServer = false;
+
+const startListening = () => {
+    if (isStartingServer || server.listening) {
+        return;
+    }
+
+    isStartingServer = true;
+    server.listen(activePort, () => {
+        isStartingServer = false;
+        console.log(`🚀 Server is running on http://localhost:${activePort}`);
+        console.log(`🔌 WebSocket available at ws://localhost:${activePort}/ws/agent`);
+        console.log(`📋 Planning WebSocket available at ws://localhost:${activePort}/ws/planning`);
+        console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`📅 Started at: ${new Date().toISOString()}`);
+    });
+};
+
+server.on('error', (err: any) => {
+    isStartingServer = false;
+    if (err?.code === 'EADDRINUSE' && portAttempts < maxPortAttempts) {
+        const currentPort = activePort;
+        activePort = currentPort + 1;
+        portAttempts += 1;
+        console.error(`Port ${currentPort} is already in use. Trying ${activePort}...`);
+        setTimeout(() => startListening(), 250);
+        return;
+    }
+
+    console.error('Server failed to start:', err);
+    process.exit(1);
 });
+
+startListening();
 
 export default app;

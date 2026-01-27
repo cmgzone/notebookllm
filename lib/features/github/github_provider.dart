@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/github/github_service.dart';
 import '../../core/api/api_service.dart';
+import '../../core/auth/custom_auth_service.dart';
 import 'github_source_provider.dart';
 
 /// State class for GitHub integration
@@ -57,8 +58,20 @@ class GitHubNotifier extends StateNotifier<GitHubState> {
 
   GitHubNotifier(this._githubService, this._ref) : super(const GitHubState());
 
+  bool _isAuthenticated() {
+    return _ref.read(customAuthStateProvider).isAuthenticated;
+  }
+
   /// Check GitHub connection status
   Future<void> checkStatus() async {
+    if (!_isAuthenticated()) {
+      state = state.copyWith(
+        error: 'Authentication required',
+        connection: GitHubConnection(connected: false),
+        isLoading: false,
+      );
+      return;
+    }
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
@@ -75,6 +88,10 @@ class GitHubNotifier extends StateNotifier<GitHubState> {
 
   /// Connect with Personal Access Token
   Future<bool> connectWithToken(String token) async {
+    if (!_isAuthenticated()) {
+      state = state.copyWith(error: 'Authentication required', isLoading: false);
+      return false;
+    }
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
@@ -116,6 +133,7 @@ class GitHubNotifier extends StateNotifier<GitHubState> {
     String type = 'all',
     String sort = 'updated',
   }) async {
+    if (!_isAuthenticated()) return;
     if (!state.isConnected) return;
 
     state = state.copyWith(isLoading: true, clearError: true);
@@ -130,6 +148,7 @@ class GitHubNotifier extends StateNotifier<GitHubState> {
 
   /// Select a repository and load its tree
   Future<void> selectRepo(GitHubRepo repo) async {
+    if (!_isAuthenticated()) return;
     state = state.copyWith(
       selectedRepo: repo,
       isLoading: true,
@@ -152,6 +171,10 @@ class GitHubNotifier extends StateNotifier<GitHubState> {
   /// Get file content
   Future<GitHubFile?> getFileContent(String path,
       {String? owner, String? repo}) async {
+    if (!_isAuthenticated()) {
+      state = state.copyWith(error: 'Authentication required');
+      return null;
+    }
     final repoOwner = owner ?? state.selectedRepo?.owner;
     final repoName = repo ?? state.selectedRepo?.name;
 
@@ -203,6 +226,10 @@ class GitHubNotifier extends StateNotifier<GitHubState> {
 
   /// Search code
   Future<List<Map<String, dynamic>>> searchCode(String query) async {
+    if (!_isAuthenticated()) {
+      state = state.copyWith(error: 'Authentication required');
+      return [];
+    }
     try {
       return await _githubService.searchCode(
         query,
@@ -221,6 +248,10 @@ class GitHubNotifier extends StateNotifier<GitHubState> {
     required String notebookId,
     required String path,
   }) async {
+    if (!_isAuthenticated()) {
+      state = state.copyWith(error: 'Authentication required');
+      return false;
+    }
     if (state.selectedRepo == null) return false;
 
     try {
@@ -242,6 +273,10 @@ class GitHubNotifier extends StateNotifier<GitHubState> {
     String? focus,
     List<String>? includeFiles,
   }) async {
+    if (!_isAuthenticated()) {
+      state = state.copyWith(error: 'Authentication required');
+      return null;
+    }
     if (state.selectedRepo == null) return null;
 
     state = state.copyWith(isLoading: true, clearError: true);

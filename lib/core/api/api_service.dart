@@ -810,14 +810,23 @@ class ApiService {
             if (line.startsWith('data: ')) {
               final data = line.substring(6).trim();
               if (data == '[DONE]') return;
-              try {
-                if (data.startsWith('{')) {
-                  final json = jsonDecode(data);
-                  if (json['content'] != null) yield json['content'];
-                } else {
+              if (data.startsWith('{')) {
+                Map<String, dynamic> json;
+                try {
+                  json = jsonDecode(data);
+                } catch (_) {
                   yield data;
+                  continue;
                 }
-              } catch (_) {
+                final err = json['error'];
+                if (err != null && err.toString().isNotEmpty) {
+                  throw Exception(err.toString());
+                }
+                final content = json['content'] ?? json['text'];
+                if (content != null && content.toString().isNotEmpty) {
+                  yield content.toString();
+                }
+              } else {
                 yield data;
               }
             }
@@ -835,14 +844,23 @@ class ApiService {
             if (line.startsWith('data: ')) {
               final data = line.substring(6).trim();
               if (data == '[DONE]') return;
-              try {
-                if (data.startsWith('{')) {
-                  final json = jsonDecode(data);
-                  if (json['content'] != null) yield json['content'];
-                } else {
+              if (data.startsWith('{')) {
+                Map<String, dynamic> json;
+                try {
+                  json = jsonDecode(data);
+                } catch (_) {
                   yield data;
+                  continue;
                 }
-              } catch (_) {
+                final err = json['error'];
+                if (err != null && err.toString().isNotEmpty) {
+                  throw Exception(err.toString());
+                }
+                final content = json['content'] ?? json['text'];
+                if (content != null && content.toString().isNotEmpty) {
+                  yield content.toString();
+                }
+              } else {
                 yield data;
               }
             }
@@ -859,14 +877,23 @@ class ApiService {
             if (line.startsWith('data: ')) {
               final data = line.substring(6).trim();
               if (data == '[DONE]') return;
-              try {
-                if (data.startsWith('{')) {
-                  final json = jsonDecode(data);
-                  if (json['content'] != null) yield json['content'];
-                } else {
+              if (data.startsWith('{')) {
+                Map<String, dynamic> json;
+                try {
+                  json = jsonDecode(data);
+                } catch (_) {
                   yield data;
+                  continue;
                 }
-              } catch (_) {
+                final err = json['error'];
+                if (err != null && err.toString().isNotEmpty) {
+                  throw Exception(err.toString());
+                }
+                final content = json['content'] ?? json['text'];
+                if (content != null && content.toString().isNotEmpty) {
+                  yield content.toString();
+                }
+              } else {
                 yield data;
               }
             }
@@ -1096,6 +1123,23 @@ class ApiService {
       'transactionId': transactionId,
       'paymentMethod': paymentMethod,
     });
+  }
+
+  Future<Map<String, dynamic>> createStripePaymentIntent({
+    String? packageId,
+    double? amount,
+    String currency = 'USD',
+    String? description,
+  }) async {
+    return await post<Map<String, dynamic>>(
+      '/subscriptions/create-payment-intent',
+      {
+        if (packageId != null) 'packageId': packageId,
+        if (amount != null) 'amount': amount,
+        'currency': currency,
+        if (description != null) 'description': description,
+      },
+    );
   }
 
   Future<List<Map<String, dynamic>>> getAdminPlans() async {

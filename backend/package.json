@@ -8,7 +8,7 @@
     "start": "node --max-old-space-size=6144 dist/index.js",
     "dev": "tsx src/index.ts",
     "dev:watch": "tsx watch src/index.ts",
-    "lint": "eslint src/**/*.ts",
+    "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
     "test:pbt": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --testPathPattern=pbt",
     "migrate:agent-communication": "tsx src/scripts/run-agent-communication-migration.ts"

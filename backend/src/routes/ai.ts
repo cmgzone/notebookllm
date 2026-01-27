@@ -309,7 +309,7 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
         for await (const chunk of generator) {
             // Send chunk as data event
             // Properly escape newlines for SSE
-            const payload = JSON.stringify({ text: chunk });
+            const payload = JSON.stringify({ content: chunk, text: chunk });
             res.write(`data: ${payload}\n\n`);
         }
 
