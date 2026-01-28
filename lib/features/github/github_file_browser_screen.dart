@@ -429,62 +429,87 @@ class _GitHubFileBrowserScreenState
 
   void _showSearchResults(String query, List<Map<String, dynamic>> results) {
     showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        builder: (context) => DraggableScrollableSheet(
-              initialChildSize: 0.7,
-              minChildSize: 0.3,
-              maxChildSize: 0.9,
-              expand: false,
-              builder: (context, scrollController) => Column(children: [
-                Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                        border: Border(
-                            bottom: BorderSide(color: Colors.grey[300]!))),
-                    child: Row(children: [
-                      const Icon(Icons.search),
-                      const SizedBox(width: 8),
-                      Expanded(
-                          child: Text(
-                              'Results for "$query" (${results.length})',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 16))),
-                      IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(context))
-                    ])),
-                Expanded(
-                    child: ListView.builder(
-                        controller: scrollController,
-                        itemCount: results.length,
-                        itemBuilder: (context, index) {
-                          final result = results[index];
-                          return ListTile(
-                              leading: const Icon(Icons.code),
-                              title: Text(result['path'] ?? 'Unknown'),
-                              subtitle: result['text_matches'] != null
-                                  ? Text(
-                                      (result['text_matches'] as List)
-                                              .isNotEmpty
-                                          ? (result['text_matches'][0]
-                                                  ['fragment'] ??
-                                              '')
-                                          : '',
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis)
-                                  : null,
-                              onTap: () {
-                                Navigator.pop(context);
-                                Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) => GitHubFileViewerScreen(
-                                            repo: widget.repo,
-                                            filePath: result['path'] ?? '')));
-                              });
-                        })),
-              ]),
-            ));
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey[300]!),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.search),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Results for "$query" (${results.length})',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: results.length,
+                  itemBuilder: (context, index) {
+                    final result = results[index];
+                    return ListTile(
+                      leading: const Icon(Icons.code),
+                      title: Text(result['path'] ?? 'Unknown'),
+                      subtitle: result['text_matches'] != null
+                          ? Text(
+                              (result['text_matches'] as List).isNotEmpty
+                                  ? (result['text_matches'][0]['fragment'] ??
+                                      '')
+                                  : '',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            )
+                          : null,
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => GitHubFileViewerScreen(
+                              repo: widget.repo,
+                              filePath: result['path'] ?? '',
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -78,6 +78,14 @@ class AIModelService {
     return results.map((m) => AIModel.fromMap(m)).toList();
   }
 
+  Future<AIModel?> getDefaultModel() async {
+    final result = await _api.getDefaultAIModel();
+    if (result.isEmpty) {
+      return null;
+    }
+    return AIModel.fromMap(result);
+  }
+
   Future<void> addModel(AIModel model) async {
     await _api.addAIModel(model.toMap());
   }

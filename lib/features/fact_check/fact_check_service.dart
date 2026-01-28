@@ -140,7 +140,7 @@ class FactCheckService {
   FactCheckService(this.ref);
 
   Future<String> _generateContent(String prompt) async {
-    final settings = await AISettingsService.getSettings();
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
     final model = settings.getEffectiveModel();
 
     // Use Backend Proxy (Admin's API keys)

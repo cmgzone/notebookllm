@@ -138,9 +138,16 @@ class _InfographicsListScreenState
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => _SelectSourceSheet(
-        sources: notebookSources,
-        notebookId: widget.notebookId,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: _SelectSourceSheet(
+          sources: notebookSources,
+          notebookId: widget.notebookId,
+        ),
       ),
     );
   }

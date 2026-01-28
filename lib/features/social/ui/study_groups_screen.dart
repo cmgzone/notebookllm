@@ -236,14 +236,28 @@ class _StudyGroupsScreenState extends ConsumerState<StudyGroupsScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => const _CreateGroupSheet(),
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: const _CreateGroupSheet(),
+      ),
     );
   }
 
   void _showInvitations(List<GroupInvitation> invitations) {
     showModalBottomSheet(
       context: context,
-      builder: (context) => _InvitationsSheet(invitations: invitations),
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: _InvitationsSheet(invitations: invitations),
+      ),
     );
   }
 }

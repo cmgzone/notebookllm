@@ -28,6 +28,24 @@ async function runMigration() {
       CREATE INDEX IF NOT EXISTS idx_agent_skills_user_id ON agent_skills(user_id);
     `);
 
+        await client.query(`
+      CREATE TABLE IF NOT EXISTS skill_catalog (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+        slug TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        description TEXT,
+        content TEXT NOT NULL,
+        parameters JSONB DEFAULT '{}',
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+        await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_skill_catalog_active_updated ON skill_catalog(is_active, updated_at DESC);
+    `);
+
         await client.query('COMMIT');
         console.log('✅ Agent skills migration completed successfully!');
 

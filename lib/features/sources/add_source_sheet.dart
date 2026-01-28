@@ -81,27 +81,57 @@ class AddSourceSheet extends ConsumerWidget {
                     showModalBottomSheet(
                       context: context,
                       isScrollControlled: true,
-                      builder: (_) =>
-                          EnhancedTextNoteSheet(notebookId: notebookId),
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(20)),
+                        ),
+                        child: EnhancedTextNoteSheet(notebookId: notebookId),
+                      ),
                     );
                   } else if (c.label == 'Web URL') {
                     showModalBottomSheet(
                       context: context,
                       isScrollControlled: true,
-                      builder: (_) => AddUrlSheet(notebookId: notebookId),
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(20)),
+                        ),
+                        child: AddUrlSheet(notebookId: notebookId),
+                      ),
                     );
                   } else if (c.label == 'YouTube') {
                     showModalBottomSheet(
                       context: context,
                       isScrollControlled: true,
-                      builder: (_) => AddYouTubeSheet(notebookId: notebookId),
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(20)),
+                        ),
+                        child: AddYouTubeSheet(notebookId: notebookId),
+                      ),
                     );
                   } else if (c.label == 'Google Drive') {
                     showModalBottomSheet(
                       context: context,
                       isScrollControlled: true,
-                      builder: (_) =>
-                          AddGoogleDriveSheet(notebookId: notebookId),
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(20)),
+                        ),
+                        child: AddGoogleDriveSheet(notebookId: notebookId),
+                      ),
                     );
                   } else if (c.label == 'Image') {
                     _pickAndUpload(context, ref, type: 'image');

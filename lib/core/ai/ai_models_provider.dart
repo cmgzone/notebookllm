@@ -52,6 +52,19 @@ final currentAIModelIdProvider = FutureProvider<String>((ref) async {
   final saved = prefs.getString('ai_model');
   if (saved != null && saved.isNotEmpty) return saved;
 
+  try {
+    final service = ref.read(aiModelServiceProvider);
+    final defaultModel = await service.getDefaultModel();
+    if (defaultModel != null && defaultModel.modelId.isNotEmpty) {
+      return defaultModel.modelId;
+    }
+  } catch (e, st) {
+    assert(() {
+      debugPrint('[AIModels] Failed to load default model: $e\n$st');
+      return true;
+    }());
+  }
+
   // No saved model, pick first active one from DB
   final models = await ref.watch(availableModelsProvider.future);
   final provider = prefs.getString('ai_provider') ?? 'gemini';

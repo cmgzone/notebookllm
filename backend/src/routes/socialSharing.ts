@@ -1,14 +1,13 @@
 import express, { type Response } from 'express';
-import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
+import { authenticateToken, optionalAuth, type AuthRequest } from '../middleware/auth.js';
 import { socialSharingService } from '../services/socialSharingService.js';
 
 const router = express.Router();
-router.use(authenticateToken);
 
 // =====================================================
 // Share Content to Social Feed
 // =====================================================
-router.post('/share', async (req: AuthRequest, res: Response) => {
+router.post('/share', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -41,7 +40,7 @@ router.post('/share', async (req: AuthRequest, res: Response) => {
 // =====================================================
 // Get Social Feed (Shared Content)
 // =====================================================
-router.get('/feed', async (req: AuthRequest, res: Response) => {
+router.get('/feed', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -64,7 +63,7 @@ router.get('/feed', async (req: AuthRequest, res: Response) => {
 // =====================================================
 // Discover Public Notebooks
 // =====================================================
-router.get('/discover/notebooks', async (req: AuthRequest, res: Response) => {
+router.get('/discover/notebooks', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -89,7 +88,7 @@ router.get('/discover/notebooks', async (req: AuthRequest, res: Response) => {
 // =====================================================
 // Discover Public Plans
 // =====================================================
-router.get('/discover/plans', async (req: AuthRequest, res: Response) => {
+router.get('/discover/plans', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -114,7 +113,7 @@ router.get('/discover/plans', async (req: AuthRequest, res: Response) => {
 // =====================================================
 // Set Notebook Public/Private
 // =====================================================
-router.patch('/notebooks/:id/visibility', async (req: AuthRequest, res: Response) => {
+router.patch('/notebooks/:id/visibility', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -137,7 +136,7 @@ router.patch('/notebooks/:id/visibility', async (req: AuthRequest, res: Response
 // =====================================================
 // Set Notebook Lock
 // =====================================================
-router.patch('/notebooks/:id/lock', async (req: AuthRequest, res: Response) => {
+router.patch('/notebooks/:id/lock', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -160,7 +159,7 @@ router.patch('/notebooks/:id/lock', async (req: AuthRequest, res: Response) => {
 // =====================================================
 // Set Plan Public/Private
 // =====================================================
-router.patch('/plans/:id/visibility', async (req: AuthRequest, res: Response) => {
+router.patch('/plans/:id/visibility', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -183,7 +182,7 @@ router.patch('/plans/:id/visibility', async (req: AuthRequest, res: Response) =>
 // =====================================================
 // Record View
 // =====================================================
-router.post('/view', async (req: AuthRequest, res: Response) => {
+router.post('/view', optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
     const { contentType, contentId } = req.body;
@@ -204,7 +203,7 @@ router.post('/view', async (req: AuthRequest, res: Response) => {
 // =====================================================
 // Get View Stats
 // =====================================================
-router.get('/stats/:contentType/:contentId', async (req: AuthRequest, res: Response) => {
+router.get('/stats/:contentType/:contentId', optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { contentType, contentId } = req.params;
 
@@ -346,7 +345,7 @@ router.get('/my-stats', async (req: AuthRequest, res: Response) => {
 // =====================================================
 // Get Public Notebook Details with Sources
 // =====================================================
-router.get('/public/notebooks/:id', async (req: AuthRequest, res: Response) => {
+router.get('/public/notebooks/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const viewerId = req.userId; // Optional - user may not be logged in
@@ -367,7 +366,7 @@ router.get('/public/notebooks/:id', async (req: AuthRequest, res: Response) => {
 // =====================================================
 // Get Public Source Details
 // =====================================================
-router.get('/public/sources/:id', async (req: AuthRequest, res: Response) => {
+router.get('/public/sources/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const viewerId = req.userId;
@@ -416,7 +415,7 @@ router.post('/fork/notebook/:id', async (req: AuthRequest, res: Response) => {
 // =====================================================
 // Get Public Plan Details with Requirements and Tasks
 // =====================================================
-router.get('/public/plans/:id', async (req: AuthRequest, res: Response) => {
+router.get('/public/plans/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const viewerId = req.userId;

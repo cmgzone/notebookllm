@@ -235,7 +235,14 @@ class QuizzesListScreen extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => QuizGeneratorSheet(notebookId: notebookId),
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: QuizGeneratorSheet(notebookId: notebookId),
+      ),
     );
   }
 

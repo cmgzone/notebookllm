@@ -53,6 +53,7 @@ import '../features/admin/ai_models_manager_screen.dart';
 import '../features/ai_browser/ai_browser_screen.dart';
 import '../features/settings/agent_connections_screen.dart';
 import '../features/agent_skills/agent_skills_screen.dart';
+import '../features/custom_agents/custom_agents_screen.dart';
 import '../features/github/github_connect_screen.dart';
 import '../features/github/github_repos_screen.dart';
 import '../features/planning/ui/plans_list_screen.dart';
@@ -144,6 +145,17 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             name: 'home',
             pageBuilder: (context, state) =>
                 buildTransitionPage(child: const HomeScreen()),
+          ),
+          GoRoute(
+            path: '/category/:category',
+            name: 'category-notebooks',
+            pageBuilder: (context, state) {
+              final categoryEncoded = state.pathParameters['category'] ?? '';
+              final category = Uri.decodeComponent(categoryEncoded);
+              return buildTransitionPage(
+                child: CategoryNotebooksScreen(category: category),
+              );
+            },
           ),
           GoRoute(
             path: '/sources',
@@ -392,6 +404,12 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             name: 'agent-skills',
             pageBuilder: (context, state) =>
                 buildTransitionPage(child: const AgentSkillsScreen()),
+          ),
+          GoRoute(
+            path: '/custom-agents',
+            name: 'custom-agents',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const CustomAgentsScreen()),
           ),
           GoRoute(
             path: '/github',

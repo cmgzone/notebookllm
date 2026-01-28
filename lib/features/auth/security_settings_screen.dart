@@ -622,6 +622,7 @@ class _SecuritySettingsScreenState
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -630,25 +631,33 @@ class _SecuritySettingsScreenState
         minChildSize: 0.5,
         maxChildSize: 0.95,
         expand: false,
-        builder: (context, scrollController) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('Activity Log',
-                  style: Theme.of(context).textTheme.titleLarge),
-            ),
-            Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                itemCount: _auditLogs?.length ?? 0,
-                itemBuilder: (context, index) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child:
-                      _buildAuditLogTile(Theme.of(context), _auditLogs![index]),
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Activity Log',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
-            ),
-          ],
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: _auditLogs?.length ?? 0,
+                  itemBuilder: (context, index) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _buildAuditLogTile(
+                        Theme.of(context), _auditLogs![index]),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

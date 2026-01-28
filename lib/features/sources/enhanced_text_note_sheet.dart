@@ -194,7 +194,7 @@ class _EnhancedTextNoteSheetState extends ConsumerState<EnhancedTextNoteSheet>
 
   // Helper to call AI with proper settings via Backend Proxy
   Future<String> _callAI(String prompt) async {
-    final settings = await AISettingsService.getSettings();
+    final settings = await AISettingsService.getSettingsWithDefault(ref as Ref);
     final model = settings.model;
 
     if (model == null || model.isEmpty) {

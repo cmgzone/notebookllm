@@ -82,7 +82,7 @@ class AdsGeneratorNotifier extends StateNotifier<AdsGeneratorState> {
     state = state.copyWith(isGenerating: true, error: null, generatedAd: null);
 
     try {
-      final settings = await AISettingsService.getSettings();
+      final settings = await AISettingsService.getSettingsWithDefault(ref);
       final provider = settings.provider;
       final model = settings.model;
 

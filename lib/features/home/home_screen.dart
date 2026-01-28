@@ -11,7 +11,6 @@ import '../../ui/widgets/notebook_card.dart';
 import '../../core/auth/custom_auth_service.dart';
 import 'create_notebook_dialog.dart';
 import '../notebook/notebook_provider.dart';
-import '../notebook/notebook.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../core/extensions/color_compat.dart';
@@ -210,7 +209,7 @@ class HomeScreen extends ConsumerWidget {
           const DashboardGrid(),
           if (ref.watch(notebookProvider).isEmpty)
             const SliverToBoxAdapter(child: _EmptyState()),
-          ..._buildCategorizedNotebooks(context, ref),
+          ..._buildCategories(context, ref),
           const SliverToBoxAdapter(
             child: SizedBox(height: 80), // Bottom padding
           ),
@@ -226,110 +225,127 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  List<Widget> _buildCategorizedNotebooks(BuildContext context, WidgetRef ref) {
+  List<Widget> _buildCategories(BuildContext context, WidgetRef ref) {
     final notebooks = ref.watch(notebookProvider);
     if (notebooks.isEmpty) return [];
 
-    final grouped = <String, List<Notebook>>{};
-    for (var n in notebooks) {
-      final category = n.category;
-      grouped.putIfAbsent(category, () => []).add(n);
+    final grouped = <String, int>{};
+    for (final n in notebooks) {
+      final category = n.category.trim().isEmpty ? 'General' : n.category.trim();
+      grouped.update(category, (count) => count + 1, ifAbsent: () => 1);
     }
 
-    final sortedCategories = grouped.keys.toList()
+    final sortedCategories = grouped.keys.toList(growable: false)
       ..sort((a, b) {
         if (a == 'General') return -1;
         if (b == 'General') return 1;
         return a.compareTo(b);
       });
 
-    final slivers = <Widget>[];
-
-    for (final category in sortedCategories) {
-      final categoryNotebooks = grouped[category]!;
-
-      slivers.add(
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+          child: Text(
+            'Categories',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ).animate().fadeIn().slideX(),
+        ),
+      ),
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        sliver: SliverList.separated(
+          itemBuilder: (context, index) {
+            final category = sortedCategories[index];
+            final count = grouped[category] ?? 0;
+            return Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => context.push(
+                  '/category/${Uri.encodeComponent(category)}',
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
                   decoration: BoxDecoration(
-                    color:
-                        Theme.of(context).primaryColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .outline
+                          .withValues(alpha: 0.12),
+                    ),
                   ),
-                  child: Icon(
-                    _getCategoryIcon(category),
-                    size: 20,
-                    color: Theme.of(context).primaryColor,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .primaryColor
+                              .withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          _getCategoryIcon(category),
+                          size: 20,
+                          color: Theme.of(context).primaryColor,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          category,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '$count',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Icon(
+                        Icons.chevron_right,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.6),
+                      )
+                    ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  category,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const Spacer(),
-                Text(
-                  '${categoryNotebooks.length}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.secondary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-              ],
-            ).animate().fadeIn().slideX(),
-          ),
+              ),
+            ).animate().fadeIn(delay: Duration(milliseconds: index * 60));
+          },
+          separatorBuilder: (context, index) => const SizedBox(height: 12),
+          itemCount: sortedCategories.length,
         ),
-      );
-
-      slivers.add(
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          sliver: SliverGrid(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: ResponsiveValue<int>(
-                context,
-                defaultValue: 4,
-                conditionalValues: [
-                  const Condition.smallerThan(name: MOBILE, value: 1),
-                  const Condition.equals(name: MOBILE, value: 1),
-                  const Condition.equals(name: TABLET, value: 2),
-                  const Condition.equals(name: DESKTOP, value: 4),
-                  const Condition.largerThan(name: DESKTOP, value: 5),
-                ],
-              ).value,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 0.85,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final n = categoryNotebooks[index];
-                return NotebookCard(
-                  key: ValueKey(n.id),
-                  title: n.title,
-                  sourceCount: n.sourceCount,
-                  notebookId: n.id,
-                  coverImage: n.coverImage,
-                  isAgentNotebook: n.isAgentNotebook,
-                  agentName: n.agentName,
-                  agentStatus: n.agentStatus,
-                ).animate().fadeIn(delay: Duration(milliseconds: index * 50));
-              },
-              childCount: categoryNotebooks.length,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return slivers;
+      ),
+    ];
   }
 
   IconData _getCategoryIcon(String category) {
@@ -349,6 +365,88 @@ class HomeScreen extends ConsumerWidget {
       default:
         return LucideIcons.folderOpen;
     }
+  }
+}
+
+class CategoryNotebooksScreen extends ConsumerWidget {
+  const CategoryNotebooksScreen({super.key, required this.category});
+
+  final String category;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notebooks = ref
+        .watch(notebookProvider)
+        .where((n) => (n.category.trim().isEmpty ? 'General' : n.category.trim()) == category)
+        .toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(category),
+        actions: [
+          IconButton(
+            onPressed: () => ref.read(notebookProvider.notifier).refresh(),
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+          ),
+          IconButton(
+            onPressed: () => showDialog(
+              context: context,
+              builder: (_) => CreateNotebookDialog(initialCategory: category),
+            ),
+            icon: const Icon(Icons.add),
+            tooltip: 'New Notebook',
+          ),
+        ],
+      ),
+      body: notebooks.isEmpty
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'No notebooks in this category yet.',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
+          : Padding(
+              padding: const EdgeInsets.all(20),
+              child: GridView.builder(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: ResponsiveValue<int>(
+                    context,
+                    defaultValue: 4,
+                    conditionalValues: [
+                      const Condition.smallerThan(name: MOBILE, value: 2),
+                      const Condition.equals(name: MOBILE, value: 2),
+                      const Condition.equals(name: TABLET, value: 3),
+                      const Condition.equals(name: DESKTOP, value: 4),
+                      const Condition.largerThan(name: DESKTOP, value: 5),
+                    ],
+                  ).value,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.8,
+                ),
+                itemCount: notebooks.length,
+                itemBuilder: (context, index) {
+                  final n = notebooks[index];
+                  return NotebookCard(
+                    key: ValueKey(n.id),
+                    title: n.title,
+                    sourceCount: n.sourceCount,
+                    notebookId: n.id,
+                    coverImage: n.coverImage,
+                    isAgentNotebook: n.isAgentNotebook,
+                    agentName: n.agentName,
+                    agentStatus: n.agentStatus,
+                  ).animate().fadeIn(delay: Duration(milliseconds: index * 50));
+                },
+              ),
+            ),
+    );
   }
 }
 

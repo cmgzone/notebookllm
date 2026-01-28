@@ -37,7 +37,7 @@ class VoiceActionHandler {
 
   /// Generate AI content using the user's selected provider (OpenRouter or Gemini)
   Future<String> _generateAIContent(String prompt) async {
-    final settings = await AISettingsService.getSettings();
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
     final model = settings.model;
 
     if (model == null || model.isEmpty) {
@@ -504,7 +504,7 @@ Return only the enhanced prompt, nothing else.
       final title = intent['title'] as String? ?? 'New Ebook';
       final topic = intent['content'] as String? ?? 'General Topic';
 
-      final settings = await AISettingsService.getSettings();
+      final settings = await AISettingsService.getSettingsWithDefault(ref);
       final currentModel = settings.model ?? '';
 
       if (currentModel.isEmpty) {

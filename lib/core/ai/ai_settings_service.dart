@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/admin/services/ai_model_service.dart';
@@ -7,6 +8,15 @@ import '../../features/admin/services/ai_model_service.dart';
 class AISettingsService {
   static const String _providerKey = 'ai_provider';
   static const String _modelKey = 'ai_model';
+
+  static String _normalizeProvider(String provider) {
+    if (provider == 'openrouter' ||
+        provider == 'openai' ||
+        provider == 'anthropic') {
+      return 'openrouter';
+    }
+    return provider;
+  }
 
   /// Get the user's selected AI provider
   static Future<String> getProvider() async {
@@ -54,6 +64,43 @@ class AISettingsService {
     return AISettings(
       provider: prefs.getString(_providerKey) ?? 'gemini',
       model: prefs.getString(_modelKey),
+    );
+  }
+
+  static Future<AISettings> getSettingsWithDefault(Ref ref) async {
+    final prefs = await SharedPreferences.getInstance();
+    final modelId = prefs.getString(_modelKey);
+
+    if (modelId != null && modelId.isNotEmpty) {
+      final provider = await getProviderForModel(modelId, ref);
+      return AISettings(
+        provider: provider,
+        model: modelId,
+      );
+    }
+
+    try {
+      final service = ref.read(aiModelServiceProvider);
+      final defaultModel = await service.getDefaultModel();
+      if (defaultModel != null && defaultModel.modelId.isNotEmpty) {
+        final provider = _normalizeProvider(defaultModel.provider);
+        return AISettings(
+          provider: provider,
+          model: defaultModel.modelId,
+        );
+      }
+    } catch (e, st) {
+      assert(() {
+        debugPrint(
+          '[AISettingsService] Failed to load default model: $e\n$st',
+        );
+        return true;
+      }());
+    }
+
+    return AISettings(
+      provider: prefs.getString(_providerKey) ?? 'gemini',
+      model: null,
     );
   }
 
@@ -161,7 +208,7 @@ class AISettingsService {
 
 /// Provider for AI settings
 final aiSettingsProvider = FutureProvider<AISettings>((ref) async {
-  final settings = await AISettingsService.getSettings();
+  final settings = await AISettingsService.getSettingsWithDefault(ref);
   return AISettings(
     provider: settings.provider,
     model: settings.model,

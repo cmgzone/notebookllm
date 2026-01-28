@@ -72,6 +72,10 @@ class _ShareContentSheetState extends ConsumerState<ShareContentSheet> {
     final theme = Theme.of(context);
 
     return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       padding: EdgeInsets.only(
         left: 24,
         right: 24,
@@ -179,6 +183,7 @@ Future<bool?> showShareContentSheet(
   return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
+    backgroundColor: Colors.transparent,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),

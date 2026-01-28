@@ -61,6 +61,19 @@ class ApiToken {
     );
   }
 
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'token_prefix': tokenPrefix,
+      'token_suffix': tokenSuffix,
+      'expires_at': expiresAt?.toIso8601String(),
+      'last_used_at': lastUsedAt?.toIso8601String(),
+      'created_at': createdAt.toIso8601String(),
+      'revoked_at': isRevoked ? DateTime.now().toIso8601String() : null,
+    };
+  }
+
   String get displayToken => '$tokenPrefix...$tokenSuffix';
 
   bool get isExpired =>

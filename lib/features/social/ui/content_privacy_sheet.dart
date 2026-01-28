@@ -90,6 +90,10 @@ class _ContentPrivacySheetState extends ConsumerState<ContentPrivacySheet> {
 
     return Container(
       padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,6 +234,7 @@ Future<bool?> showContentPrivacySheet(
 }) {
   return showModalBottomSheet<bool>(
     context: context,
+    backgroundColor: Colors.transparent,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),

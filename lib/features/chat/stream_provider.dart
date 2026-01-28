@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'stream_token.dart';
+import '../../core/ai/ai_models_provider.dart';
 import '../../core/ai/ai_settings_service.dart';
 import '../../core/services/wakelock_service.dart';
 import '../sources/source_provider.dart';
@@ -10,10 +10,12 @@ import '../sources/source.dart';
 import '../gamification/gamification_provider.dart';
 import '../../core/search/serper_service.dart';
 import 'message.dart';
-import '../../core/ai/ai_models_provider.dart';
 import '../../core/api/api_service.dart';
 import 'github_chat_context_builder.dart';
 import '../subscription/services/credit_manager.dart';
+import '../agent_skills/agent_skill.dart';
+import '../agent_skills/agent_skills_provider.dart';
+import '../custom_agents/custom_agents_provider.dart';
 
 class StreamNotifier extends StateNotifier<List<StreamToken>> {
   StreamNotifier(this.ref) : super([]);
@@ -21,39 +23,15 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
   late final SerperService _serperService = SerperService(ref);
 
   Future<String> _getSelectedProvider() async {
-    // Get the selected model first
-    final model = await AISettingsService.getModel();
-
-    if (model != null && model.isNotEmpty) {
-      // Auto-detect provider from the model
-      return await AISettingsService.getProviderForModel(model, ref);
-    }
-
-    // Fallback to saved provider if no model selected
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('ai_provider') ?? 'gemini';
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
+    return settings.provider;
   }
 
   Future<String> _getSelectedModel() async {
-    final settings = await AISettingsService.getSettings();
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
     if (settings.model != null && settings.model!.isNotEmpty) {
       debugPrint('[StreamNotifier] Using selected model: ${settings.model}');
       return settings.model!;
-    }
-
-    // Try to get the first available model from the API
-    debugPrint('[StreamNotifier] No model selected, trying to get default...');
-    try {
-      final modelsAsync = await ref.read(availableModelsProvider.future);
-      for (final models in modelsAsync.values) {
-        if (models.isNotEmpty) {
-          final defaultModel = models.first.id;
-          debugPrint('[StreamNotifier] Using default model: $defaultModel');
-          return defaultModel;
-        }
-      }
-    } catch (e) {
-      debugPrint('[StreamNotifier] Error getting default model: $e');
     }
 
     throw Exception(
@@ -69,8 +47,15 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
       int currentChars = 0;
 
       // Reserve space for instructions and query (~2000 chars)
-      const reservedChars = 2000;
+      const reservedChars = 4000;
       final availableForContext = maxContextChars - reservedChars;
+
+      final agentPreamble = _buildAgentPreamble();
+      if (agentPreamble != null && agentPreamble.isNotEmpty) {
+        buffer.writeln(agentPreamble);
+        buffer.writeln();
+        currentChars += agentPreamble.length;
+      }
 
       // Separate GitHub sources from regular sources
       final githubSources = sources.where((s) => s.isGitHubSource).toList();
@@ -261,6 +246,57 @@ $query
 === INSTRUCTIONS ===
 Answer the user's question to the best of your ability.
 ''';
+    }
+  }
+
+  String? _buildAgentPreamble() {
+    try {
+      final agentsState = ref.read(customAgentsProvider);
+      if (agentsState.isLoading) return null;
+      final selectedId = agentsState.selectedAgentId;
+      if (selectedId == null || selectedId.isEmpty) return null;
+      final agent = agentsState.agents.where((a) => a.id == selectedId).isEmpty
+          ? null
+          : agentsState.agents.firstWhere((a) => a.id == selectedId);
+      if (agent == null) return null;
+
+      final skillsAsync = ref.read(agentSkillsProvider);
+      final allSkills = skillsAsync.valueOrNull ?? const <AgentSkill>[];
+      final skillsById = {for (final s in allSkills) s.id: s};
+      final selectedSkills = agent.skillIds
+          .map((id) => skillsById[id])
+          .whereType<AgentSkill>()
+          .where((s) => s.isActive)
+          .toList();
+
+      final b = StringBuffer();
+      b.writeln('=== AGENT CONFIGURATION ===');
+      b.writeln('Agent: ${agent.name}');
+      if (agent.description != null && agent.description!.isNotEmpty) {
+        b.writeln('Description: ${agent.description}');
+      }
+      if (agent.systemPrompt.isNotEmpty) {
+        b.writeln();
+        b.writeln('SYSTEM PROMPT:');
+        b.writeln(agent.systemPrompt);
+      }
+      if (selectedSkills.isNotEmpty) {
+        b.writeln();
+        b.writeln('SKILLS:');
+        for (final s in selectedSkills) {
+          b.writeln('---');
+          b.writeln('Name: ${s.name}');
+          if (s.description != null && s.description!.isNotEmpty) {
+            b.writeln('Description: ${s.description}');
+          }
+          b.writeln('Content:');
+          b.writeln(s.content);
+        }
+      }
+      b.writeln('=== END AGENT CONFIGURATION ===');
+      return b.toString();
+    } catch (_) {
+      return null;
     }
   }
 

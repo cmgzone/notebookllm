@@ -30,7 +30,7 @@ class ResearchAgent {
       }
     } else {
       // Fallback to global settings
-      final settings = await AISettingsService.getSettings();
+      final settings = await AISettingsService.getSettingsWithDefault(ref);
       provider = settings.provider;
       targetModel = settings.getEffectiveModel();
     }

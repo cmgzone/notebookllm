@@ -288,7 +288,7 @@ class StoryGeneratorNotifier extends StateNotifier<StoryGeneratorState> {
       yield state;
 
       // Generate AI images - use environment API key from config
-      final settings = await AISettingsService.getSettings();
+      final settings = await AISettingsService.getSettingsWithDefault(ref);
 
       // Get correct API key
       final creds = ref.read(globalCredentialsServiceProvider);
@@ -493,7 +493,7 @@ Return JSON format:
   }
 
   Future<String> _callAI(String prompt) async {
-    final settings = await AISettingsService.getSettings();
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
     final model = settings.getEffectiveModel();
 
     // Use Backend Proxy (Admin's API keys)

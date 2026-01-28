@@ -149,7 +149,7 @@ Return ONLY the image generation prompt, no other text.
 
   Future<String> _callAI(String prompt) async {
     try {
-      final settings = await AISettingsService.getSettings();
+      final settings = await AISettingsService.getSettingsWithDefault(ref);
       final model = settings.model;
 
       if (model == null || model.isEmpty) {

@@ -694,6 +694,27 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
             title: 'Tools',
             children: [
               _ActionTile(
+                title: 'Custom Agents',
+                subtitle: 'Create agents and attach skills',
+                icon: Icons.smart_toy_outlined,
+                color: Colors.teal,
+                onTap: () => context.push('/custom-agents'),
+              ),
+              _ActionTile(
+                title: 'Agent Skills',
+                subtitle: 'Manage prompt skills and plugins',
+                icon: Icons.extension,
+                color: Colors.blue,
+                onTap: () => context.push('/agent-skills'),
+              ),
+              _ActionTile(
+                title: 'Agent Connections',
+                subtitle: 'Connect external coding agents',
+                icon: Icons.terminal,
+                color: Colors.deepOrange,
+                onTap: () => context.push('/agent-connections'),
+              ),
+              _ActionTile(
                 title: 'Migrate Agent ID',
                 subtitle: 'Move ElevenLabs Agent ID to database',
                 icon: Icons.support_agent,

@@ -30,6 +30,7 @@ import '../../core/audio/voice_service.dart';
 import 'context_usage_widget.dart';
 import 'github_action_detector.dart';
 import '../github/github_issue_dialog.dart';
+import '../custom_agents/custom_agents_provider.dart';
 
 class EnhancedChatScreen extends ConsumerStatefulWidget {
   const EnhancedChatScreen({super.key});
@@ -620,12 +621,26 @@ Sources to analyze:''';
   @override
   Widget build(BuildContext context) {
     final messages = ref.watch(chatProvider);
+    final customAgentsState = ref.watch(customAgentsProvider);
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
 
+    String? selectedAgentName;
+    final selectedAgentId = customAgentsState.selectedAgentId;
+    if (selectedAgentId != null) {
+      for (final agent in customAgentsState.agents) {
+        if (agent.id == selectedAgentId) {
+          selectedAgentName = agent.name;
+          break;
+        }
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Chat'),
+        title: Text(selectedAgentName == null
+            ? 'AI Chat'
+            : 'AI Chat • $selectedAgentName'),
         actions: [
           // Context usage indicator
           GestureDetector(
@@ -645,6 +660,11 @@ Sources to analyze:''';
             onPressed: _showExportDialog,
             icon: const Icon(Icons.download_outlined),
             tooltip: 'Export chat',
+          ).animate().scale(duration: Motion.short, delay: Motion.medium),
+          IconButton(
+            onPressed: () => context.push('/custom-agents'),
+            icon: const Icon(Icons.smart_toy_outlined),
+            tooltip: 'Custom agents',
           ).animate().scale(duration: Motion.short, delay: Motion.medium),
           Consumer(builder: (context, ref, _) {
             return IconButton(

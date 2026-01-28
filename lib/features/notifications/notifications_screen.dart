@@ -110,6 +110,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) => const _NotificationSettingsSheet(),
     );
   }

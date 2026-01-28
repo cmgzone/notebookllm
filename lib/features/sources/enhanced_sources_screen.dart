@@ -543,7 +543,15 @@ class _EnhancedSourcesScreenState extends ConsumerState<EnhancedSourcesScreen> {
             onPressed: () => showModalBottomSheet(
               context: context,
               isScrollControlled: true,
-              builder: (_) => const AddSourceSheet(),
+              backgroundColor: Colors.transparent,
+              builder: (_) => Container(
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: const AddSourceSheet(),
+              ),
             ),
             heroTag: 'add_source',
             backgroundColor: scheme.primary,

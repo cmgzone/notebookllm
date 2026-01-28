@@ -111,7 +111,7 @@ class AudioOverviewNotifier extends StateNotifier<AudioStudioState> {
   }
 
   Future<String> _callAI(String prompt) async {
-    final settings = await AISettingsService.getSettings();
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
     final model = settings.model;
 
     if (model == null || model.isEmpty) {

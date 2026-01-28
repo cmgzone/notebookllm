@@ -156,7 +156,14 @@ class _MealPlannerScreenState extends ConsumerState<MealPlannerScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => _MealDetailsSheet(meal: meal),
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: _MealDetailsSheet(meal: meal),
+      ),
     );
   }
 
@@ -164,10 +171,17 @@ class _MealPlannerScreenState extends ConsumerState<MealPlannerScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => AddMealSheet(
-        date: date,
-        mealType: type,
-        savedMeals: ref.read(mealPlannerProvider).savedMeals,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: AddMealSheet(
+          date: date,
+          mealType: type,
+          savedMeals: ref.read(mealPlannerProvider).savedMeals,
+        ),
       ),
     );
   }

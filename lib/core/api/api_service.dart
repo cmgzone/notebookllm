@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
@@ -42,7 +43,7 @@ class ApiService {
   late final Dio _dio;
   String? _token;
   String? _refreshToken;
-  bool _isRefreshing = false;
+  Completer<bool>? _refreshCompleter;
 
   ApiService(this.ref) {
     _dio = Dio(BaseOptions(
@@ -82,32 +83,40 @@ class ApiService {
             !e.requestOptions.path.contains('/auth/refresh') &&
             !e.requestOptions.path.contains('/auth/login')) {
           final refreshToken = await getRefreshToken();
-          if (refreshToken != null && !_isRefreshing) {
-            _isRefreshing = true;
-            try {
-              developer.log('[API] Access token expired, attempting refresh...',
-                  name: 'ApiService');
-              final success = await refreshAccessToken();
-              _isRefreshing = false;
-
-              if (success) {
-                // Retry the original request with the new token
-                final newToken = await getToken();
-                final options = e.requestOptions;
-                options.headers['Authorization'] = 'Bearer $newToken';
-
-                final response = await _dio.fetch(options);
-                return handler.resolve(response);
+          bool refreshed = false;
+          if (refreshToken != null) {
+            final currentCompleter = _refreshCompleter;
+            if (currentCompleter != null) {
+              refreshed = await currentCompleter.future;
+            } else {
+              final newCompleter = Completer<bool>();
+              _refreshCompleter = newCompleter;
+              try {
+                developer.log('[API] Access token expired, attempting refresh...',
+                    name: 'ApiService');
+                refreshed = await refreshAccessToken();
+                newCompleter.complete(refreshed);
+              } catch (refreshError) {
+                newCompleter.complete(false);
+                developer.log('[API] Token refresh failed: $refreshError',
+                    name: 'ApiService');
+              } finally {
+                _refreshCompleter = null;
               }
-            } catch (refreshError) {
-              _isRefreshing = false;
-              developer.log('[API] Token refresh failed: $refreshError',
-                  name: 'ApiService');
+            }
+
+            if (refreshed) {
+              final newToken = await getToken();
+              final options = e.requestOptions;
+              options.headers['Authorization'] = 'Bearer $newToken';
+
+              final response = await _dio.fetch(options);
+              return handler.resolve(response);
             }
           }
 
-          // If refresh failed or no refresh token, log out
-          if (e.requestOptions.extra['clearTokenOn401'] ?? true) {
+          if ((e.requestOptions.extra['clearTokenOn401'] ?? true) &&
+              !refreshed) {
             await clearTokens();
           }
         }
@@ -464,7 +473,7 @@ class ApiService {
   // ============ API TOKENS ============
 
   Future<List<Map<String, dynamic>>> listApiTokens() async {
-    final response = await get<Map<String, dynamic>>('/auth/api-tokens');
+    final response = await get<Map<String, dynamic>>('/auth/tokens');
     return List<Map<String, dynamic>>.from(response['tokens'] ?? []);
   }
 
@@ -472,14 +481,14 @@ class ApiService {
     required String name,
     DateTime? expiresAt,
   }) async {
-    return await post<Map<String, dynamic>>('/auth/api-tokens', {
+    return await post<Map<String, dynamic>>('/auth/tokens', {
       'name': name,
       if (expiresAt != null) 'expiresAt': expiresAt.toIso8601String(),
     });
   }
 
   Future<void> revokeApiToken(String tokenId) async {
-    await delete('/auth/api-tokens/$tokenId');
+    await delete('/auth/tokens/$tokenId');
   }
 
   // ============ NOTEBOOKS ============
@@ -977,6 +986,11 @@ class ApiService {
   Future<List<Map<String, dynamic>>> getAIModels() async {
     final response = await get<Map<String, dynamic>>('/ai/models');
     return List<Map<String, dynamic>>.from(response['models'] ?? []);
+  }
+
+  Future<Map<String, dynamic>> getDefaultAIModel() async {
+    final response = await get<Map<String, dynamic>>('/ai/models/default');
+    return Map<String, dynamic>.from(response['model'] ?? {});
   }
 
   Future<Map<String, dynamic>> addAIModel(Map<String, dynamic> data) async {
@@ -1503,7 +1517,7 @@ class ApiService {
   // ============ AGENT SKILLS ============
 
   Future<List<Map<String, dynamic>>> getAgentSkills() async {
-    final response = await get<Map<String, dynamic>>('/agents/skills');
+    final response = await get<Map<String, dynamic>>('/agent-skills');
     return List<Map<String, dynamic>>.from(response['skills'] ?? []);
   }
 
@@ -1519,7 +1533,7 @@ class ApiService {
       if (description != null) 'description': description,
       if (parameters != null) 'parameters': parameters,
     };
-    return await post<Map<String, dynamic>>('/agents/skills', data);
+    return await post<Map<String, dynamic>>('/agent-skills', data);
   }
 
   Future<Map<String, dynamic>> updateAgentSkill(
@@ -1537,11 +1551,41 @@ class ApiService {
       if (parameters != null) 'parameters': parameters,
       if (isActive != null) 'isActive': isActive,
     };
-    return await put<Map<String, dynamic>>('/agents/skills/$id', data);
+    return await put<Map<String, dynamic>>('/agent-skills/$id', data);
   }
 
   Future<void> deleteAgentSkill(String id) async {
-    await delete('/agents/skills/$id');
+    await delete('/agent-skills/$id');
+  }
+
+  Future<List<Map<String, dynamic>>> getAgentSkillsCatalog({
+    String? query,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final response = await get<Map<String, dynamic>>(
+      '/agent-skills/catalog',
+      queryParameters: {
+        if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
+        'limit': limit,
+        'offset': offset,
+      },
+    );
+    return List<Map<String, dynamic>>.from(response['catalog'] ?? []);
+  }
+
+  Future<Map<String, dynamic>> installAgentSkillFromCatalog(
+    String catalogId, {
+    String? nameOverride,
+  }) async {
+    final data = <String, dynamic>{
+      if (nameOverride != null && nameOverride.trim().isNotEmpty)
+        'name': nameOverride.trim(),
+    };
+    return await post<Map<String, dynamic>>(
+      '/agent-skills/install/$catalogId',
+      data,
+    );
   }
 
   // ============ ONBOARDING ============

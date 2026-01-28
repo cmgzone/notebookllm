@@ -15,20 +15,13 @@ class AINotifier extends StateNotifier<AIState> {
   final OpenRouterService _openRouterService = OpenRouterService();
 
   Future<String> _getSelectedProvider() async {
-    // Get the selected model first
-    final model = await AISettingsService.getModel();
-
-    if (model != null && model.isNotEmpty) {
-      // Auto-detect provider from the model
-      return await AISettingsService.getProviderForModel(model, ref);
-    }
-
-    // Fallback to saved provider if no model selected
-    return await AISettingsService.getProvider();
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
+    return settings.provider;
   }
 
   Future<String> _getSelectedModel() async {
-    final model = await AISettingsService.getModel();
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
+    final model = settings.model;
     if (model == null || model.isEmpty) {
       // Optional: try to get the first available model from provider as last resort?
       // But user asked to remove hardcoded fallbacks.

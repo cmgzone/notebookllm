@@ -387,100 +387,108 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.7,
         maxChildSize: 0.95,
         expand: false,
         builder: (context, scrollController) {
-          return transactions.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => Center(child: Text('Error: $error')),
-            data: (txList) {
-              return Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(color: Colors.grey.shade300),
+          return Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: transactions.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, stack) => Center(child: Text('Error: $error')),
+              data: (txList) {
+                return Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: Colors.grey.shade300),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Text(
+                            'Transaction History',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        const Text(
-                          'Transaction History',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
+                    Expanded(
+                      child: txList.isEmpty
+                          ? const Center(child: Text('No transactions yet'))
+                          : ListView.builder(
+                              controller: scrollController,
+                              itemCount: txList.length,
+                              itemBuilder: (context, index) {
+                                final tx = txList[index];
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: tx.isCredit
+                                        ? Colors.green.shade100
+                                        : Colors.red.shade100,
+                                    child: Icon(
+                                      tx.isCredit ? Icons.add : Icons.remove,
+                                      color: tx.isCredit
+                                          ? Colors.green.shade700
+                                          : Colors.red.shade700,
+                                    ),
+                                  ),
+                                  title: Text(
+                                      tx.description ?? tx.transactionType),
+                                  subtitle: Text(
+                                    _formatDate(tx.createdAt),
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  trailing: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '${tx.isCredit ? '+' : ''}${tx.amount}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: tx.isCredit
+                                              ? Colors.green.shade700
+                                              : Colors.red.shade700,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Balance: ${tx.balanceAfter}',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
                     ),
-                  ),
-                  Expanded(
-                    child: txList.isEmpty
-                        ? const Center(child: Text('No transactions yet'))
-                        : ListView.builder(
-                            controller: scrollController,
-                            itemCount: txList.length,
-                            itemBuilder: (context, index) {
-                              final tx = txList[index];
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: tx.isCredit
-                                      ? Colors.green.shade100
-                                      : Colors.red.shade100,
-                                  child: Icon(
-                                    tx.isCredit ? Icons.add : Icons.remove,
-                                    color: tx.isCredit
-                                        ? Colors.green.shade700
-                                        : Colors.red.shade700,
-                                  ),
-                                ),
-                                title:
-                                    Text(tx.description ?? tx.transactionType),
-                                subtitle: Text(
-                                  _formatDate(tx.createdAt),
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                trailing: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      '${tx.isCredit ? '+' : ''}${tx.amount}',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: tx.isCredit
-                                            ? Colors.green.shade700
-                                            : Colors.red.shade700,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Balance: ${tx.balanceAfter}',
-                                      style: TextStyle(
-                                        color: Colors.grey.shade600,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              );
-            },
+                  ],
+                );
+              },
+            ),
           );
         },
       ),

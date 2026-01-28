@@ -174,7 +174,7 @@ Create 3-5 main branches with 2-4 sub-topics each.
 
   Future<String> _callAI(String prompt) async {
     try {
-      final settings = await AISettingsService.getSettings();
+      final settings = await AISettingsService.getSettingsWithDefault(ref);
       final model = settings.getEffectiveModel();
 
       debugPrint(

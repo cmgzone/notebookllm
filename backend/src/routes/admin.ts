@@ -932,4 +932,124 @@ router.get('/notifications/stats', async (req: AuthRequest, res: Response) => {
     }
 });
 
+router.get('/skill-catalog', async (req: AuthRequest, res: Response) => {
+    try {
+        const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+        const limitRaw = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : 100;
+        const offsetRaw = typeof req.query.offset === 'string' ? parseInt(req.query.offset, 10) : 0;
+
+        const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 100;
+        const offset = Number.isFinite(offsetRaw) ? Math.max(offsetRaw, 0) : 0;
+
+        if (q) {
+            const result = await pool.query(
+                `SELECT *
+                 FROM skill_catalog
+                 WHERE slug ILIKE $1
+                    OR name ILIKE $1
+                    OR COALESCE(description, '') ILIKE $1
+                 ORDER BY updated_at DESC
+                 LIMIT $2 OFFSET $3`,
+                [`%${q}%`, limit, offset]
+            );
+            return res.json({ success: true, catalog: result.rows, limit, offset });
+        }
+
+        const result = await pool.query(
+            `SELECT *
+             FROM skill_catalog
+             ORDER BY updated_at DESC
+             LIMIT $1 OFFSET $2`,
+            [limit, offset]
+        );
+        return res.json({ success: true, catalog: result.rows, limit, offset });
+    } catch (error) {
+        console.error('Error listing skill catalog:', error);
+        return res.status(500).json({ error: 'Failed to list skill catalog' });
+    }
+});
+
+router.post('/skill-catalog', async (req: AuthRequest, res: Response) => {
+    try {
+        const slug = typeof req.body?.slug === 'string' ? req.body.slug.trim() : '';
+        const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+        const description = typeof req.body?.description === 'string' ? req.body.description.trim() : null;
+        const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
+        const parameters = req.body?.parameters ?? null;
+        const isActive = typeof req.body?.isActive === 'boolean' ? req.body.isActive : (typeof req.body?.is_active === 'boolean' ? req.body.is_active : true);
+
+        if (!slug || !name || !content) {
+            return res.status(400).json({ error: 'slug, name, and content are required' });
+        }
+
+        const existing = await pool.query('SELECT id FROM skill_catalog WHERE slug = $1', [slug]);
+        if (existing.rows.length > 0) {
+            return res.status(409).json({ error: 'Catalog slug already exists' });
+        }
+
+        const result = await pool.query(
+            `INSERT INTO skill_catalog (slug, name, description, content, parameters, is_active, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+             RETURNING *`,
+            [slug, name, description, content, parameters ?? '{}', isActive]
+        );
+
+        return res.json({ success: true, item: result.rows[0] });
+    } catch (error) {
+        console.error('Error creating catalog skill:', error);
+        return res.status(500).json({ error: 'Failed to create catalog skill' });
+    }
+});
+
+router.put('/skill-catalog/:id', async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const slug = typeof req.body?.slug === 'string' ? req.body.slug.trim() : null;
+        const name = typeof req.body?.name === 'string' ? req.body.name.trim() : null;
+        const description = typeof req.body?.description === 'string' ? req.body.description.trim() : null;
+        const content = typeof req.body?.content === 'string' ? req.body.content.trim() : null;
+        const parameters = req.body?.parameters ?? null;
+        const isActive = typeof req.body?.isActive === 'boolean' ? req.body.isActive : (typeof req.body?.is_active === 'boolean' ? req.body.is_active : null);
+
+        const result = await pool.query(
+            `UPDATE skill_catalog
+             SET slug = COALESCE($1, slug),
+                 name = COALESCE($2, name),
+                 description = COALESCE($3, description),
+                 content = COALESCE($4, content),
+                 parameters = COALESCE($5, parameters),
+                 is_active = COALESCE($6, is_active),
+                 updated_at = NOW()
+             WHERE id = $7
+             RETURNING *`,
+            [slug, name, description, content, parameters, isActive, id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Catalog skill not found' });
+        }
+
+        return res.json({ success: true, item: result.rows[0] });
+    } catch (error) {
+        console.error('Error updating catalog skill:', error);
+        return res.status(500).json({ error: 'Failed to update catalog skill' });
+    }
+});
+
+router.delete('/skill-catalog/:id', async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const result = await pool.query('DELETE FROM skill_catalog WHERE id = $1 RETURNING id', [id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Catalog skill not found' });
+        }
+
+        return res.json({ success: true, deletedId: result.rows[0].id });
+    } catch (error) {
+        console.error('Error deleting catalog skill:', error);
+        return res.status(500).json({ error: 'Failed to delete catalog skill' });
+    }
+});
+
 export default router;

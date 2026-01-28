@@ -28,4 +28,16 @@ class AgentSkill {
       createdAt: DateTime.parse(json['created_at']),
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'content': content,
+      'parameters': parameters,
+      'is_active': isActive,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
 }

@@ -318,7 +318,7 @@ Return ONLY a JSON array with this format:
   }
 
   Future<String> _callAI(String prompt) async {
-    final settings = await AISettingsService.getSettings();
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
     final model = settings.getEffectiveModel();
 
     // Use Backend Proxy (Admin's API keys)

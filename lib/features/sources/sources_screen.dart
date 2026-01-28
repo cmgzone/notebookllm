@@ -71,7 +71,15 @@ class SourcesScreen extends ConsumerWidget {
             onPressed: () => showModalBottomSheet(
               context: context,
               isScrollControlled: true,
-              builder: (_) => const AddSourceSheet(),
+              backgroundColor: Colors.transparent,
+              builder: (_) => Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: const AddSourceSheet(),
+              ),
             ),
             heroTag: 'add_source',
             child: const Icon(Icons.add),

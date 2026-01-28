@@ -38,7 +38,7 @@ class AgentSkillsNotifier extends StateNotifier<AsyncValue<List<AgentSkill>>> {
       // Reload list
       await loadSkills();
     } catch (e) {
-      rethrow;
+      state = AsyncValue.error(e, StackTrace.current);
     }
   }
 
@@ -62,7 +62,7 @@ class AgentSkillsNotifier extends StateNotifier<AsyncValue<List<AgentSkill>>> {
       );
       await loadSkills();
     } catch (e) {
-      rethrow;
+      state = AsyncValue.error(e, StackTrace.current);
     }
   }
 
@@ -75,10 +75,8 @@ class AgentSkillsNotifier extends StateNotifier<AsyncValue<List<AgentSkill>>> {
       state.whenData((skills) {
         state = AsyncValue.data(skills.where((s) => s.id != id).toList());
       });
-      // Or reload to be safe
-      // await loadSkills();
     } catch (e) {
-      rethrow;
+      state = AsyncValue.error(e, StackTrace.current);
     }
   }
 }

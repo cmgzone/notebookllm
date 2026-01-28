@@ -12,7 +12,7 @@ class DesignerAgent {
 
   Future<GeminiImageService> _getImageService(
       {required String? providerOverride}) async {
-    final settings = await AISettingsService.getSettings();
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
     final provider = providerOverride ?? settings.provider;
     final creds = ref.read(globalCredentialsServiceProvider);
 
@@ -30,7 +30,7 @@ class DesignerAgent {
   }
 
   Future<String> generateCoverArt(EbookProject project) async {
-    final settings = await AISettingsService.getSettings();
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
     final imageService =
         await _getImageService(providerOverride: settings.provider);
 
@@ -47,7 +47,7 @@ Primary color: ${project.branding.primaryColorValue.toRadixString(16)}
 
   Future<String> generateChapterIllustration(
       EbookChapter chapter, String style) async {
-    final settings = await AISettingsService.getSettings();
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
     final imageService =
         await _getImageService(providerOverride: settings.provider);
 

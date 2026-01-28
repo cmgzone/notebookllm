@@ -17,12 +17,12 @@ class ArtifactNotifier extends StateNotifier<List<Artifact>> {
   final Ref ref;
 
   Future<String> _getSelectedProvider() async {
-    final settings = await AISettingsService.getSettings();
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
     return settings.provider;
   }
 
   Future<String> _getSelectedModel() async {
-    final settings = await AISettingsService.getSettings();
+    final settings = await AISettingsService.getSettingsWithDefault(ref);
     return settings.getEffectiveModel();
   }
 

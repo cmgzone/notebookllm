@@ -1,18 +1,20 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../ai/gemini_service.dart';
 import '../ai/ai_settings_service.dart';
 
 class GeminiEmbeddingService {
   final GeminiService _geminiService;
+  final Ref ref;
 
-  GeminiEmbeddingService(this._geminiService);
+  GeminiEmbeddingService(this._geminiService, {required this.ref});
 
   Future<List<double>> embed(String text) async {
     try {
       // Use Gemini to generate embeddings
-      final settings = await AISettingsService.getSettings();
+      final settings = await AISettingsService.getSettingsWithDefault(ref);
       final model = settings.model;
 
       if (model == null || model.isEmpty) {

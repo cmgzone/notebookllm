@@ -1105,6 +1105,48 @@ $content''',
                 label: const Text('Add Report to Notebook'),
               ),
             const SizedBox(height: 24),
+            if (((_finalResult?.images ?? _researchUpdates.last.images) ?? [])
+                .isNotEmpty) ...[
+              Text('Images', style: text.titleSmall),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: ((_finalResult?.images ??
+                            _researchUpdates.last.images) ??
+                        [])
+                    .map((url) {
+                  return InkWell(
+                    onTap: () => _showDeepResearchImagePreview(context, url),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        url,
+                        width: 110,
+                        height: 110,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          width: 110,
+                          height: 110,
+                          color: scheme.surfaceContainerHighest,
+                          child: Icon(Icons.broken_image,
+                              color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+            ],
+            if (((_finalResult?.videos ?? _researchUpdates.last.videos) ?? [])
+                .isNotEmpty) ...[
+              Text('Videos', style: text.titleSmall),
+              const SizedBox(height: 8),
+              ...((_finalResult?.videos ?? _researchUpdates.last.videos) ?? [])
+                  .map((url) => _buildVideoCard(url)),
+              const SizedBox(height: 24),
+            ],
             const Divider(),
             const SizedBox(height: 8),
             Text('Research Log', style: text.titleSmall),
@@ -1393,6 +1435,70 @@ $content''',
     );
   }
 
+  void _showDeepResearchImagePreview(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Align(
+              alignment: Alignment.topRight,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 32),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+            Flexible(
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.7,
+                  maxWidth: MediaQuery.of(context).size.width * 0.9,
+                ),
+                child: Image.network(
+                  url,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    padding: const EdgeInsets.all(32),
+                    color: Colors.grey[900],
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.broken_image,
+                            size: 64, color: Colors.white54),
+                        SizedBox(height: 16),
+                        Text(
+                          'Failed to load image',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                  ),
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Container(
+                      padding: const EdgeInsets.all(32),
+                      color: Colors.grey[900],
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded /
+                                  loadingProgress.expectedTotalBytes!
+                              : null,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildVideoCard(String url, {bool isPreview = false}) {
     final videoId = _extractVideoId(url);
     final thumbnailUrl =
@@ -1594,7 +1700,12 @@ class _SearchResultCard extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,

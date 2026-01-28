@@ -42,7 +42,7 @@ class _EbookCreatorWizardState extends ConsumerState<EbookCreatorWizard> {
   }
 
   Future<void> _loadGlobalAISettings() async {
-    final settings = await AISettingsService.getSettings();
+    final settings = await AISettingsService.getSettingsWithDefault(ref as Ref);
     final globalModel = settings.model;
     if (globalModel != null && globalModel.isNotEmpty && mounted) {
       setState(() => _selectedModel = globalModel);

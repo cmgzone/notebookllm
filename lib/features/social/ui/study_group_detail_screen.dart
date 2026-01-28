@@ -261,9 +261,16 @@ class _StudyGroupDetailScreenState
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => _ScheduleSessionSheet(
-        groupId: widget.groupId,
-        onCreated: _loadGroup,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: _ScheduleSessionSheet(
+          groupId: widget.groupId,
+          onCreated: _loadGroup,
+        ),
       ),
     );
   }

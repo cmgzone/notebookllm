@@ -164,6 +164,7 @@ class DeepResearchService {
             final sourcesData =
                 (event['sources'] as List?)?.cast<Map<String, dynamic>>() ?? [];
             final imagesData = (event['images'] as List?)?.cast<String>() ?? [];
+            final videosData = (event['videos'] as List?)?.cast<String>() ?? [];
 
             final sources = sourcesData
                 .map((s) {
@@ -202,6 +203,7 @@ class DeepResearchService {
               result: result.isNotEmpty ? result : null,
               sources: sources,
               images: imagesData,
+              videos: videosData,
               isComplete: true,
             );
           } else {
@@ -209,6 +211,7 @@ class DeepResearchService {
             final sourcesData =
                 (event['sources'] as List?)?.cast<Map<String, dynamic>>() ?? [];
             final imagesData = (event['images'] as List?)?.cast<String>() ?? [];
+            final videosData = (event['videos'] as List?)?.cast<String>() ?? [];
 
             final sources = sourcesData
                 .map((s) {
@@ -238,6 +241,7 @@ class DeepResearchService {
               progress: progress,
               sources: sources.isNotEmpty ? sources : null,
               images: imagesData.isNotEmpty ? imagesData : null,
+              videos: videosData.isNotEmpty ? videosData : null,
               isComplete: false,
             );
           }

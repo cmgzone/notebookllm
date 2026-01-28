@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../components/premium_card.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'agent_notebook_badge.dart';
 
 class NotebookCard extends StatelessWidget {
@@ -30,12 +30,30 @@ class NotebookCard extends StatelessWidget {
   final String? agentName;
   final String agentStatus;
 
-  Widget? _buildCoverImage() {
+  // Helper to generate a consistent gradient based on notebook ID
+  List<Color> _getGradient(ColorScheme scheme) {
+    final int hash = notebookId.hashCode;
+    final gradients = [
+      [scheme.primary, scheme.tertiary],
+      [scheme.secondary, scheme.primary],
+      [Colors.blueAccent, Colors.purpleAccent],
+      [Colors.orangeAccent, Colors.deepOrange],
+      [Colors.teal, Colors.greenAccent],
+      [Colors.indigo, Colors.pinkAccent],
+    ];
+    final selection = gradients[hash.abs() % gradients.length];
+    return [
+      selection[0].withValues(alpha: 0.8),
+      selection[1].withValues(alpha: 0.6),
+    ];
+  }
+
+  Widget? _buildCoverImage(BuildContext context) {
     if (coverImage == null || coverImage!.isEmpty) return null;
 
     try {
       if (coverImage!.startsWith('data:image/svg+xml')) {
-        return null; // SVG data URIs not supported by default Image.memory
+        return null;
       } else if (coverImage!.startsWith('data:')) {
         final base64Data = coverImage!.split(',').last;
         return Image.memory(
@@ -43,7 +61,7 @@ class NotebookCard extends StatelessWidget {
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
-          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          errorBuilder: (_, __, ___) => _buildPlaceholder(context),
         );
       } else if (coverImage!.startsWith('http')) {
         return CachedNetworkImage(
@@ -54,7 +72,7 @@ class NotebookCard extends StatelessWidget {
           placeholder: (context, url) => Container(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
-          errorWidget: (_, __, ___) => const SizedBox.shrink(),
+          errorWidget: (_, __, ___) => _buildPlaceholder(context),
         );
       }
     } catch (e) {
@@ -63,182 +81,171 @@ class NotebookCard extends StatelessWidget {
     return null;
   }
 
+  Widget _buildPlaceholder(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: _getGradient(scheme),
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          LucideIcons.book,
+          size: 48,
+          color: Colors.white.withValues(alpha: 0.3),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final coverWidget = _buildCoverImage();
+    final coverWidget = _buildCoverImage(context);
     final hasCover = coverWidget != null;
 
-    return PremiumCard(
-      onTap: () => context.go('/notebook/$notebookId'),
-      padding: EdgeInsets.zero,
-      child: SizedBox(
-        height: 250, // Enforce height
-        child: Stack(
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => context.go('/notebook/$notebookId'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Background (if no cover)
-            if (!hasCover)
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        scheme.primary.withValues(alpha: 0.1),
-                        scheme.secondary.withValues(alpha: 0.05),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-            // Cover Image
-            if (hasCover) Positioned.fill(child: coverWidget),
-
-            // Gradient Overlay for text readability on images
-            if (hasCover)
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.1),
-                        Colors.black.withValues(alpha: 0.7),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-            // Content
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            // Top Section: Cover or Gradient
+            Expanded(
+              flex: 3,
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color:
-                                    hasCover ? Colors.white : scheme.onSurface,
-                                shadows: hasCover
-                                    ? const [
-                                        Shadow(
-                                            color: Colors.black54,
-                                            blurRadius: 4)
-                                      ]
-                                    : null,
-                              ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                  if (hasCover) coverWidget else _buildPlaceholder(context),
+                  
+                  // Play button overlay
+                  Positioned(
+                    bottom: 8,
+                    right: 8,
+                    child: Material(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      shape: const CircleBorder(),
+                      clipBehavior: Clip.antiAlias,
+                      child: IconButton(
+                        onPressed: onPlay ?? () => _showAudioPreview(context),
+                        icon: const Icon(Icons.play_arrow_rounded, color: Colors.white),
+                        tooltip: 'Play Audio Overview',
+                        visualDensity: VisualDensity.compact,
                       ),
-                      // Play Button
-                      Container(
-                        decoration: BoxDecoration(
-                          color: hasCover
-                              ? Colors.white.withValues(alpha: 0.2)
-                              : scheme.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: IconButton(
-                          tooltip: 'Play Audio Overview',
-                          onPressed: onPlay ?? () => _showAudioPreview(context),
-                          icon: Icon(
-                            Icons.play_circle_fill,
-                            color: hasCover ? Colors.white : scheme.primary,
-                            size: 28,
+                    ),
+                  ).animate().fadeIn(),
+                ],
+              ),
+            ),
+            
+            // Bottom Section: Info
+            Expanded(
+              flex: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Title
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            height: 1.2,
                           ),
-                        ),
-                      ).animate().scale(duration: 500.ms).fadeIn(),
-                    ],
-                  ),
-                  const Spacer(),
-                  // Footer Stats
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: hasCover
-                              ? Colors.white.withValues(alpha: 0.2)
-                              : scheme.secondary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.source,
-                                size: 16,
-                                color:
-                                    hasCover ? Colors.white : scheme.secondary),
-                            const SizedBox(width: 6),
-                            Text(
-                              '$sourceCount',
-                              style: TextStyle(
-                                color:
-                                    hasCover ? Colors.white : scheme.secondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Spacer(),
-                      // AI/Agent Badge
-                      if (isAgentNotebook && agentName != null)
-                        AgentNotebookBadge(
-                          agentName: agentName!,
-                          status: agentStatus,
-                          compact: true,
-                          onCoverImage: hasCover,
-                        )
-                      else
+                    ),
+                    
+                    // Metadata Row
+                    Row(
+                      children: [
+                        // Source Count Pill
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: hasCover
-                                ? Colors.white.withValues(alpha: 0.2)
-                                : scheme.tertiary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
+                            color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: scheme.outline.withValues(alpha: 0.1),
+                            ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.auto_awesome,
-                                  size: 14,
-                                  color: hasCover
-                                      ? Colors.white
-                                      : scheme.tertiary),
-                              const SizedBox(width: 4),
+                              Icon(LucideIcons.files, size: 10, color: scheme.onSurfaceVariant),
+                              const SizedBox(width: 2),
                               Text(
-                                'AI',
+                                '$sourceCount',
                                 style: TextStyle(
-                                  color:
-                                      hasCover ? Colors.white : scheme.tertiary,
-                                  fontSize: 12,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w600,
+                                  color: scheme.onSurfaceVariant,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                    ],
-                  ),
-                ],
+                        
+                        const Spacer(),
+                        
+                        if (isAgentNotebook && agentName != null) ...[
+                          AgentNotebookBadge(
+                            agentName: agentName!,
+                            status: agentStatus,
+                            compact: true,
+                          ),
+                        ] else ...[
+                          // AI Label
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: scheme.primaryContainer.withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.auto_awesome, 
+                                  size: 8, 
+                                  color: scheme.onPrimaryContainer
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  'AI',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: scheme.onPrimaryContainer,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -248,7 +255,6 @@ class NotebookCard extends StatelessWidget {
   }
 
   void _showAudioPreview(BuildContext context) {
-    // (Kept existing visual logic but simplified)
     final scheme = Theme.of(context).colorScheme;
     showModalBottomSheet(
       context: context,

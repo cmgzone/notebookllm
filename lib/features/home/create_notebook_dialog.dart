@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../notebook/notebook_provider.dart';
 
 class CreateNotebookDialog extends ConsumerStatefulWidget {
-  const CreateNotebookDialog({super.key});
+  const CreateNotebookDialog({super.key, this.initialCategory});
+
+  final String? initialCategory;
 
   @override
   ConsumerState<CreateNotebookDialog> createState() =>
@@ -13,9 +15,10 @@ class CreateNotebookDialog extends ConsumerStatefulWidget {
 
 class _CreateNotebookDialogState extends ConsumerState<CreateNotebookDialog> {
   final _controller = TextEditingController();
+  final _customCategoryController = TextEditingController();
   bool _isCreating = false;
-  String _selectedCategory = 'General';
-  final _categories = [
+  late String _selectedCategory;
+  late final List<String> _categories = [
     'General',
     'Work',
     'Study',
@@ -26,8 +29,19 @@ class _CreateNotebookDialogState extends ConsumerState<CreateNotebookDialog> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    final initial = (widget.initialCategory ?? 'General').trim();
+    _selectedCategory = initial.isEmpty ? 'General' : initial;
+    if (!_categories.contains(_selectedCategory)) {
+      _categories.insert(0, _selectedCategory);
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
+    _customCategoryController.dispose();
     super.dispose();
   }
 
@@ -84,7 +98,7 @@ class _CreateNotebookDialogState extends ConsumerState<CreateNotebookDialog> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedCategory,
+              initialValue: _selectedCategory,
               decoration: const InputDecoration(labelText: 'Category'),
               items: _categories
                   .map((c) => DropdownMenuItem(value: c, child: Text(c)))
@@ -92,6 +106,24 @@ class _CreateNotebookDialogState extends ConsumerState<CreateNotebookDialog> {
               onChanged: _isCreating
                   ? null
                   : (v) => setState(() => _selectedCategory = v!),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _customCategoryController,
+              enabled: !_isCreating,
+              decoration: const InputDecoration(
+                labelText: 'Custom category (optional)',
+              ),
+              onChanged: (value) {
+                final next = value.trim();
+                if (next.isEmpty) return;
+                setState(() {
+                  if (!_categories.contains(next)) {
+                    _categories.insert(0, next);
+                  }
+                  _selectedCategory = next;
+                });
+              },
             ),
             const SizedBox(height: 24),
             Row(

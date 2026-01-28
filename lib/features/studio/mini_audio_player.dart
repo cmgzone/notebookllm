@@ -31,7 +31,15 @@ class MiniAudioPlayer extends ConsumerWidget {
             context: context,
             isScrollControlled: true,
             useRootNavigator: true,
-            builder: (_) => AudioPlayerSheet(overview: overview),
+            backgroundColor: Colors.transparent,
+            builder: (_) => Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: AudioPlayerSheet(overview: overview),
+            ),
           );
         },
         child: Container(
