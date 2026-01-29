@@ -14,7 +14,9 @@
     "test:qr-mobile": "tsx src/scripts/test-qr-auth-mobile.ts",
     "test:qr-mobile:full": "tsx src/scripts/test-qr-auth-mobile.ts --with-expiry",
     "migrate:agent-communication": "tsx src/scripts/run-agent-communication-migration.ts",
-    "migrate:gitu-core": "tsx src/scripts/run-gitu-core-migration.ts"
+    "migrate:gitu-core": "tsx src/scripts/run-gitu-core-migration.ts",
+    "gitu-cli": "tsx src/scripts/gitu-cli.ts",
+    "gitu": "tsx src/scripts/gitu-cli.ts"
   },
   "keywords": [
     "notebook",
@@ -35,6 +37,7 @@
     "bcryptjs": "^2.4.3",
     "chalk": "^5.3.0",
     "cheerio": "^1.1.2",
+    "commander": "^12.1.0",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
@@ -44,6 +47,7 @@
     "ora": "^8.1.1",
     "pdf-parse": "^1.1.4",
     "pg": "^8.14.0",
+    "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "redis": "^5.10.0",
     "stripe": "^20.1.0",
