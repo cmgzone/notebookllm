@@ -7,7 +7,7 @@ const router = express.Router();
 router.use(authenticateToken);
 
 // Get all notebooks for the authenticated user
-import { getOrSetCache, CacheKeys, CacheTTL } from '../services/cacheService.js';
+import { CacheKeys, CacheTTL, clearNotebookCache, clearUserAnalyticsCache, deleteCache, getOrSetCache } from '../services/cacheService.js';
 
 // ... (imports)
 
@@ -120,6 +120,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
             console.log('Could not update user stats:', statsError);
         }
 
+        await deleteCache(CacheKeys.userNotebooks(req.userId!));
+        await clearUserAnalyticsCache(req.userId!);
+
         res.status(201).json({ success: true, notebook: result.rows[0] });
     } catch (error) {
         console.error('Create notebook error:', error);
@@ -175,6 +178,10 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ error: 'Notebook not found' });
         }
 
+        await deleteCache(CacheKeys.userNotebooks(req.userId!));
+        await clearNotebookCache(id);
+        await clearUserAnalyticsCache(req.userId!);
+
         res.json({ success: true, notebook: result.rows[0] });
     } catch (error) {
         console.error('Update notebook error:', error);
@@ -194,6 +201,10 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Notebook not found' });
         }
+
+        await deleteCache(CacheKeys.userNotebooks(req.userId!));
+        await clearNotebookCache(id);
+        await clearUserAnalyticsCache(req.userId!);
 
         res.json({ success: true, message: 'Notebook deleted' });
     } catch (error) {

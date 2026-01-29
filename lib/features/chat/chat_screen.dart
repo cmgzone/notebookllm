@@ -6,6 +6,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'chat_provider.dart';
 import 'message.dart';
 import 'citation_drawer.dart';
+import '../../core/audio/voice_service.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../ui/components/glass_container.dart';
 import '../../theme/app_theme.dart';
@@ -199,12 +200,12 @@ class _MessagesList extends StatelessWidget {
   }
 }
 
-class _MessageBubble extends StatelessWidget {
+class _MessageBubble extends ConsumerWidget {
   const _MessageBubble({required this.message});
   final Message message;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final isUser = message.isUser;
 
@@ -250,6 +251,49 @@ class _MessageBubble extends StatelessWidget {
                     height: 1.5,
                   ),
                 ),
+                if (!isUser) ...[
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () async {
+                            try {
+                              await ref
+                                  .read(voiceServiceProvider)
+                                  .speak(message.text, interrupt: true);
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('TTS error: $e')),
+                              );
+                            }
+                          },
+                          onLongPress: () async {
+                            await ref.read(voiceServiceProvider).stopSpeaking();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: scheme.surface.withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: scheme.outline.withValues(alpha: 0.12),
+                              ),
+                            ),
+                            child: Icon(
+                              LucideIcons.volume2,
+                              size: 16,
+                              color: scheme.onSurface.withValues(alpha: 0.75),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (message.citations.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Container(
@@ -292,11 +336,81 @@ class _PromptBar extends ConsumerStatefulWidget {
 
 class _PromptBarState extends ConsumerState<_PromptBar> {
   final TextEditingController _controller = TextEditingController();
+  bool _isListening = false;
+  double _soundLevel = 0.0;
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  void _setControllerText(String text) {
+    _controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
+  Future<void> _startVoiceInput() async {
+    setState(() {
+      _isListening = true;
+      _soundLevel = 0.0;
+    });
+
+    try {
+      await ref.read(voiceServiceProvider).listen(
+        onResult: (text) {
+          if (!mounted) return;
+          _setControllerText(text);
+        },
+        onDone: (text) {
+          if (!mounted) return;
+          setState(() => _isListening = false);
+          final finalText = text.trim();
+          if (finalText.isEmpty) return;
+          ref.read(chatProvider.notifier).send(finalText);
+          _controller.clear();
+        },
+        onSoundLevel: (level) {
+          if (!mounted) return;
+          setState(() => _soundLevel = level);
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isListening = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Voice input error: $e')),
+      );
+    }
+  }
+
+  Future<void> _stopVoiceInput() async {
+    try {
+      final transcript = await ref.read(voiceServiceProvider).stopListening();
+      if (!mounted) return;
+      setState(() => _isListening = false);
+      final text = transcript.trim();
+      if (text.isEmpty) return;
+      _setControllerText(text);
+      ref.read(chatProvider.notifier).send(text);
+      _controller.clear();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isListening = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to stop voice input: $e')),
+      );
+    }
+  }
+
+  Future<void> _toggleVoiceInput() async {
+    if (_isListening) {
+      await _stopVoiceInput();
+    } else {
+      await _startVoiceInput();
+    }
   }
 
   @override
@@ -335,6 +449,29 @@ class _PromptBarState extends ConsumerState<_PromptBar> {
                   maxLines: 4,
                 ),
               ),
+            ),
+            const SizedBox(width: 12),
+            Transform.scale(
+              scale: 1 + (_soundLevel * 0.18),
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _isListening
+                      ? scheme.error.withValues(alpha: 0.9)
+                      : scheme.surface.withValues(alpha: 0.5),
+                  border:
+                      Border.all(color: scheme.outline.withValues(alpha: 0.2)),
+                ),
+                child: IconButton(
+                  onPressed: _toggleVoiceInput,
+                  icon: Icon(
+                    _isListening ? Icons.stop : LucideIcons.mic,
+                    color: _isListening ? scheme.onError : scheme.onSurface,
+                    size: 20,
+                  ),
+                  tooltip: _isListening ? 'Stop voice input' : 'Voice input',
+                ),
+              ).animate(key: ValueKey(_isListening)).scale(duration: 200.ms),
             ),
             const SizedBox(width: 12),
             Container(

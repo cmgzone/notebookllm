@@ -2,6 +2,7 @@ import express, { type Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
+import { CacheKeys, clearNotebookCache, clearUserAnalyticsCache, deleteCache } from '../services/cacheService.js';
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -101,6 +102,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
             [req.userId]
         );
 
+        await deleteCache(CacheKeys.userNotebooks(req.userId!));
+        await clearNotebookCache(notebookId);
+        await clearUserAnalyticsCache(req.userId!);
+
         res.status(201).json({ success: true, source: result.rows[0] });
     } catch (error) {
         console.error('Create source error:', error);
@@ -150,6 +155,12 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ error: 'Source not found' });
         }
 
+        const notebookId = result.rows[0].notebook_id;
+        await pool.query('UPDATE notebooks SET updated_at = NOW() WHERE id = $1', [notebookId]);
+        await deleteCache(CacheKeys.userNotebooks(req.userId!));
+        await clearNotebookCache(notebookId);
+        await clearUserAnalyticsCache(req.userId!);
+
         res.json({ success: true, source: result.rows[0] });
     } catch (error) {
         console.error('Update source error:', error);
@@ -165,13 +176,19 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
             `DELETE FROM sources s
              USING notebooks n
              WHERE s.id = $1 AND s.notebook_id = n.id AND n.user_id = $2
-             RETURNING s.id`,
+             RETURNING s.id, s.notebook_id`,
             [id, req.userId]
         );
 
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Source not found' });
         }
+
+        const notebookId = result.rows[0].notebook_id;
+        await pool.query('UPDATE notebooks SET updated_at = NOW() WHERE id = $1', [notebookId]);
+        await deleteCache(CacheKeys.userNotebooks(req.userId!));
+        await clearNotebookCache(notebookId);
+        await clearUserAnalyticsCache(req.userId!);
 
         res.json({ success: true, message: 'Source deleted' });
     } catch (error) {
@@ -192,9 +209,17 @@ router.post('/bulk/delete', async (req: AuthRequest, res: Response) => {
             `DELETE FROM sources s
              USING notebooks n
              WHERE s.id = ANY($1) AND s.notebook_id = n.id AND n.user_id = $2
-             RETURNING s.id`,
+             RETURNING s.id, s.notebook_id`,
             [ids, req.userId]
         );
+
+        const notebookIds = Array.from(new Set(result.rows.map((r: any) => r.notebook_id).filter(Boolean)));
+        if (notebookIds.length > 0) {
+            await pool.query('UPDATE notebooks SET updated_at = NOW() WHERE id = ANY($1)', [notebookIds]);
+        }
+        await deleteCache(CacheKeys.userNotebooks(req.userId!));
+        await Promise.all(notebookIds.map((notebookId: string) => clearNotebookCache(notebookId)));
+        await clearUserAnalyticsCache(req.userId!);
 
         res.json({ success: true, count: result.rowCount });
     } catch (error) {
@@ -221,6 +246,17 @@ router.post('/bulk/move', async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ error: 'Target notebook not found' });
         }
 
+        await pool.query('BEGIN');
+
+        const oldNotebooksResult = await pool.query(
+            `SELECT DISTINCT s.notebook_id
+             FROM sources s
+             INNER JOIN notebooks n ON s.notebook_id = n.id
+             WHERE s.id = ANY($1) AND n.user_id = $2`,
+            [ids, req.userId]
+        );
+        const oldNotebookIds = oldNotebooksResult.rows.map((r: any) => r.notebook_id);
+
         const result = await pool.query(
             `UPDATE sources s SET notebook_id = $1, updated_at = NOW()
              FROM notebooks n
@@ -229,8 +265,22 @@ router.post('/bulk/move', async (req: AuthRequest, res: Response) => {
             [targetNotebookId, ids, req.userId]
         );
 
+        const touchedNotebookIds = Array.from(new Set([...oldNotebookIds, targetNotebookId].filter(Boolean)));
+        if (touchedNotebookIds.length > 0) {
+            await pool.query('UPDATE notebooks SET updated_at = NOW() WHERE id = ANY($1)', [touchedNotebookIds]);
+        }
+
+        await pool.query('COMMIT');
+
+        await deleteCache(CacheKeys.userNotebooks(req.userId!));
+        await Promise.all(touchedNotebookIds.map((notebookId: string) => clearNotebookCache(notebookId)));
+        await clearUserAnalyticsCache(req.userId!);
+
         res.json({ success: true, count: result.rowCount });
     } catch (error) {
+        try {
+            await pool.query('ROLLBACK');
+        } catch {}
         console.error('Bulk move error:', error);
         res.status(500).json({ error: 'Failed to move sources' });
     }

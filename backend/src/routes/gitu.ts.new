@@ -1,0 +1,155 @@
+// ============================================================================
+// CHAT API ENDPOINTS
+// ============================================================================
+
+/**
+ * Send a message to Gitu Assistant
+ * 
+ * POST /api/gitu/message
+ * Body: { message: string, model?: string, sessionId?: string, context?: string[] }
+ * 
+ * Requires: JWT authentication
+ */
+router.post('/message', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { message, model, sessionId: existingSessionId, context = [] } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    let sessionId = existingSessionId;
+    
+    // Create session if not provided
+    if (!sessionId) {
+      const sessionResult = await pool.query(
+        `INSERT INTO gitu_sessions (user_id, title, model)
+         VALUES ($1, $2, $3)
+         RETURNING id`,
+        [userId, message.substring(0, 50), model || 'default']
+      );
+      sessionId = sessionResult.rows[0].id;
+    } else {
+        // Verify session ownership
+        const sessionCheck = await pool.query(
+            `SELECT id FROM gitu_sessions WHERE id = $1 AND user_id = $2`,
+            [sessionId, userId]
+        );
+        if (sessionCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Session not found or access denied' });
+        }
+    }
+
+    // Store user message
+    await pool.query(
+      `INSERT INTO gitu_messages (session_id, role, content, created_at)
+       VALUES ($1, 'user', $2, NOW())`,
+      [sessionId, message]
+    );
+
+    // Get conversation history for context
+    const historyResult = await pool.query(
+        `SELECT role, content FROM gitu_messages 
+         WHERE session_id = $1 
+         ORDER BY created_at ASC 
+         LIMIT 20`, // Limit context window
+        [sessionId]
+    );
+    
+    const history = historyResult.rows.map(row => row.content);
+    // Combine explicit context with history (simple concatenation for now)
+    const fullContext = [...context, ...history];
+
+    // Call AI Router
+    const aiResponse = await gituAIRouter.route({
+      userId,
+      sessionId,
+      prompt: message,
+      context: fullContext,
+      taskType: 'chat',
+      // We can pass model preference if needed, AI Router handles it
+    });
+
+    // Store assistant message
+    await pool.query(
+      `INSERT INTO gitu_messages (session_id, role, content, model, metadata, created_at)
+       VALUES ($1, 'assistant', $2, $3, $4, NOW())`,
+      [sessionId, aiResponse.content, aiResponse.model, JSON.stringify({
+          tokensUsed: aiResponse.tokensUsed,
+          cost: aiResponse.cost
+      })]
+    );
+
+    // Update session timestamp
+    await pool.query(
+        `UPDATE gitu_sessions SET updated_at = NOW() WHERE id = $1`,
+        [sessionId]
+    );
+
+    res.json({
+      content: aiResponse.content,
+      sessionId: sessionId,
+      model: aiResponse.model,
+      usage: {
+          tokens: aiResponse.tokensUsed,
+          cost: aiResponse.cost
+      }
+    });
+
+  } catch (error: any) {
+    console.error('[Gitu] Error processing message:', error);
+    res.status(500).json({ error: error.message || 'Failed to process message' });
+  }
+});
+
+/**
+ * Get Gitu chat sessions
+ * 
+ * GET /api/gitu/sessions
+ * Query: limit=20, offset=0
+ */
+router.get('/sessions', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const result = await pool.query(
+      `SELECT id, title, model, created_at, updated_at 
+       FROM gitu_sessions 
+       WHERE user_id = $1 
+       ORDER BY updated_at DESC 
+       LIMIT $2 OFFSET $3`,
+      [userId, limit, offset]
+    );
+
+    res.json({ sessions: result.rows });
+  } catch (error) {
+    console.error('[Gitu] Error fetching sessions:', error);
+    res.status(500).json({ error: 'Failed to fetch sessions' });
+  }
+});
+
+/**
+ * Get Gitu system status
+ * 
+ * GET /api/gitu/status
+ */
+router.get('/status', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId!;
+        
+        // Check database connection
+        // Check MCP status (optional)
+        
+        res.json({
+            status: 'online',
+            version: '1.0.0',
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('[Gitu] Error fetching status:', error);
+        res.status(500).json({ error: 'System error' });
+    }
+});

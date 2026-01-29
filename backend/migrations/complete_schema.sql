@@ -478,7 +478,7 @@ INSERT INTO ai_models (name, model_id, provider, description, context_window, is
 VALUES 
     ('Gemini 1.5 Flash', 'gemini-1.5-flash', 'google', 'Fast and efficient model for quick tasks', 1000000, true),
     ('Gemini 1.5 Pro', 'gemini-1.5-pro', 'google', 'Advanced model for complex tasks', 2000000, true),
-    ('Gemini 2.0 Flash', 'gemini-2.0-flash-exp', 'google', 'Latest experimental model', 1000000, true),
+    ('Gemini 2.0 Flash', 'gemini-2.0-flash', 'google', 'Latest fast model for quick tasks', 1000000, true),
     ('Llama 3.3 70B', 'meta-llama/llama-3.3-70b-instruct', 'openrouter', 'Powerful open-source model', 128000, true),
     ('Claude 3.5 Sonnet', 'anthropic/claude-3.5-sonnet', 'openrouter', 'Excellent for analysis and writing', 200000, true)
 ON CONFLICT DO NOTHING;

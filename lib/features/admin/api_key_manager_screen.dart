@@ -23,6 +23,7 @@ class _ApiKeyManagerScreenState extends ConsumerState<ApiKeyManagerScreen> {
 
   // Predefined supported services
   final List<String> _supportedServices = [
+    'deepgram',
     'gemini',
     'elevenlabs',
     'murf',

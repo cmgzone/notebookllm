@@ -2,6 +2,7 @@ import express, { type Response } from 'express';
 import pool from '../config/database.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 import { v4 as uuidv4 } from 'uuid';
+import { clearUserAnalyticsCache } from '../services/cacheService.js';
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -71,6 +72,7 @@ router.post('/track', async (req: AuthRequest, res: Response) => {
         }
 
         const result = await pool.query(query, params);
+        await clearUserAnalyticsCache(req.userId!);
         res.json({ success: true, stats: result.rows[0] });
     } catch (error) {
         console.error('Track activity error:', error);

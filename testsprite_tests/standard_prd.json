@@ -12,8 +12,8 @@
     "Offer robust authentication and onboarding flows to personalize and secure user data.",
     "Leverage vector embeddings and retrieval augmented generation (RAG) techniques for efficient semantic search and answer generation."
   ],
-  "key_features": [
-    "User authentication and secure login backed by Supabase services.",
+    "key_features": [
+    "User authentication and secure login backed by backend services.",
     "Notebook creation, editing, and management with intuitive UI components.",
     "Source ingestion from URLs or files with automatic chunking and embedding.",
     "AI-powered chat interface with streaming token support and citation drawer for context.",
@@ -21,7 +21,7 @@
     "Rich audio playback and media management with background service support.",
     "Search functionality including web search integration via Serper API.",
     "Onboarding screens to guide new users through app features and setup.",
-    "Supabase edge functions supporting ingestion, query answering, STT, TTS, and voice management.",
+    "Backend services supporting ingestion, query answering, STT, TTS, and voice management.",
     "Database migrations to enable vector search and media asset handling."
   ],
   "user_flow_summary": [
@@ -35,21 +35,21 @@
     "User can search knowledge sources and the web using integrated search screens.",
     "User manages notebooks and sources through dedicated UIs including detail screens and editable cards."
   ],
-  "validation_criteria": [
+    "validation_criteria": [
     "User authentication succeeds with valid credentials and rejects invalid logins.",
     "Notebooks can be created, displayed, and persisted accurately across sessions.",
     "Sources are ingested properly with successful embedding and chunking, and can be browsed and viewed in detail.",
     "Chat interface streams AI responses smoothly and displays proper citations when applicable.",
     "Audio playback and recording features operate without crashes and manage media assets correctly.",
     "Search features return relevant results from both local knowledge and web queries.",
-    "Supabase edge functions execute correctly and support expected backend operations.",
+    "Backend services execute correctly and support expected operations.",
     "Onboarding screens appear as first-time user experience and can be skipped or repeated as needed."
   ],
   "code_summary": {
     "tech_stack": [
       "Dart",
       "Flutter",
-      "Supabase (Postgres, Edge Functions)",
+      "Postgres",
       "TypeScript",
       "Deno",
       "Android/Gradle",
@@ -69,10 +69,9 @@
       },
       {
         "name": "Authentication",
-        "description": "User login screen and Supabase-backed auth utilities.",
+        "description": "User login screen and backend auth utilities.",
         "files": [
-          "lib/features/auth/login_screen.dart",
-          "lib/core/backend/supabase_service.dart"
+          "lib/features/auth/login_screen.dart"
         ]
       },
       {
@@ -186,36 +185,12 @@
           "lib/features/onboarding/onboarding_screen.dart"
         ]
       },
-      {
-        "name": "Supabase Functions",
-        "description": "Edge functions for query answering, ingestion, STT, TTS, voices, web search.",
-        "files": [
-          "supabase/functions/answer_query/index.ts",
-          "supabase/functions/ingest_source/index.ts",
-          "supabase/functions/stt/index.ts",
-          "supabase/functions/tts/index.ts",
-          "supabase/functions/voices/index.ts",
-          "supabase/functions/web_search/index.ts",
-          "supabase/functions/deno_shims.d.ts"
-        ]
-      },
-      {
-        "name": "Database Migrations",
-        "description": "Supabase SQL migrations for schema, vector search RPC, and media assets.",
-        "files": [
-          "supabase/migrations/0001_init.sql",
-          "supabase/migrations/0002_vector_search_rpc.sql",
-          "supabase/migrations/0003_media_assets.sql",
-          "supabase/migrations/20251118000001_rls_policies.sql",
-          "supabase/config.toml"
-        ]
-      },
+      
+      
       {
         "name": "Scripts",
-        "description": "Operational PowerShell scripts for testing AI and deploying Supabase.",
+        "description": "Operational PowerShell scripts.",
         "files": [
-          "scripts/test_ai.ps1",
-          "scripts/deploy_supabase.ps1"
         ]
       },
       {

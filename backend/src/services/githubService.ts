@@ -4,12 +4,9 @@
  */
 
 import { Octokit } from '@octokit/rest';
-import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database.js';
-
-// Encryption key from environment
-const ENCRYPTION_KEY = process.env.GITHUB_ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-key-change-me';
+import { decryptSecretAllowLegacy, encryptSecret } from './secretEncryptionService.js';
 
 interface GitHubConnection {
   id: string;
@@ -72,27 +69,6 @@ class GitHubService {
     this.clientId = process.env.GITHUB_CLIENT_ID || '';
     this.clientSecret = process.env.GITHUB_CLIENT_SECRET || '';
     this.redirectUri = process.env.GITHUB_REDIRECT_URI || 'http://localhost:3000/api/github/callback';
-  }
-
-  // ==================== ENCRYPTION ====================
-
-  private encrypt(text: string): string {
-    const iv = crypto.randomBytes(16);
-    const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
-    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    return iv.toString('hex') + ':' + encrypted;
-  }
-
-  private decrypt(encryptedText: string): string {
-    const [ivHex, encrypted] = encryptedText.split(':');
-    const iv = Buffer.from(ivHex, 'hex');
-    const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
-    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
   }
 
   // ==================== OAUTH ====================
@@ -206,7 +182,7 @@ class GitHubService {
       [userId]
     );
 
-    const encryptedToken = this.encrypt(token);
+    const encryptedToken = encryptSecret(token);
     const scopes = ['repo', 'read:user']; // Assumed scopes for PAT
 
     if (existing.rows.length > 0) {
@@ -290,7 +266,7 @@ class GitHubService {
       throw new Error('GitHub not connected');
     }
 
-    const token = this.decrypt(result.rows[0].access_token_encrypted);
+    const token = decryptSecretAllowLegacy(result.rows[0].access_token_encrypted);
 
     // Update last used
     await pool.query(

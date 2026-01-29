@@ -2,6 +2,7 @@ import express, { type Response } from 'express';
 import pool from '../config/database.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 import { v4 as uuidv4 } from 'uuid';
+import { clearNotebookCache, clearUserAnalyticsCache } from '../services/cacheService.js';
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -69,6 +70,9 @@ router.post('/flashcards/decks', async (req: AuthRequest, res: Response) => {
         }
 
         await pool.query('COMMIT');
+
+        await clearNotebookCache(notebookId);
+        await clearUserAnalyticsCache(req.userId!);
 
         res.status(201).json({ success: true, deck: result.rows[0] });
     } catch (error: any) {
@@ -139,6 +143,15 @@ router.post('/flashcards/batch', async (req: AuthRequest, res: Response) => {
             [deckId]
         );
 
+        const deckNotebookResult = await pool.query(
+            'SELECT notebook_id FROM flashcard_decks WHERE id = $1 AND user_id = $2',
+            [deckId, req.userId]
+        );
+        if (deckNotebookResult.rows[0]?.notebook_id) {
+            await clearNotebookCache(deckNotebookResult.rows[0].notebook_id);
+        }
+        await clearUserAnalyticsCache(req.userId!);
+
         res.json({ success: true, flashcards: results });
     } catch (error) {
         console.error('Batch sync flashcards error:', error);
@@ -150,10 +163,17 @@ router.post('/flashcards/batch', async (req: AuthRequest, res: Response) => {
 router.delete('/flashcards/decks/:id', async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        await pool.query(
-            'DELETE FROM flashcard_decks WHERE id = $1 AND user_id = $2',
+        const deckNotebookResult = await pool.query(
+            'SELECT notebook_id FROM flashcard_decks WHERE id = $1 AND user_id = $2',
             [id, req.userId]
         );
+        await pool.query('DELETE FROM flashcard_decks WHERE id = $1 AND user_id = $2', [id, req.userId]);
+
+        if (deckNotebookResult.rows[0]?.notebook_id) {
+            await clearNotebookCache(deckNotebookResult.rows[0].notebook_id);
+        }
+        await clearUserAnalyticsCache(req.userId!);
+
         res.json({ success: true });
     } catch (error) {
         console.error('Delete flashcard deck error:', error);
@@ -184,6 +204,18 @@ router.post('/flashcards/:id/progress', async (req: AuthRequest, res: Response) 
                               JOIN flashcards f ON f.deck_id = fd.id WHERE f.id = $1)`,
             [id]
         );
+
+        const flashcardNotebookResult = await pool.query(
+            `SELECT fd.notebook_id
+             FROM flashcards f
+             INNER JOIN flashcard_decks fd ON f.deck_id = fd.id
+             WHERE f.id = $1 AND fd.user_id = $2`,
+            [id, req.userId]
+        );
+        if (flashcardNotebookResult.rows[0]?.notebook_id) {
+            await clearNotebookCache(flashcardNotebookResult.rows[0].notebook_id);
+        }
+        await clearUserAnalyticsCache(req.userId!);
 
         res.json({ success: true });
     } catch (error) {
@@ -249,6 +281,11 @@ router.post('/quizzes', async (req: AuthRequest, res: Response) => {
         }
 
         await pool.query('COMMIT');
+
+        if (notebookId) {
+            await clearNotebookCache(notebookId);
+        }
+        await clearUserAnalyticsCache(req.userId!);
         res.status(201).json({ success: true, quiz: quizRes.rows[0] });
     } catch (error) {
         await pool.query('ROLLBACK');
@@ -284,10 +321,16 @@ router.get('/quizzes/:id', async (req: AuthRequest, res: Response) => {
 // Delete quiz
 router.delete('/quizzes/:id', async (req: AuthRequest, res: Response) => {
     try {
-        await pool.query(
-            'DELETE FROM quizzes WHERE id = $1 AND user_id = $2',
+        const notebookResult = await pool.query(
+            'SELECT notebook_id FROM quizzes WHERE id = $1 AND user_id = $2',
             [req.params.id, req.userId]
         );
+        await pool.query('DELETE FROM quizzes WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+
+        if (notebookResult.rows[0]?.notebook_id) {
+            await clearNotebookCache(notebookResult.rows[0].notebook_id);
+        }
+        await clearUserAnalyticsCache(req.userId!);
         res.json({ success: true });
     } catch (error) {
         console.error('Delete quiz error:', error);
@@ -318,6 +361,15 @@ router.post('/quizzes/:id/attempt', async (req: AuthRequest, res: Response) => {
              WHERE user_id = $1`,
             [req.userId]
         );
+
+        const notebookResult = await pool.query(
+            'SELECT notebook_id FROM quizzes WHERE id = $1 AND user_id = $2',
+            [id, req.userId]
+        );
+        if (notebookResult.rows[0]?.notebook_id) {
+            await clearNotebookCache(notebookResult.rows[0].notebook_id);
+        }
+        await clearUserAnalyticsCache(req.userId!);
 
         res.json({ success: true });
     } catch (error) {
@@ -355,6 +407,11 @@ router.post('/mindmaps', async (req: AuthRequest, res: Response) => {
              RETURNING *`,
             [mmId, req.userId, notebookId, sourceId, title, JSON.stringify(rootNode), textContent]
         );
+
+        if (notebookId) {
+            await clearNotebookCache(notebookId);
+        }
+        await clearUserAnalyticsCache(req.userId!);
 
         res.json({ success: true, mindMap: result.rows[0] });
     } catch (error) {

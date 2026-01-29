@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/audio/elevenlabs_service.dart';
 import '../../core/audio/google_tts_service.dart';
 import '../../core/audio/google_cloud_tts_service.dart';
+import '../../core/audio/voice_service.dart';
 import '../../core/audio/voice_models_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/motion.dart';
@@ -49,6 +50,7 @@ class AIModelSettingsScreen extends ConsumerStatefulWidget {
 class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
   String _aiProvider = 'gemini'; // gemini or openrouter
   String _ttsProvider = 'google'; // google or elevenlabs
+  String _sttProvider = 'device'; // device or deepgram
 
   @override
   void initState() {
@@ -89,6 +91,7 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
 
     setState(() {
       _ttsProvider = prefs.getString('tts_provider') ?? 'google';
+      _sttProvider = prefs.getString('stt_provider') ?? 'device';
     });
 
     final ttsVoice = prefs.getString('tts_voice');
@@ -123,6 +126,7 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
     await prefs.setString('ai_provider', _aiProvider);
     await prefs.setString('ai_model', ref.read(selectedAIModelProvider));
     await prefs.setString('tts_provider', _ttsProvider);
+    await prefs.setString('stt_provider', _sttProvider);
     await prefs.setString('tts_voice', ref.read(selectedTTSVoiceProvider));
     await prefs.setString('tts_model', ref.read(selectedTTSModelProvider));
     await prefs.setString(
@@ -131,6 +135,20 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
         ref.read(selectedGoogleCloudTTSVoiceProvider));
     await prefs.setString(
         'tts_murf_voice', ref.read(selectedMurfVoiceProvider));
+
+    await ref.read(voiceServiceProvider).setSttProvider(
+          _sttProvider == 'deepgram' ? SttProvider.deepgram : SttProvider.device,
+        );
+
+    await ref.read(voiceServiceProvider).setTtsProvider(
+          _ttsProvider == 'google'
+              ? TtsProvider.google
+              : _ttsProvider == 'google_cloud'
+                  ? TtsProvider.googleCloud
+                  : _ttsProvider == 'murf'
+                      ? TtsProvider.murf
+                      : TtsProvider.elevenlabs,
+        );
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -402,6 +420,31 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
               ],
             ],
           ).animate().premiumFade().premiumSlide(),
+
+          const SizedBox(height: 32),
+
+          _SettingsSection(
+            title: 'Voice Input',
+            children: [
+              _SelectionCard(
+                title: 'Device Speech-to-Text',
+                subtitle: 'Free, uses built-in OS recognition',
+                isSelected: _sttProvider == 'device',
+                onTap: () => setState(() => _sttProvider = 'device'),
+                icon: Icons.mic,
+                color: Colors.indigo,
+              ),
+              const SizedBox(height: 12),
+              _SelectionCard(
+                title: 'Deepgram Speech-to-Text',
+                subtitle: 'Fast cloud transcription (requires API key)',
+                isSelected: _sttProvider == 'deepgram',
+                onTap: () => setState(() => _sttProvider = 'deepgram'),
+                icon: Icons.cloud,
+                color: Colors.blue,
+              ),
+            ],
+          ).animate().premiumFade(delay: 150.ms).premiumSlide(delay: 150.ms),
 
           const SizedBox(height: 32),
 
@@ -693,6 +736,13 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
           _SettingsSection(
             title: 'Tools',
             children: [
+              _ActionTile(
+                title: 'Gitu Assistant',
+                subtitle: 'Configure universal assistant settings',
+                icon: Icons.assistant,
+                onTap: () => context.push('/gitu-settings'),
+                color: Colors.deepPurple,
+              ),
               _ActionTile(
                 title: 'Custom Agents',
                 subtitle: 'Create agents and attach skills',

@@ -219,8 +219,6 @@ flutter pub get
 
 ## 📚 Documentation
 
-- Full details: `FEATURES_IMPLEMENTATION.md`
-- Database schema: `supabase/migrations/20251119_add_all_features.sql`
 - Code examples: See individual feature files
 
 ---

@@ -30,6 +30,7 @@ final apiServiceProvider = Provider<ApiService>((ref) {
 class ApiService {
   final Ref ref;
   static const String _baseUrl = 'https://backend.taskiumnetwork.com/api/';
+  String get baseUrl => _baseUrl;
   static const String _tokenKey = 'auth_token';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _tokenBackupKey = 'auth_token_backup';

@@ -62,9 +62,16 @@ export async function deleteCache(key: string): Promise<boolean> {
  */
 export async function deleteCachePattern(pattern: string): Promise<number> {
     return safeRedisCommand(async () => {
-        const keys = await redisClient.keys(pattern);
+        const keys: string[] = [];
+        for await (const scanned of redisClient.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+            if (Array.isArray(scanned)) {
+                keys.push(...scanned);
+                continue;
+            }
+            keys.push(scanned);
+        }
         if (keys.length === 0) return 0;
-        
+
         await redisClient.del(keys);
         return keys.length;
     }, 0);
@@ -184,6 +191,10 @@ export const CacheKeys = {
     // Planning caches
     plan: (planId: string) => `plan:${planId}`,
     planTasks: (planId: string) => `plan:${planId}:tasks`,
+
+    // Analytics caches
+    userActivity: (userId: string, days: number) => `user:${userId}:activity:${days}`,
+    notebookAnalytics: (notebookId: string) => `notebook:${notebookId}:analytics`,
 };
 
 /**
@@ -200,6 +211,11 @@ export async function clearUserCache(userId: string): Promise<void> {
 export async function clearNotebookCache(notebookId: string): Promise<void> {
     await deleteCachePattern(`notebook:${notebookId}:*`);
     await deleteCache(CacheKeys.notebook(notebookId));
+}
+
+export async function clearUserAnalyticsCache(userId: string): Promise<void> {
+    await deleteCache(CacheKeys.userStats(userId));
+    await deleteCachePattern(`user:${userId}:activity:*`);
 }
 
 /**

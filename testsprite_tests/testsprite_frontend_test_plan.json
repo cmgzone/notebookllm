@@ -313,7 +313,7 @@
   {
     "id": "TC012",
     "title": "Supabase Edge Functions Operation",
-    "description": "Validate all relevant Supabase edge functions (ingestion, query answering, STT, TTS, voice management, web search) execute correctly and handle errors gracefully.",
+    "description": "Validate backend services (ingestion, query answering, STT, TTS, voice management, web search) execute correctly and handle errors gracefully.",
     "category": "integration",
     "priority": "High",
     "steps": [
@@ -353,8 +353,8 @@
   },
   {
     "id": "TC013",
-    "title": "Database Migration Integrity and Vector Search RPC Functionality",
-    "description": "Test that the Supabase database migrations are applied successfully and that vector search RPC calls perform as expected.",
+    "title": "Database Migration Integrity and Vector Search Functionality",
+    "description": "Test that the database migrations are applied successfully and that vector search calls perform as expected.",
     "category": "integration",
     "priority": "High",
     "steps": [

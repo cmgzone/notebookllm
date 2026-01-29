@@ -153,8 +153,10 @@ describe('Plan Service - Property-Based Tests', () => {
             // Verify timestamps are valid dates
             expect(plan.createdAt).toBeInstanceOf(Date);
             expect(plan.updatedAt).toBeInstanceOf(Date);
-            expect(plan.createdAt.getTime()).toBeLessThanOrEqual(Date.now());
-            expect(plan.updatedAt.getTime()).toBeLessThanOrEqual(Date.now());
+            const now = Date.now();
+            const maxClockSkewMs = 10_000;
+            expect(plan.createdAt.getTime()).toBeLessThanOrEqual(now + maxClockSkewMs);
+            expect(plan.updatedAt.getTime()).toBeLessThanOrEqual(now + maxClockSkewMs);
             
             // Verify completedAt is undefined for new plans
             expect(plan.completedAt).toBeUndefined();

@@ -38,6 +38,13 @@ import contentRoutes from './routes/content.js';
 import deepResearchRoutes from './routes/deepResearch.js';
 import ragRoutes from './routes/rag.js';
 import agentSkillsRoutes from './routes/agentSkills.js';
+import gituRoutes from './routes/gitu.js';
+import { flutterAdapter } from './adapters/flutterAdapter.js';
+import { gituWebSocketService } from './services/gituWebSocketService.js';
+import { gituShellWebSocketService } from './services/gituShellWebSocketService.js';
+import { registerNotebookTools } from './services/notebookMCPTools.js';
+import { whatsappAdapter } from './adapters/whatsappAdapter.js';
+import { whatsappHealthMonitor } from './services/whatsappHealthMonitor.js';
 
 // Import services
 import bunnyService from './services/bunnyService.js';
@@ -45,7 +52,9 @@ import codeVerificationService from './services/codeVerificationService.js';
 import codeAnalysisService from './services/codeAnalysisService.js';
 import { agentWebSocketService } from './services/agentWebSocketService.js';
 import { planningWebSocketService } from './services/planningWebSocketService.js';
+import { gituQRAuthWebSocketService } from './services/gituQRAuthWebSocketService.js';
 import { connectRedis, disconnectRedis } from './config/redis.js';
+import { gituScheduler } from './services/gituScheduler.js';
 
 // Load environment variables
 dotenv.config();
@@ -60,16 +69,30 @@ connectRedis().catch(err => {
 bunnyService.initialize();
 codeVerificationService.initialize();
 codeAnalysisService.initialize();
+registerNotebookTools();
+gituScheduler.start();
+
+// Initialize WhatsApp
+whatsappAdapter.initialize({ printQRInTerminal: false }).then(() => {
+    console.log('📱 WhatsApp Adapter initialized');
+    whatsappHealthMonitor.start();
+}).catch(err => {
+    console.error('❌ Failed to initialize WhatsApp Adapter:', err);
+});
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
     console.log('SIGTERM received, shutting down gracefully...');
+    gituScheduler.stop();
+    whatsappHealthMonitor.stop();
     await disconnectRedis();
     process.exit(0);
 });
 
 process.on('SIGINT', async () => {
     console.log('SIGINT received, shutting down gracefully...');
+    gituScheduler.stop();
+    whatsappHealthMonitor.stop();
     await disconnectRedis();
     process.exit(0);
 });
@@ -153,6 +176,7 @@ app.use('/api/messaging', messagingRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/google-drive', googleDriveRoutes);
 app.use('/api/content', contentRoutes);
+app.use('/api/gitu', gituRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -178,6 +202,17 @@ agentWebSocketService.initialize(server);
 // Initialize WebSocket service for real-time planning updates
 planningWebSocketService.initialize(server);
 
+// Initialize WebSocket service for QR code authentication
+gituQRAuthWebSocketService.initialize(server);
+
+// Initialize WebSocket service for Flutter Gitu adapter
+flutterAdapter.initialize(server);
+
+// Initialize WebSocket service for Web Gitu adapter
+gituWebSocketService.initialize(server);
+
+gituShellWebSocketService.initialize(server);
+
 let activePort = requestedPort;
 let portAttempts = 0;
 let isStartingServer = false;
@@ -193,6 +228,10 @@ const startListening = () => {
         console.log(`🚀 Server is running on http://localhost:${activePort}`);
         console.log(`🔌 WebSocket available at ws://localhost:${activePort}/ws/agent`);
         console.log(`📋 Planning WebSocket available at ws://localhost:${activePort}/ws/planning`);
+        console.log(`🔐 Gitu QR Auth WebSocket available at ws://localhost:${activePort}/api/gitu/terminal/qr-auth`);
+        console.log(`📱 Gitu Flutter WebSocket available at ws://localhost:${activePort}/ws/gitu`);
+        console.log(`🌐 Gitu Web WebSocket available at ws://localhost:${activePort}/ws/gitu-web`);
+        console.log(`🖥️  Shell WebSocket available at ws://localhost:${activePort}/ws/shell`);
         console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
         console.log(`📅 Started at: ${new Date().toISOString()}`);
     });

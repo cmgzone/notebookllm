@@ -3,6 +3,7 @@ import pool from '../config/database.js';
 import { authenticateToken, requireAdmin, type AuthRequest } from '../middleware/auth.js';
 import { mcpLimitsService } from '../services/mcpLimitsService.js';
 import { notificationService } from '../services/notificationService.js';
+import { encryptSecret } from '../services/secretEncryptionService.js';
 
 const router = express.Router();
 
@@ -179,13 +180,21 @@ router.get('/api-keys', async (req: AuthRequest, res: Response) => {
 router.post('/api-keys', async (req: AuthRequest, res: Response) => {
     try {
         const { service, apiKey, description } = req.body;
+        if (!service || typeof service !== 'string') {
+            return res.status(400).json({ error: 'service is required' });
+        }
+        if (!apiKey || typeof apiKey !== 'string') {
+            return res.status(400).json({ error: 'apiKey is required' });
+        }
+
+        const encryptedValue = encryptSecret(apiKey);
 
         await pool.query(`
             INSERT INTO api_keys (service_name, encrypted_value, description, updated_at)
             VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
             ON CONFLICT (service_name) 
             DO UPDATE SET encrypted_value = $2, description = $3, updated_at = CURRENT_TIMESTAMP
-        `, [service, apiKey, description]);
+        `, [service, encryptedValue, description]);
 
         res.json({ message: 'API key saved' });
     } catch (error) {
@@ -1049,6 +1058,148 @@ router.delete('/skill-catalog/:id', async (req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error('Error deleting catalog skill:', error);
         return res.status(500).json({ error: 'Failed to delete catalog skill' });
+    }
+});
+
+router.get('/gitu-plugin-catalog', async (req: AuthRequest, res: Response) => {
+    try {
+        const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+        const limitRaw = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : 100;
+        const offsetRaw = typeof req.query.offset === 'string' ? parseInt(req.query.offset, 10) : 0;
+
+        const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 100;
+        const offset = Number.isFinite(offsetRaw) ? Math.max(offsetRaw, 0) : 0;
+
+        if (q) {
+            const result = await pool.query(
+                `SELECT *
+                 FROM gitu_plugin_catalog
+                 WHERE slug ILIKE $1
+                    OR name ILIKE $1
+                    OR COALESCE(description, '') ILIKE $1
+                 ORDER BY updated_at DESC
+                 LIMIT $2 OFFSET $3`,
+                [`%${q}%`, limit, offset]
+            );
+            return res.json({ success: true, catalog: result.rows, limit, offset });
+        }
+
+        const result = await pool.query(
+            `SELECT *
+             FROM gitu_plugin_catalog
+             ORDER BY updated_at DESC
+             LIMIT $1 OFFSET $2`,
+            [limit, offset]
+        );
+        return res.json({ success: true, catalog: result.rows, limit, offset });
+    } catch (error) {
+        console.error('Error listing plugin catalog:', error);
+        return res.status(500).json({ error: 'Failed to list plugin catalog' });
+    }
+});
+
+router.post('/gitu-plugin-catalog', async (req: AuthRequest, res: Response) => {
+    try {
+        const slug = typeof req.body?.slug === 'string' ? req.body.slug.trim() : '';
+        const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+        const description = typeof req.body?.description === 'string' ? req.body.description.trim() : null;
+        const code = typeof req.body?.code === 'string' ? req.body.code : '';
+        const entrypoint = typeof req.body?.entrypoint === 'string' ? req.body.entrypoint.trim() : 'run';
+        const version = typeof req.body?.version === 'string' ? req.body.version.trim() : '1.0.0';
+        const author = typeof req.body?.author === 'string' ? req.body.author.trim() : null;
+        const tags = Array.isArray(req.body?.tags) ? req.body.tags : [];
+        const isActive =
+            typeof req.body?.isActive === 'boolean' ? req.body.isActive : (typeof req.body?.is_active === 'boolean' ? req.body.is_active : true);
+
+        if (!slug || !name || !code) {
+            return res.status(400).json({ error: 'slug, name, and code are required' });
+        }
+
+        const existing = await pool.query('SELECT id FROM gitu_plugin_catalog WHERE slug = $1', [slug]);
+        if (existing.rows.length > 0) {
+            return res.status(409).json({ error: 'Catalog slug already exists' });
+        }
+
+        const result = await pool.query(
+            `INSERT INTO gitu_plugin_catalog (slug, name, description, code, entrypoint, version, author, tags, is_active, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),NOW())
+             RETURNING *`,
+            [slug, name, description, code, entrypoint, version, author, JSON.stringify(tags), isActive]
+        );
+
+        return res.json({ success: true, item: result.rows[0] });
+    } catch (error) {
+        console.error('Error creating catalog plugin:', error);
+        return res.status(500).json({ error: 'Failed to create catalog plugin' });
+    }
+});
+
+router.put('/gitu-plugin-catalog/:id', async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const slug = typeof req.body?.slug === 'string' ? req.body.slug.trim() : null;
+        const name = typeof req.body?.name === 'string' ? req.body.name.trim() : null;
+        const description = typeof req.body?.description === 'string' ? req.body.description.trim() : null;
+        const code = typeof req.body?.code === 'string' ? req.body.code : null;
+        const entrypoint = typeof req.body?.entrypoint === 'string' ? req.body.entrypoint.trim() : null;
+        const version = typeof req.body?.version === 'string' ? req.body.version.trim() : null;
+        const author = typeof req.body?.author === 'string' ? req.body.author.trim() : null;
+        const tags = req.body?.tags ?? null;
+        const isActive =
+            typeof req.body?.isActive === 'boolean' ? req.body.isActive : (typeof req.body?.is_active === 'boolean' ? req.body.is_active : null);
+
+        const result = await pool.query(
+            `UPDATE gitu_plugin_catalog
+             SET slug = COALESCE($1, slug),
+                 name = COALESCE($2, name),
+                 description = COALESCE($3, description),
+                 code = COALESCE($4, code),
+                 entrypoint = COALESCE($5, entrypoint),
+                 version = COALESCE($6, version),
+                 author = COALESCE($7, author),
+                 tags = COALESCE($8, tags),
+                 is_active = COALESCE($9, is_active),
+                 updated_at = NOW()
+             WHERE id = $10
+             RETURNING *`,
+            [
+                slug,
+                name,
+                description,
+                code,
+                entrypoint,
+                version,
+                author,
+                tags == null ? null : JSON.stringify(tags),
+                isActive,
+                id,
+            ]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Catalog plugin not found' });
+        }
+
+        return res.json({ success: true, item: result.rows[0] });
+    } catch (error) {
+        console.error('Error updating catalog plugin:', error);
+        return res.status(500).json({ error: 'Failed to update catalog plugin' });
+    }
+});
+
+router.delete('/gitu-plugin-catalog/:id', async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const result = await pool.query('DELETE FROM gitu_plugin_catalog WHERE id = $1 RETURNING id', [id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Catalog plugin not found' });
+        }
+
+        return res.json({ success: true, deletedId: result.rows[0].id });
+    } catch (error) {
+        console.error('Error deleting catalog plugin:', error);
+        return res.status(500).json({ error: 'Failed to delete catalog plugin' });
     }
 });
 

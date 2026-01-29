@@ -1,0 +1,590 @@
+/**
+ * Gitu AI Router Service
+ * Routes AI requests to appropriate models based on user preferences, task requirements, and cost optimization.
+ * 
+ * Requirements: US-0.1 (API Key Management), US-0.2 (AI Model Selection), TR-6 (AI Model Support)
+ * Design: Section 4 (AI Router)
+ */
+
+import pool from '../config/database.js';
+import { generateWithGemini, generateWithOpenRouter } from './aiService.js';
+
+// ==================== INTERFACES ====================
+
+/**
+ * Task types that determine model selection
+ */
+export type TaskType = 'chat' | 'research' | 'coding' | 'analysis' | 'summarization' | 'creative';
+
+/**
+ * AI model information
+ */
+export interface AIModel {
+  provider: 'openrouter' | 'gemini' | 'openai' | 'anthropic';
+  modelId: string;
+  contextWindow: number;
+  costPer1kTokens: number;
+}
+
+/**
+ * User's model preferences from NotebookLLM app settings
+ */
+export interface ModelPreferences {
+  defaultModel: string;  // From NotebookLLM app settings
+  taskSpecificModels: Record<TaskType, string>;
+  apiKeySource: 'platform' | 'personal';
+  personalKeys?: {
+    openrouter?: string;
+    gemini?: string;
+    openai?: string;
+    anthropic?: string;
+  };
+}
+
+/**
+ * AI request parameters
+ */
+export interface AIRequest {
+  userId: string;
+  sessionId: string;
+  prompt: string;
+  context: string[];
+  taskType: TaskType;
+  maxTokens?: number;
+  temperature?: number;
+  preferredModel?: string;
+}
+
+/**
+ * AI response with metadata
+ */
+export interface AIResponse {
+  content: string;
+  model: string;
+  tokensUsed: number;
+  cost: number;
+  finishReason: 'stop' | 'length' | 'error';
+}
+
+/**
+ * Cost estimate for a request
+ */
+export interface CostEstimate {
+  estimatedTokens: number;
+  estimatedCostUSD: number;
+  confidence: number;  // 0-1
+  alternatives: { model: string; estimatedCost: number }[];
+}
+
+// ==================== MODEL DEFINITIONS ====================
+
+/**
+ * Database model interface (from ai_models table)
+ */
+interface DBModel {
+  id: string;
+  name: string;
+  model_id: string;
+  provider: string;
+  context_window: number;
+  input_cost_per_token: number;
+  output_cost_per_token: number;
+  is_active: boolean;
+}
+
+/**
+ * Cache for loaded models (refreshed periodically)
+ */
+let modelsCache: Record<string, AIModel> = {};
+let modelsCacheTimestamp: number = 0;
+const MODELS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Default model recommendations by task type (model IDs from database)
+ */
+const DEFAULT_TASK_MODELS: Record<TaskType, string> = {
+  chat: 'gemini-2.0-flash',
+  research: 'gemini-1.5-pro',
+  coding: 'anthropic/claude-3.5-sonnet',
+  analysis: 'gemini-1.5-pro',
+  summarization: 'gemini-1.5-flash',
+  creative: 'anthropic/claude-3.5-sonnet',
+};
+
+/**
+ * Map database provider names to AIModel provider types
+ */
+function mapProviderName(dbProvider: string): 'openrouter' | 'gemini' | 'openai' | 'anthropic' {
+  const normalized = dbProvider.toLowerCase();
+  if (normalized === 'google' || normalized === 'gemini') return 'gemini';
+  if (normalized === 'openrouter') return 'openrouter';
+  if (normalized === 'openai') return 'openai';
+  if (normalized === 'anthropic') return 'anthropic';
+  // Default to openrouter for unknown providers
+  return 'openrouter';
+}
+
+// ==================== SERVICE CLASS ====================
+
+class GituAIRouter {
+  /**
+   * Load models from database and cache them
+   */
+  private async loadModelsFromDatabase(): Promise<Record<string, AIModel>> {
+    try {
+      const result = await pool.query(
+        `SELECT id, name, model_id, provider, context_window, 
+                input_cost_per_token, output_cost_per_token, is_active
+         FROM ai_models 
+         WHERE is_active = true
+         ORDER BY provider, name`
+      );
+
+      const models: Record<string, AIModel> = {};
+      
+      for (const row of result.rows) {
+        const dbModel = row as DBModel;
+        
+        // Calculate average cost per 1k tokens (input + output average)
+        const avgCostPer1kTokens = ((dbModel.input_cost_per_token + dbModel.output_cost_per_token) / 2) * 1000;
+        
+        models[dbModel.model_id] = {
+          provider: mapProviderName(dbModel.provider),
+          modelId: dbModel.model_id,
+          contextWindow: dbModel.context_window,
+          costPer1kTokens: avgCostPer1kTokens,
+        };
+      }
+      
+      console.log(`[Gitu AI Router] Loaded ${Object.keys(models).length} models from database`);
+      return models;
+    } catch (error) {
+      console.error('[Gitu AI Router] Error loading models from database:', error);
+      // Return empty object on error - will cause fallback behavior
+      return {};
+    }
+  }
+
+  /**
+   * Get models with cache management
+   */
+  private async getModels(): Promise<Record<string, AIModel>> {
+    const now = Date.now();
+    
+    // Check if cache is valid
+    if (Object.keys(modelsCache).length > 0 && (now - modelsCacheTimestamp) < MODELS_CACHE_TTL) {
+      return modelsCache;
+    }
+    
+    // Refresh cache
+    modelsCache = await this.loadModelsFromDatabase();
+    modelsCacheTimestamp = now;
+    
+    return modelsCache;
+  }
+
+  /**
+   * Route an AI request to the appropriate model and generate a response.
+   * 
+   * @param request - The AI request parameters
+   * @returns The AI response with metadata
+   */
+  async route(request: AIRequest): Promise<AIResponse> {
+    // Get user's model preferences
+    const preferences = await this.getUserPreferences(request.userId);
+    
+    // Select the best model for this request, considering explicit preference override
+    const model = await this.selectModel(
+        request.taskType, 
+        preferences, 
+        request.context, 
+        request.preferredModel
+    );
+    
+    // Estimate cost before execution
+    const estimate = await this.estimateCost(request.prompt, request.context, model);
+    
+    // Generate response using the selected model
+    const startTime = Date.now();
+    let content: string;
+    let tokensUsed: number;
+    
+    try {
+      if (model.provider === 'gemini') {
+        content = await generateWithGemini(
+          [
+            ...request.context.map(ctx => ({ role: 'user' as const, content: ctx })),
+            { role: 'user' as const, content: request.prompt }
+          ],
+          model.modelId
+        );
+      } else if (model.provider === 'openrouter') {
+        content = await generateWithOpenRouter(
+          [
+            ...request.context.map(ctx => ({ role: 'user' as const, content: ctx })),
+            { role: 'user' as const, content: request.prompt }
+          ],
+          model.modelId,
+          request.maxTokens
+        );
+      } else {
+        throw new Error(`Unsupported provider: ${model.provider}`);
+      }
+      
+      // Estimate tokens used (rough approximation: 1 token ≈ 4 characters)
+      tokensUsed = Math.ceil((request.prompt.length + content.length) / 4);
+      
+      const cost = (tokensUsed / 1000) * model.costPer1kTokens;
+      
+      return {
+        content,
+        model: model.modelId,
+        tokensUsed,
+        cost,
+        finishReason: 'stop',
+      };
+    } catch (error: any) {
+      console.error(`AI Router error with model ${model.modelId}:`, error);
+      
+      // Try fallback model
+      const fallbackModel = await this.fallback(model, error);
+      if (fallbackModel) {
+        console.log(`Falling back to model: ${fallbackModel.modelId}`);
+        // Recursive call with fallback model (update request to use fallback)
+        return this.route({
+          ...request,
+          taskType: 'chat',  // Use generic task type for fallback
+        });
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Select the best model for a task based on user preferences and requirements.
+   * 
+   * @param taskType - The type of task
+   * @param preferences - User's model preferences
+   * @param context - Context strings to check against model limits
+   * @returns The selected AI model
+   */
+  async selectModel(
+    taskType: TaskType,
+    preferences: ModelPreferences,
+    context: string[] = [],
+    overrideModelId?: string
+  ): Promise<AIModel> {
+    // Get available models from database
+    const models = await this.getModels();
+    
+    let model: AIModel | undefined;
+
+    // Check for override model
+    if (overrideModelId && overrideModelId !== 'default' && models[overrideModelId]) {
+        model = models[overrideModelId];
+    } else {
+        // Check if user has a task-specific model preference
+        const preferredModelId = preferences.taskSpecificModels[taskType] || preferences.defaultModel;
+        model = models[preferredModelId];
+        
+        // If preferred model not found, use default for task type
+        if (!model) {
+            const defaultModelId = DEFAULT_TASK_MODELS[taskType];
+            model = models[defaultModelId];
+        }
+    }
+    
+    // If still no model found, use first available model
+    if (!model) {
+      const availableModels = Object.values(models);
+      if (availableModels.length === 0) {
+        throw new Error('No AI models available. Please configure models in admin panel.');
+      }
+      model = availableModels[0];
+    }
+    
+    // Check if context fits within model's context window
+    const totalContextLength = context.reduce((sum, ctx) => sum + ctx.length, 0);
+    const estimatedTokens = Math.ceil(totalContextLength / 4);
+    
+    if (estimatedTokens > model.contextWindow) {
+      // Context too large, find a model with larger context window
+      console.warn(`Context (${estimatedTokens} tokens) exceeds model limit (${model.contextWindow}). Finding alternative...`);
+      model = await this.findModelWithLargerContext(estimatedTokens);
+    }
+    
+    return model;
+  }
+
+  /**
+   * Find a model with a larger context window.
+   * 
+   * @param requiredTokens - Minimum required context window
+   * @returns A model with sufficient context window
+   */
+  private async findModelWithLargerContext(requiredTokens: number): Promise<AIModel> {
+    const models = await this.getModels();
+    
+    // Sort models by context window size
+    const sortedModels = Object.values(models)
+      .filter(m => m.contextWindow >= requiredTokens)
+      .sort((a, b) => a.contextWindow - b.contextWindow);
+    
+    if (sortedModels.length === 0) {
+      throw new Error(`No model found with context window >= ${requiredTokens} tokens`);
+    }
+    
+    // Return the smallest model that fits (most cost-effective)
+    return sortedModels[0];
+  }
+
+  /**
+   * Estimate the cost of a request before execution.
+   * 
+   * @param prompt - The user's prompt
+   * @param context - Context strings
+   * @param model - The model to use
+   * @returns Cost estimate
+   */
+  async estimateCost(prompt: string, context: string[], model: AIModel): Promise<CostEstimate> {
+    const models = await this.getModels();
+    
+    // Estimate tokens (rough: 1 token ≈ 4 characters)
+    const totalLength = prompt.length + context.reduce((sum, ctx) => sum + ctx.length, 0);
+    const estimatedTokens = Math.ceil(totalLength / 4);
+    
+    // Estimate response tokens (assume 2x input for safety)
+    const totalEstimatedTokens = estimatedTokens * 3;
+    
+    const estimatedCostUSD = (totalEstimatedTokens / 1000) * model.costPer1kTokens;
+    
+    // Find cheaper alternatives
+    const alternatives = Object.entries(models)
+      .filter(([id, m]) => m.contextWindow >= estimatedTokens && id !== model.modelId)
+      .map(([id, m]) => ({
+        model: id,
+        estimatedCost: (totalEstimatedTokens / 1000) * m.costPer1kTokens,
+      }))
+      .sort((a, b) => a.estimatedCost - b.estimatedCost)
+      .slice(0, 3);
+    
+    return {
+      estimatedTokens: totalEstimatedTokens,
+      estimatedCostUSD,
+      confidence: 0.7,  // Rough estimate
+      alternatives,
+    };
+  }
+
+  /**
+   * Estimate tokens in a string.
+   * 
+   * @param content - The content to estimate
+   * @returns Estimated token count
+   */
+  estimateTokens(content: string): number {
+    // Rough approximation: 1 token ≈ 4 characters
+    return Math.ceil(content.length / 4);
+  }
+
+  /**
+   * Find a fallback model when the primary model fails.
+   * 
+   * @param primaryModel - The model that failed
+   * @param error - The error that occurred
+   * @returns A fallback model or null if none available
+   */
+  async fallback(primaryModel: AIModel, error: Error): Promise<AIModel | null> {
+    console.log(`Finding fallback for ${primaryModel.modelId} due to: ${error.message}`);
+    
+    const models = await this.getModels();
+    
+    // Determine fallback strategy based on error
+    const isContextLimit = error.message.includes('context') || error.message.includes('too long');
+    
+    if (isContextLimit) {
+      // Need a model with larger context window
+      const requiredTokens = primaryModel.contextWindow * 1.5;
+      try {
+        return await this.findModelWithLargerContext(requiredTokens);
+      } catch {
+        return null;
+      }
+    }
+    
+    // For rate limits or unavailability, try a different provider
+    const alternativeProviders = ['gemini', 'openrouter'] as const;
+    const currentProvider = primaryModel.provider;
+    
+    for (const provider of alternativeProviders) {
+      if (provider !== currentProvider) {
+        // Find a model from this provider
+        const alternativeModel = Object.values(models).find(m => m.provider === provider);
+        if (alternativeModel) {
+          return alternativeModel;
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Suggest a cheaper model for the same task.
+   * 
+   * @param currentModel - The current model ID
+   * @param taskType - The task type
+   * @returns A cheaper model or null if current is cheapest
+   */
+  async suggestCheaperModel(currentModel: string, taskType: TaskType): Promise<AIModel | null> {
+    const models = await this.getModels();
+    const current = models[currentModel];
+    if (!current) return null;
+    
+    // Find cheaper models with similar capabilities
+    const cheaperModels = Object.values(models)
+      .filter(m => 
+        m.costPer1kTokens < current.costPer1kTokens &&
+        m.contextWindow >= current.contextWindow * 0.5  // At least 50% of context window
+      )
+      .sort((a, b) => a.costPer1kTokens - b.costPer1kTokens);
+    
+    return cheaperModels.length > 0 ? cheaperModels[0] : null;
+  }
+
+  /**
+   * Get user's model preferences from database.
+   * 
+   * @param userId - The user's ID
+   * @returns User's model preferences
+   */
+  async getUserPreferences(userId: string): Promise<ModelPreferences> {
+    try {
+      // Check if user has Gitu settings
+      const result = await pool.query(
+        `SELECT gitu_settings FROM users WHERE id = $1`,
+        [userId]
+      );
+      
+      if (result.rows.length === 0) {
+        // User not found, return defaults
+        return this.getDefaultPreferences();
+      }
+      
+      const gituSettings = result.rows[0].gitu_settings || {};
+      
+      // Extract model preferences from settings (support both nested and flat for migration)
+      const modelPrefs = gituSettings.modelPreferences || gituSettings;
+
+      const preferences: ModelPreferences = {
+        defaultModel: modelPrefs.defaultModel || 'gemini-2.0-flash',
+        taskSpecificModels: modelPrefs.taskSpecificModels || DEFAULT_TASK_MODELS,
+        apiKeySource: modelPrefs.apiKeySource || 'platform',
+        personalKeys: modelPrefs.personalKeys || {},
+      };
+      
+      return preferences;
+    } catch (error) {
+      console.error('Error fetching user preferences:', error);
+      return this.getDefaultPreferences();
+    }
+  }
+
+  /**
+   * Get default model preferences.
+   * 
+   * @returns Default preferences
+   */
+  private getDefaultPreferences(): ModelPreferences {
+    return {
+      defaultModel: 'gemini-2.0-flash',
+      taskSpecificModels: DEFAULT_TASK_MODELS,
+      apiKeySource: 'platform',
+      personalKeys: {},
+    };
+  }
+
+  /**
+   * Update user's model preferences.
+   * 
+   * @param userId - The user's ID
+   * @param preferences - New preferences (partial update)
+   */
+  async updateUserPreferences(userId: string, preferences: Partial<ModelPreferences>): Promise<void> {
+    try {
+      // Get current settings
+      const current = await this.getUserPreferences(userId);
+      
+      // Merge with new preferences
+      const updated = {
+        ...current,
+        ...preferences,
+        taskSpecificModels: {
+          ...current.taskSpecificModels,
+          ...(preferences.taskSpecificModels || {}),
+        },
+        personalKeys: {
+          ...current.personalKeys,
+          ...(preferences.personalKeys || {}),
+        },
+      };
+      
+      // Update in database
+      await pool.query(
+        `UPDATE users 
+         SET gitu_settings = jsonb_set(
+           COALESCE(gitu_settings, '{}'::jsonb),
+           '{modelPreferences}',
+           $1::jsonb
+         )
+         WHERE id = $2`,
+        [JSON.stringify(updated), userId]
+      );
+    } catch (error) {
+      console.error('Error updating user preferences:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get available models for a user based on their API key configuration.
+   * 
+   * @param userId - The user's ID
+   * @returns List of available models
+   */
+  async getAvailableModels(userId: string): Promise<AIModel[]> {
+    const preferences = await this.getUserPreferences(userId);
+    const models = await this.getModels();
+    
+    // If using platform keys, all models are available
+    if (preferences.apiKeySource === 'platform') {
+      return Object.values(models);
+    }
+    
+    // If using personal keys, filter by available keys
+    const availableModels: AIModel[] = [];
+    
+    if (preferences.personalKeys?.gemini) {
+      availableModels.push(...Object.values(models).filter(m => m.provider === 'gemini'));
+    }
+    
+    if (preferences.personalKeys?.openrouter) {
+      availableModels.push(...Object.values(models).filter(m => m.provider === 'openrouter'));
+    }
+    
+    if (preferences.personalKeys?.openai) {
+      availableModels.push(...Object.values(models).filter(m => m.provider === 'openai'));
+    }
+    
+    if (preferences.personalKeys?.anthropic) {
+      availableModels.push(...Object.values(models).filter(m => m.provider === 'anthropic'));
+    }
+    
+    return availableModels;
+  }
+}
+
+// Export singleton instance
+export const gituAIRouter = new GituAIRouter();
+export default gituAIRouter;

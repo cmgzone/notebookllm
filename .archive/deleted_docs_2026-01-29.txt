@@ -1,0 +1,41 @@
+Deleted documentation files and directories referencing Supabase or Firebase (cleanup date: 2026-01-29)
+
+Reason: Repository no longer uses Supabase/Firebase. Removed obsolete or conflicting docs per request.
+
+Paths removed:
+1. c:\Users\Admin\Documents\project\NOTBOOK LLM\.kiro\specs\neon-firebase-backend\
+   - tasks.md
+   - design.md
+   - requirements.md
+2. c:\Users\Admin\Documents\project\NOTBOOK LLM\FEATURES_IMPLEMENTATION.md
+3. c:\Users\Admin\Documents\project\NOTBOOK LLM\GEMINI_SETUP.md
+4. c:\Users\Admin\Documents\project\NOTBOOK LLM\API_KEYS_DIAGNOSTIC.md
+5. c:\Users\Admin\Documents\project\NOTBOOK LLM\API_KEY_VERIFICATION_REPORT.md
+6. c:\Users\Admin\Documents\project\NOTBOOK LLM\VOICE_MODE_GUIDE.md
+7. c:\Users\Admin\Documents\project\NOTBOOK LLM\FINAL_IMPLEMENTATION_SUMMARY.md
+8. c:\Users\Admin\Documents\project\NOTBOOK LLM\SECURITY_FIXES.md
+9. c:\Users\Admin\Documents\project\NOTBOOK LLM\IMPLEMENTATION_SUMMARY.md
+10. c:\Users\Admin\Documents\project\NOTBOOK LLM\YOUTUBE_GDRIVE_INTEGRATION.md
+11. c:\Users\Admin\Documents\project\NOTBOOK LLM\QUICK_FEATURES_GUIDE.md
+12. c:\Users\Admin\Documents\project\NOTBOOK LLM\testsprite_tests\testsprite-mcp-test-report.md
+13. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\AI Research Assistant System (Flutter + Supabase).md
+14. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Implement Multimodal Ingest with Animated Uploads, Previews, and Supabase Embeddings.md
+15. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Add Image_Video Support with Supabase Storage (Flutter).md
+16. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Integrate Supabase Backend.md
+17. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Choose and Integrate Backend for Notebook LLM (Supabase RAG).md
+18. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Add Dark Mode Toggle with Persistence (Flutter_Riverpod).md
+19. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Audit and Fix Studio Features.md
+20. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Audit and Fix All Features and Buttons.md
+21. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Audit And Fix Bugs Across Frontend And Backend.md
+22. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Fix Build Errors and Lint Warnings.md
+23. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Expand ElevenLabs Audio Features_ Voice Selector, STT Capture, Streaming, and Robust UX.md
+24. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Add VoIP AI Call Handling with ElevenLabs.md
+25. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Enable And Verify Web Search Via Serper.md
+26. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Document Target Users And Surface In App Copy.md
+27. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Futuristic Features, Interactions, and Animations for Notebook LLM.md
+28. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Fix Logic Bugs and Stability across Notebook LLM.md
+29. c:\Users\Admin\Documents\project\NOTBOOK LLM\.trae\documents\Fix Critical Bugs, Secrets, and Stability Issues.md
+
+Notes:
+- backend\README.md and CUSTOM_AUTH_SYSTEM.md retained; they reference Firebase only for migration context or explicitly state "no Firebase".
+- GRADLE_BUILD_FIX.md retained; contains build fix guidance even if it mentions Firebase.

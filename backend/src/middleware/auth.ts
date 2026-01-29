@@ -2,6 +2,7 @@ import { type Request, type Response, type NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import pool from '../config/database.js';
 import { tokenService, TOKEN_PREFIX } from '../services/tokenService.js';
+import { getJwtSecret } from '../config/secrets.js';
 
 export interface AuthRequest extends Request {
     userId?: string;
@@ -35,10 +36,15 @@ export const authenticateToken = async (
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
-    console.log(`[Auth] Request to ${req.method} ${req.path} - Auth header present: ${!!authHeader}, Token present: ${!!token}`);
+    const shouldLog = process.env.NODE_ENV !== 'production';
+    if (shouldLog) {
+        console.log(
+            `[Auth] Request to ${req.method} ${req.path} - Auth header present: ${!!authHeader}, Token present: ${!!token}`
+        );
+    }
 
     if (!token) {
-        console.log('[Auth] No token provided');
+        if (shouldLog) console.log('[Auth] No token provided');
         return res.status(401).json({ error: 'Access token required' });
     }
 
@@ -94,7 +100,7 @@ export const authenticateToken = async (
     }
 
     // Otherwise, validate as JWT
-    const jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+    const jwtSecret = getJwtSecret();
 
     try {
         const decoded = jwt.verify(token, jwtSecret) as {
@@ -102,14 +108,14 @@ export const authenticateToken = async (
             email: string;
             role?: string;
         };
-        console.log(`[Auth] JWT validated successfully for user: ${decoded.userId}`);
+        if (shouldLog) console.log(`[Auth] JWT validated successfully`);
         req.userId = decoded.userId;
         req.userEmail = decoded.email;
         req.authMethod = 'jwt';
         if (decoded.role) req.userRole = decoded.role;
         next();
     } catch (error: any) {
-        console.log(`[Auth] JWT validation failed:`, error);
+        if (shouldLog) console.log(`[Auth] JWT validation failed`);
 
         // Return 401 for expired or invalid tokens so clients know to refresh
         const message = error.name === 'TokenExpiredError' ? 'Token expired' : 'Invalid token';
@@ -209,7 +215,7 @@ export const optionalAuth = async (
     }
 
     // Otherwise, try to validate as JWT
-    const jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+    const jwtSecret = getJwtSecret();
 
     try {
         const decoded = jwt.verify(token, jwtSecret) as {

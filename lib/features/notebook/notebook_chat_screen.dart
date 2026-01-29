@@ -21,6 +21,7 @@ import '../chat/github_action_detector.dart';
 import '../github/github_issue_dialog.dart';
 import '../chat/github_chat_context_builder.dart';
 import '../sources/source.dart';
+import '../../core/audio/voice_service.dart';
 
 class NotebookChatScreen extends ConsumerStatefulWidget {
   final String notebookId;
@@ -39,6 +40,8 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<ChatMessage> _messages = [];
   bool _isLoading = false;
+  bool _isVoiceListening = false;
+  double _voiceSoundLevel = 0.0;
   ChatStyle _selectedStyle = ChatStyle.standard;
   bool _isWebBrowsingEnabled = false;
   String? _webBrowsingStatus;
@@ -143,9 +146,80 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
 
   @override
   void dispose() {
+    if (_isVoiceListening) {
+      ref.read(voiceServiceProvider).stopListening();
+    }
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _setMessageText(String text) {
+    _messageController.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
+  Future<void> _startVoiceInput() async {
+    if (_isLoading) return;
+    setState(() {
+      _isVoiceListening = true;
+      _voiceSoundLevel = 0.0;
+    });
+
+    try {
+      await ref.read(voiceServiceProvider).listen(
+        onResult: (text) {
+          if (!mounted) return;
+          _setMessageText(text);
+        },
+        onDone: (text) {
+          if (!mounted) return;
+          setState(() => _isVoiceListening = false);
+          final finalText = text.trim();
+          if (finalText.isEmpty) return;
+          _setMessageText(finalText);
+          _sendMessage();
+        },
+        onSoundLevel: (level) {
+          if (!mounted) return;
+          setState(() => _voiceSoundLevel = level);
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isVoiceListening = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Voice input error: $e')),
+      );
+    }
+  }
+
+  Future<void> _stopVoiceInput() async {
+    try {
+      final transcript = await ref.read(voiceServiceProvider).stopListening();
+      if (!mounted) return;
+      setState(() => _isVoiceListening = false);
+      final text = transcript.trim();
+      if (text.isEmpty) return;
+      _setMessageText(text);
+      _sendMessage();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isVoiceListening = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to stop voice input: $e')),
+      );
+    }
+  }
+
+  Future<void> _toggleVoiceInput() async {
+    if (_isVoiceListening) {
+      await _stopVoiceInput();
+    } else {
+      await _startVoiceInput();
+    }
   }
 
   Future<void> _sendMessage() async {
@@ -974,6 +1048,24 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
                           ),
                           tooltip: 'Open AI Browser',
                         ),
+                        Transform.scale(
+                          scale: 1 + (_voiceSoundLevel * 0.18),
+                          child: IconButton(
+                            onPressed: _isLoading ? null : _toggleVoiceInput,
+                            icon: Icon(
+                              _isVoiceListening ? Icons.stop : Icons.mic,
+                              color: _isVoiceListening
+                                  ? scheme.error
+                                  : scheme.onSurface.withValues(alpha: 0.6),
+                              size: 22,
+                            ),
+                            tooltip: _isVoiceListening
+                                ? 'Stop voice input'
+                                : 'Voice input',
+                          )
+                              .animate(key: ValueKey(_isVoiceListening))
+                              .scale(duration: 200.ms),
+                        ),
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1319,6 +1411,45 @@ class _MessageBubble extends ConsumerWidget {
                         }
                       },
                     ),
+                  if (!isUser) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: GestureDetector(
+                        onTap: () async {
+                          try {
+                            await ref
+                                .read(voiceServiceProvider)
+                                .speak(message.text, interrupt: true);
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('TTS error: $e')),
+                            );
+                          }
+                        },
+                        onLongPress: () async {
+                          await ref.read(voiceServiceProvider).stopSpeaking();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: scheme.surfaceContainerHighest
+                                .withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: scheme.outline.withValues(alpha: 0.12),
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.volume_up,
+                            size: 16,
+                            color: scheme.onSurface.withValues(alpha: 0.75),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                   // Sources from web browsing
                   if (!isUser &&
                       message.isWebBrowsing &&

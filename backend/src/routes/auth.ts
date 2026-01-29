@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import pool from '../config/database.js';
 import { tokenService, MAX_TOKENS_PER_USER } from '../services/tokenService.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
+import { getJwtRefreshSecret, getJwtSecret } from '../config/secrets.js';
 
 const router = express.Router();
 
@@ -40,7 +41,7 @@ const checkTokenRateLimit = (userId: string): { allowed: boolean; retryAfter?: n
     return { allowed: true };
 };
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+const JWT_SECRET = getJwtSecret();
 const JWT_EXPIRES_SHORT = '1d';  // 1 day when not remembered
 const JWT_EXPIRES_LONG = '30d';  // 30 days when remembered
 
@@ -97,7 +98,7 @@ router.post('/signup', async (req: Request, res: Response) => {
             { expiresIn: '15m' }
         );
 
-        const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || JWT_SECRET;
+        const JWT_REFRESH_SECRET = getJwtRefreshSecret();
         const refreshToken = jwt.sign(
             { userId, email: normalizedEmail, role: 'user' },
             JWT_REFRESH_SECRET,
@@ -137,15 +138,12 @@ router.post('/login', async (req: Request, res: Response) => {
         }
 
         const normalizedEmail = email.toLowerCase().trim();
-        console.log(`[AUTH] Login attempt for: ${normalizedEmail} (rememberMe: ${rememberMe})`);
-
         const result = await pool.query(
             'SELECT id, email, display_name, password_hash, email_verified, two_factor_enabled, avatar_url, cover_url, role FROM users WHERE email = $1',
             [normalizedEmail]
         );
 
         if (result.rows.length === 0) {
-            console.log(`[AUTH] User not found: ${normalizedEmail}`);
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
@@ -153,7 +151,6 @@ router.post('/login', async (req: Request, res: Response) => {
         const isValid = await bcrypt.compare(password, user.password_hash);
 
         if (!isValid) {
-            console.log(`[AUTH] Invalid password for: ${normalizedEmail}`);
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
@@ -167,14 +164,12 @@ router.post('/login', async (req: Request, res: Response) => {
         );
 
         // Generate refresh token with longer expiry
-        const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || JWT_SECRET;
+        const JWT_REFRESH_SECRET = getJwtRefreshSecret();
         const refreshToken = jwt.sign(
             { userId: user.id, email: user.email, role: user.role },
             JWT_REFRESH_SECRET,
             { expiresIn: tokenExpiry } // Use rememberMe logic for refresh token
         );
-
-        console.log(`[AUTH] Login successful for: ${normalizedEmail} (access token: 15m, refresh token: ${tokenExpiry})`);
 
         res.json({
             success: true,
@@ -256,7 +251,6 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
             [token, expiry, email.toLowerCase()]
         );
 
-        console.log(`[DEV] Reset token for ${email}: ${token}`);
         res.json({ success: true, message: 'Reset email sent' });
     } catch (error) {
         console.error('Forgot password error:', error);
@@ -371,7 +365,6 @@ router.post('/resend-verification', async (req: Request, res: Response) => {
         const token = crypto.randomBytes(32).toString('hex');
         await pool.query('UPDATE users SET verification_token = $1 WHERE id = $2', [token, userId]);
 
-        console.log(`[DEV] Verification token for ${userRes.rows[0].email}: ${token}`);
         res.json({ success: true, message: 'Verification email resent' });
     } catch (error) {
         console.error('Resend verification error:', error);
@@ -491,10 +484,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Refresh token required' });
         }
 
-        console.log('[AUTH] Token refresh attempt');
-
-        // Verify refresh token (using same secret for now, can be different in production)
-        const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || JWT_SECRET;
+        const JWT_REFRESH_SECRET = getJwtRefreshSecret();
         const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as any;
 
         // Verify user still exists and is active
@@ -515,8 +505,6 @@ router.post('/refresh', async (req: Request, res: Response) => {
             JWT_SECRET,
             { expiresIn: '15m' }
         );
-
-        console.log(`[AUTH] Token refreshed successfully for user: ${user.email}`);
 
         res.json({
             success: true,

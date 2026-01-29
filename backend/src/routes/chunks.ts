@@ -2,6 +2,7 @@ import express, { type Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
+import { CacheKeys, clearNotebookCache, clearUserAnalyticsCache, deleteCache } from '../services/cacheService.js';
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -46,7 +47,7 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
 
         // Verify source belongs to user's notebook
         const sourceResult = await pool.query(
-            `SELECT s.id FROM sources s
+            `SELECT s.id, s.notebook_id FROM sources s
              INNER JOIN notebooks n ON s.notebook_id = n.id
              WHERE s.id = $1 AND n.user_id = $2`,
             [sourceId, req.userId]
@@ -55,6 +56,8 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
         if (sourceResult.rows.length === 0) {
             return res.status(404).json({ error: 'Source not found' });
         }
+
+        const notebookId = sourceResult.rows[0].notebook_id;
 
         // Delete existing chunks for this source
         await pool.query('DELETE FROM chunks WHERE source_id = $1', [sourceId]);
@@ -75,6 +78,10 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
             insertedChunks.push(result.rows[0]);
         }
 
+        await deleteCache(CacheKeys.sourceChunks(sourceId));
+        await clearNotebookCache(notebookId);
+        await clearUserAnalyticsCache(req.userId!);
+
         res.status(201).json({ success: true, chunks: insertedChunks });
     } catch (error) {
         console.error('Create chunks error:', error);
@@ -89,7 +96,7 @@ router.delete('/source/:sourceId', async (req: AuthRequest, res: Response) => {
 
         // Verify source belongs to user's notebook
         const sourceResult = await pool.query(
-            `SELECT s.id FROM sources s
+            `SELECT s.id, s.notebook_id FROM sources s
              INNER JOIN notebooks n ON s.notebook_id = n.id
              WHERE s.id = $1 AND n.user_id = $2`,
             [sourceId, req.userId]
@@ -99,7 +106,13 @@ router.delete('/source/:sourceId', async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ error: 'Source not found' });
         }
 
+        const notebookId = sourceResult.rows[0].notebook_id;
+
         await pool.query('DELETE FROM chunks WHERE source_id = $1', [sourceId]);
+
+        await deleteCache(CacheKeys.sourceChunks(sourceId));
+        await clearNotebookCache(notebookId);
+        await clearUserAnalyticsCache(req.userId!);
 
         res.json({ success: true, message: 'Chunks deleted' });
     } catch (error) {

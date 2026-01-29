@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/motion.dart';
@@ -58,6 +59,17 @@ import '../features/github/github_connect_screen.dart';
 import '../features/github/github_repos_screen.dart';
 import '../features/planning/ui/plans_list_screen.dart';
 import '../features/planning/ui/plan_detail_screen.dart';
+import '../features/gitu/gitu_settings_screen.dart';
+import '../features/gitu/gitu_chat_screen.dart';
+import '../features/gitu/memory_screen.dart';
+import '../features/gitu/linked_accounts_screen.dart';
+import '../features/gitu/scheduled_tasks_screen.dart';
+import '../features/gitu/rules_screen.dart';
+import '../features/gitu/plugins_screen.dart';
+import '../features/gitu/gmail_connection_screen.dart';
+import '../features/gitu/shopify_connection_screen.dart';
+import '../features/gitu/file_permissions_screen.dart';
+import '../features/gitu/permissions_screen.dart';
 import '../features/planning/ui/planning_ai_screen.dart';
 import '../features/planning/ui/ui_design_generator_screen.dart';
 import '../features/planning/ui/project_prototype_screen.dart';
@@ -76,6 +88,9 @@ import '../features/social/ui/profile_screen.dart';
 import '../features/social/ui/edit_profile_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../core/error/not_found_screen.dart';
+
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+final shellNavigatorKey = GlobalKey<NavigatorState>();
 
 String getInitialLocation(bool hasSeenOnboarding) {
   return hasSeenOnboarding ? '/home' : '/onboarding';
@@ -186,6 +201,72 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             name: 'settings',
             pageBuilder: (context, state) =>
                 buildTransitionPage(child: const AIModelSettingsScreen()),
+          ),
+          GoRoute(
+            path: '/gitu-settings',
+            name: 'gitu-settings',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GituSettingsScreen()),
+          ),
+          GoRoute(
+            path: '/gitu-chat',
+            name: 'gitu-chat',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GituChatScreen()),
+          ),
+          GoRoute(
+            path: '/gitu-memories',
+            name: 'gitu-memories',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GituMemoryScreen()),
+          ),
+          GoRoute(
+            path: '/gitu-linked-accounts',
+            name: 'gitu-linked-accounts',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GituLinkedAccountsScreen()),
+          ),
+          GoRoute(
+            path: '/gitu-gmail',
+            name: 'gitu-gmail',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GmailConnectionScreen()),
+          ),
+          GoRoute(
+            path: '/gitu-shopify',
+            name: 'gitu-shopify',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const ShopifyConnectionScreen()),
+          ),
+          GoRoute(
+            path: '/gitu-tasks',
+            name: 'gitu-tasks',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GituScheduledTasksScreen()),
+          ),
+          GoRoute(
+            path: '/gitu-rules',
+            name: 'gitu-rules',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GituRulesScreen()),
+          ),
+          GoRoute(
+            path: '/gitu-plugins',
+            name: 'gitu-plugins',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GituPluginsScreen()),
+          ),
+          GoRoute(
+            path: '/gitu-file-permissions',
+            name: 'gitu-file-permissions',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GituFilePermissionsScreen()),
+          ),
+          GoRoute(
+            path: '/gitu-permissions',
+            name: 'gitu-permissions',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GituPermissionsScreen()),
           ),
           // API key management has been moved to the web admin panel
           // Users can no longer manage API keys from the mobile app

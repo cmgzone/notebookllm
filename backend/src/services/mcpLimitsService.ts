@@ -170,6 +170,20 @@ class McpLimitsService {
   }
 
   /**
+   * Increment API call usage for a user
+   */
+  async incrementApiUsage(userId: string): Promise<void> {
+    await pool.query(
+      `UPDATE user_mcp_usage 
+       SET api_calls_today = api_calls_today + 1,
+           last_api_call_date = CURRENT_DATE,
+           updated_at = NOW()
+       WHERE user_id = $1`,
+      [userId]
+    );
+  }
+
+  /**
    * Check if user is on premium plan
    */
   async isUserPremium(userId: string): Promise<boolean> {
