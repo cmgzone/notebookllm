@@ -894,7 +894,12 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
       // Close existing connection if any
       await _disconnectWebSocket();
 
-      final wsUrl = '$_wsBaseUrl/ws/planning?token=$token';
+      final apiBase = _apiService.baseUrl;
+      final apiUri = Uri.parse(apiBase);
+      final scheme = apiUri.scheme == 'https' ? 'wss' : 'ws';
+      final host = apiUri.host;
+      final port = apiUri.hasPort ? ':${apiUri.port}' : '';
+      final wsUrl = '$scheme://$host$port/ws/planning?token=$token';
       developer.log(
         '[PLANNING_PROVIDER] Connecting to WebSocket...',
         name: 'PlanningProvider',

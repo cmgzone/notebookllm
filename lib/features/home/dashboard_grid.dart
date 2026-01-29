@@ -126,6 +126,16 @@ class DashboardGrid extends ConsumerWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            _BentoCard(
+              title: 'Gitu Assistant',
+              subtitle: 'Universal assistant & automation',
+              icon: LucideIcons.bot,
+              color: const Color(0xFF7C3AED), // Violet 600
+              onTap: () => context.push('/gitu-settings'),
+              height: 120,
+              isWide: true,
+            ),
             const SizedBox(height: 24),
 
             Text(

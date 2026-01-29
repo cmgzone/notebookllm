@@ -32,6 +32,7 @@ import {
   extractActionItems,
   analyzeSentiment,
 } from '../services/gituGmailAI.js';
+import { gituAIRouter } from '../services/gituAIRouter.js';
 
 const router = express.Router();
 const normalizeScopePath = (p: string) =>
@@ -142,6 +143,56 @@ router.post('/terminal/unlink', authenticateToken, async (req: AuthRequest, res:
 });
 
 router.use(authenticateToken);
+
+router.get('/settings', async (req: AuthRequest, res: Response) => {
+  try {
+    const prefs = await gituAIRouter.getUserPreferences(req.userId!);
+    const result = await pool.query(
+      `SELECT gitu_settings FROM users WHERE id = $1`,
+      [req.userId]
+    );
+    const raw = result.rows[0]?.gitu_settings || {};
+    const enabled = !!raw.enabled;
+    res.json({
+      enabled,
+      settings: { modelPreferences: prefs },
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to load settings', message: error.message });
+  }
+});
+
+router.post('/settings', async (req: AuthRequest, res: Response) => {
+  try {
+    const body = req.body as any;
+    const enabled = body?.enabled === true;
+    const modelPrefs = body?.settings?.modelPreferences;
+
+    if (modelPrefs && typeof modelPrefs === 'object') {
+      await gituAIRouter.updateUserPreferences(req.userId!, modelPrefs);
+    }
+
+    await pool.query(
+      `UPDATE users 
+       SET gitu_settings = jsonb_set(
+         COALESCE(gitu_settings, '{}'::jsonb),
+         '{enabled}',
+         to_jsonb($1::boolean),
+         true
+       )
+       WHERE id = $2`,
+      [enabled, req.userId]
+    );
+
+    const prefs = await gituAIRouter.getUserPreferences(req.userId!);
+    res.json({
+      enabled,
+      settings: { modelPreferences: prefs },
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to update settings', message: error.message });
+  }
+});
 
 router.get('/permissions', async (req: AuthRequest, res: Response) => {
   try {

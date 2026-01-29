@@ -279,7 +279,7 @@ class GituSettingsScreen extends ConsumerWidget {
                 title: const Text('GitHub'),
                 subtitle: const Text('Manage repositories and issues'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/github-connect'),
+                onTap: () => context.push('/github'),
               ),
               const Divider(height: 1),
               ListTile(
@@ -319,11 +319,12 @@ class GituSettingsScreen extends ConsumerWidget {
                 },
               ),
               const Divider(height: 1),
-              const ListTile(
-                leading: Icon(Icons.send),
-                title: Text('Telegram'),
-                subtitle: Text('Connect Bot (Coming Soon)'),
-                enabled: false,
+              ListTile(
+                leading: const Icon(Icons.send),
+                title: const Text('Telegram'),
+                subtitle: const Text('Connect Bot to your NotebookLLM account'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/gitu-linked-accounts'),
               ),
             ],
           ),

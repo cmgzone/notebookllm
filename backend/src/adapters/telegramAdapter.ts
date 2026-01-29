@@ -106,7 +106,10 @@ class TelegramAdapter {
         console.error('Error handling Telegram message:', error);
         console.error(`❌ Error occurred for chat ID: ${msg.chat.id}`);
         console.error(`💡 To link this account, run: npx tsx src/scripts/link-telegram-test-account.ts ${msg.chat.id}`);
-        await this.sendErrorMessage(msg.chat.id, 'Sorry, I encountered an error processing your message.');
+        await this.sendErrorMessage(
+          msg.chat.id,
+          'Telegram not linked. In NotebookLLM, open Gitu → Linked Accounts and link Telegram, then send /start again.'
+        );
       }
     });
 

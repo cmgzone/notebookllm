@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // Custom exception for insufficient credits
 class InsufficientCreditsException implements Exception {
@@ -29,7 +30,13 @@ final apiServiceProvider = Provider<ApiService>((ref) {
 
 class ApiService {
   final Ref ref;
-  static const String _baseUrl = 'https://backend.taskiumnetwork.com/api/';
+  static final String _baseUrl = (() {
+    final envUrl = dotenv.env['API_BASE_URL'];
+    if (envUrl != null && envUrl.isNotEmpty) {
+      return envUrl.endsWith('/') ? envUrl : '$envUrl/';
+    }
+    return 'https://backend.taskiumnetwork.com/api/';
+  })();
   String get baseUrl => _baseUrl;
   static const String _tokenKey = 'auth_token';
   static const String _refreshTokenKey = 'refresh_token';

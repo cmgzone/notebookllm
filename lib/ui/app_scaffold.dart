@@ -131,6 +131,16 @@ class AppScaffold extends StatelessWidget {
               child: QuickAIModelSelector(),
             ),
           ),
+          Positioned(
+            right: 8,
+            bottom: 80,
+            child: SafeArea(
+              child: FloatingActionButton.small(
+                onPressed: () => context.push('/settings'),
+                child: const Icon(Icons.settings),
+              ),
+            ),
+          ),
           const Positioned(
             left: 0,
             right: 0,
