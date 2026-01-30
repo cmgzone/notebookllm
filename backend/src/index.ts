@@ -45,6 +45,7 @@ import { gituShellWebSocketService } from './services/gituShellWebSocketService.
 import { registerNotebookTools } from './services/notebookMCPTools.js';
 import { whatsappAdapter } from './adapters/whatsappAdapter.js';
 import { whatsappHealthMonitor } from './services/whatsappHealthMonitor.js';
+import { telegramAdapter } from './adapters/telegramAdapter.js';
 
 // Import services
 import bunnyService from './services/bunnyService.js';
@@ -80,11 +81,38 @@ whatsappAdapter.initialize({ printQRInTerminal: false }).then(() => {
     console.error('❌ Failed to initialize WhatsApp Adapter:', err);
 });
 
+// Initialize Telegram
+const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
+if (telegramBotToken && telegramBotToken.trim().length > 0) {
+    telegramAdapter.initialize(telegramBotToken.trim(), { polling: true }).then(async () => {
+        console.log('✈️  Telegram Adapter initialized (polling)');
+        try {
+            await telegramAdapter.setCommands([
+                { command: 'start', description: 'Start the bot' },
+                { command: 'help', description: 'Show help message' },
+                { command: 'id', description: 'Show your Chat ID for linking' },
+                { command: 'status', description: 'Check your Gitu status' },
+                { command: 'notebooks', description: 'List your notebooks' },
+                { command: 'session', description: 'View current session info' },
+                { command: 'clear', description: 'Clear conversation history' },
+                { command: 'settings', description: 'View your settings' },
+            ]);
+        } catch (err) {
+            console.error('❌ Failed to set Telegram bot commands:', err);
+        }
+    }).catch(err => {
+        console.error('❌ Failed to initialize Telegram Adapter:', err);
+    });
+} else {
+    console.log('ℹ️  Telegram Adapter disabled (TELEGRAM_BOT_TOKEN not set)');
+}
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
     console.log('SIGTERM received, shutting down gracefully...');
     gituScheduler.stop();
     whatsappHealthMonitor.stop();
+    try { await telegramAdapter.disconnect(); } catch {}
     await disconnectRedis();
     process.exit(0);
 });
@@ -93,6 +121,7 @@ process.on('SIGINT', async () => {
     console.log('SIGINT received, shutting down gracefully...');
     gituScheduler.stop();
     whatsappHealthMonitor.stop();
+    try { await telegramAdapter.disconnect(); } catch {}
     await disconnectRedis();
     process.exit(0);
 });
