@@ -253,18 +253,23 @@ class WhatsAppAdapter {
         }
 
         // Check for Note to Self or direct user messages
-        const isNoteToSelf = msg.key.fromMe || this.normalizeJid(remoteJid) === this.connectedAccountJid;
+        // Trust msg.key.fromMe explicitly for sent messages (Note to Self)
+        const normalizedRemoteJid = this.normalizeJid(remoteJid);
+        const isNoteToSelf = msg.key.fromMe || normalizedRemoteJid === this.connectedAccountJid;
         
         // If it's not a note to self and not a direct message from a user, we might want to ignore it
         // But for now, let's process everything that looks like a user message
         
-        this.logger.info(`Received message from ${remoteJid}: ${text} (Note to Self: ${isNoteToSelf})`);
+        this.logger.info(`Received message from ${remoteJid}: ${text} (fromMe: ${msg.key.fromMe}, Connected: ${this.connectedAccountJid}, Note to Self: ${isNoteToSelf})`);
 
         try {
             // Attempt to get user ID, with auto-linking check if needed
             let userId: string;
             try {
-                userId = await this.getUserIdFromJid(remoteJid);
+                // If fromMe is true, we should look up the user based on the CONNECTED account JID, not necessarily the remoteJid
+                // (remoteJid in Note to Self is usually the user's own JID, but let's be safe)
+                const targetJid = isNoteToSelf && this.connectedAccountJid ? this.connectedAccountJid : remoteJid;
+                userId = await this.getUserIdFromJid(targetJid);
             } catch (error) {
                 // If it's a note to self, we might be able to auto-link if we have a pending session
                 if (isNoteToSelf && this.connectedAccountJid) {
@@ -335,7 +340,7 @@ class WhatsAppAdapter {
                 // Send response
                 await this.sendMessage(remoteJid, aiResponse.content);
             } else {
-                this.logger.info(`Ignoring message from ${remoteJid} (not Note to Self)`);
+                this.logger.info(`Ignoring message from ${remoteJid} (not Note to Self). Connected: ${this.connectedAccountJid}, Remote: ${normalizedRemoteJid}`);
             }
 
         } catch (error) {
