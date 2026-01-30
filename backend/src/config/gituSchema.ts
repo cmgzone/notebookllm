@@ -57,11 +57,14 @@ export async function ensureGituSchema(): Promise<void> {
 
     await client.query(`
       ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS display_name TEXT;
+      ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS id UUID;
       ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS linked_at TIMESTAMPTZ DEFAULT NOW();
       ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ DEFAULT NOW();
       ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS verified BOOLEAN DEFAULT false;
       ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS is_primary BOOLEAN DEFAULT false;
       ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+      ALTER TABLE gitu_linked_accounts ALTER COLUMN id SET DEFAULT gen_random_uuid();
+      UPDATE gitu_linked_accounts SET id = gen_random_uuid() WHERE id IS NULL;
       UPDATE gitu_linked_accounts SET status = 'active' WHERE status IS NULL;
       DO $$
       BEGIN
@@ -73,6 +76,11 @@ export async function ensureGituSchema(): Promise<void> {
             CHECK (status IN ('active','inactive','suspended'));
         END IF;
       END $$;
+    `);
+
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_gitu_linked_accounts_id
+      ON gitu_linked_accounts (id);
     `);
   } finally {
     client.release();
