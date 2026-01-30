@@ -66,6 +66,15 @@ class WhatsAppAdapter {
     }
 
     /**
+     * Normalize a JID by removing device suffix.
+     * e.g. 123456789:12@s.whatsapp.net -> 123456789@s.whatsapp.net
+     */
+    private normalizeJid(jid: string): string {
+        if (!jid) return '';
+        return jid.split(':')[0].split('@')[0] + '@s.whatsapp.net';
+    }
+
+    /**
      * Connect to WhatsApp using Baileys.
      */
     private async connectToWhatsApp(): Promise<void> {
@@ -105,7 +114,19 @@ class WhatsAppAdapter {
                 const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
                 this.logger.info(`Connection closed due to ${lastDisconnect?.error}, reconnecting: ${shouldReconnect}`);
                 
-                if (shouldReconnect) {
+                // Special handling for conflict errors (Stream Errored)
+                const isConflict = (lastDisconnect?.error as any)?.message?.includes('conflict') || 
+                                   (lastDisconnect?.error as any)?.output?.statusCode === 409;
+
+                if (isConflict) {
+                     this.logger.warn('Conflict detected (Stream Errored). Clearning auth session and restarting...');
+                     // Clear auth directory to force fresh login
+                     if (this.config?.authDir && fs.existsSync(this.config.authDir)) {
+                         fs.rmSync(this.config.authDir, { recursive: true, force: true });
+                     }
+                     // Reconnect will generate a new QR code
+                     await this.connectToWhatsApp();
+                } else if (shouldReconnect) {
                     await this.connectToWhatsApp();
                 } else {
                     this.logger.info('Connection closed. You are logged out.');
@@ -121,7 +142,7 @@ class WhatsAppAdapter {
                 this.connectionState = 'connected';
                 const jid = (this.sock as any)?.user?.id;
                 const name = (this.sock as any)?.user?.name;
-                this.connectedAccountJid = typeof jid === 'string' ? jid : null;
+                this.connectedAccountJid = typeof jid === 'string' ? this.normalizeJid(jid) : null;
                 this.connectedAccountName = typeof name === 'string' ? name : null;
 
                 // Attempt to send welcome message to self if linked
@@ -232,7 +253,7 @@ class WhatsAppAdapter {
         }
 
         // Check for Note to Self or direct user messages
-        const isNoteToSelf = msg.key.fromMe || remoteJid === this.connectedAccountJid;
+        const isNoteToSelf = msg.key.fromMe || this.normalizeJid(remoteJid) === this.connectedAccountJid;
         
         // If it's not a note to self and not a direct message from a user, we might want to ignore it
         // But for now, let's process everything that looks like a user message
@@ -376,7 +397,7 @@ class WhatsAppAdapter {
     private async getUserIdFromJid(jid: string): Promise<string> {
         // Normalize JID: remove device specific suffix (e.g. :12@s.whatsapp.net -> @s.whatsapp.net)
         // Standard user JID format: 1234567890@s.whatsapp.net
-        const normalizedJid = jid.split(':')[0].split('@')[0] + '@s.whatsapp.net';
+        const normalizedJid = this.normalizeJid(jid);
 
         // Try exact match first
         let result = await pool.query(
