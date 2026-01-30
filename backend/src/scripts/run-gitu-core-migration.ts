@@ -198,6 +198,30 @@ async function runMigration() {
         END IF;
       END $$;
     `);
+
+    // ============================================================================
+    // MESSAGE HISTORY (Audit Trail)
+    // ============================================================================
+    console.log('📝 Creating gitu_messages table...');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS gitu_messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        platform TEXT NOT NULL,
+        platform_user_id TEXT NOT NULL,
+        content JSONB NOT NULL,
+        timestamp TIMESTAMPTZ DEFAULT NOW(),
+        metadata JSONB DEFAULT '{}',
+        CONSTRAINT valid_message_platform CHECK (platform IN ('flutter', 'whatsapp', 'telegram', 'email', 'terminal'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_gitu_messages_user ON gitu_messages(user_id, timestamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_gitu_messages_platform ON gitu_messages(user_id, platform, timestamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_gitu_messages_timestamp ON gitu_messages(timestamp DESC);
+
+      COMMENT ON TABLE gitu_messages IS 'Message history and audit trail for all platforms';
+    `);
+    console.log('✅ Ensured gitu_messages table exists');
     
     // ============================================================================
     // PERMISSIONS
