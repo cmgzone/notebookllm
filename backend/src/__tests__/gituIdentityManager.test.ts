@@ -26,7 +26,7 @@ describe('GituIdentityManager', () => {
       platformUserId: 'device-123',
       displayName: 'Dev Terminal',
     });
-    expect(acc.userId).toBe(testUserId);
+    expect(acc.user_id).toBe(testUserId);
     expect(acc.platform).toBe('terminal');
 
     const list = await gituIdentityManager.listLinkedAccounts(testUserId);
@@ -50,7 +50,7 @@ describe('GituIdentityManager', () => {
     const ok = await gituIdentityManager.unlinkAccount(testUserId, 'terminal', 'device-123');
     expect(ok).toBe(true);
     const list = await gituIdentityManager.listLinkedAccounts(testUserId);
-    const found = list.some(a => a.platform === 'terminal' && a.platformUserId === 'device-123');
+    const found = list.some(a => a.platform === 'terminal' && a.platform_user_id === 'device-123');
     expect(found).toBe(false);
   });
 });
