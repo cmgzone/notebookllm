@@ -114,13 +114,20 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
 
       _channel = _channelBuilder?.call(wsUrl) ?? WebSocketChannel.connect(wsUrl);
 
+      // Connection timeout safety
+      Future.delayed(const Duration(seconds: 15), () {
+        if (state.isConnecting && mounted) {
+          _disconnect(error: 'Connection timed out. Please check your internet connection.');
+        }
+      });
+
       _channel!.stream.listen(
         (message) => _handleMessage(message),
         onError: (error) {
           _disconnect(error: 'Connection error: $error');
         },
         onDone: () {
-          _disconnect();
+          _disconnect(error: 'Connection closed');
         },
       );
 

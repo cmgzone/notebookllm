@@ -27,7 +27,7 @@ class DesignNote with _$DesignNote {
   factory DesignNote.fromJson(Map<String, dynamic> json) =>
       _$DesignNoteFromJson(json);
 
-  factory DesignNote.fromBackendJson(Map<String, dynamic> json) {
+  factory DesignNote.fromBackendJson(Map<String, Object?> json) {
     final requirementIdsList =
         json['requirementIds'] ?? json['requirement_ids'];
 
@@ -63,7 +63,7 @@ class AgentAccess with _$AgentAccess {
   factory AgentAccess.fromJson(Map<String, dynamic> json) =>
       _$AgentAccessFromJson(json);
 
-  factory AgentAccess.fromBackendJson(Map<String, dynamic> json) {
+  factory AgentAccess.fromBackendJson(Map<String, Object?> json) {
     final permissionsList = json['permissions'];
 
     return AgentAccess(
@@ -124,7 +124,7 @@ class Plan with _$Plan {
 
   factory Plan.fromJson(Map<String, dynamic> json) => _$PlanFromJson(json);
 
-  factory Plan.fromBackendJson(Map<String, dynamic> json) {
+  factory Plan.fromBackendJson(Map<String, Object?> json) {
     final requirementsList = json['requirements'];
     final designNotesList = json['designNotes'] ?? json['design_notes'];
     final tasksList = json['tasks'];
@@ -139,24 +139,24 @@ class Plan with _$Plan {
       requirements: requirementsList != null && requirementsList is List
           ? requirementsList
               .map(
-                  (r) => Requirement.fromBackendJson(r as Map<String, dynamic>))
+                  (r) => Requirement.fromBackendJson(r as Map<String, Object?>))
               .toList()
           : <Requirement>[],
       designNotes: designNotesList != null && designNotesList is List
           ? designNotesList
-              .map((d) => DesignNote.fromBackendJson(d as Map<String, dynamic>))
+              .map((d) => DesignNote.fromBackendJson(d as Map<String, Object?>))
               .toList()
           : <DesignNote>[],
       tasks: tasksList != null && tasksList is List
           ? tasksList
-              .map((t) => PlanTask.fromBackendJson(t as Map<String, dynamic>))
+              .map((t) => PlanTask.fromBackendJson(t as Map<String, Object?>))
               .toList()
           : <PlanTask>[],
       isPrivate: (json['isPrivate'] ?? json['is_private']) as bool? ?? true,
       sharedAgents: sharedAgentsList != null && sharedAgentsList is List
           ? sharedAgentsList
               .map(
-                  (a) => AgentAccess.fromBackendJson(a as Map<String, dynamic>))
+                  (a) => AgentAccess.fromBackendJson(a as Map<String, Object?>))
               .toList()
           : <AgentAccess>[],
       isPublic: (json['isPublic'] ?? json['is_public']) as bool? ?? false,

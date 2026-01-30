@@ -70,6 +70,8 @@ import '../features/gitu/gmail_connection_screen.dart';
 import '../features/gitu/shopify_connection_screen.dart';
 import '../features/gitu/file_permissions_screen.dart';
 import '../features/gitu/permissions_screen.dart';
+import '../features/gitu/agents_screen.dart';
+import '../features/gitu/agent_detail_screen.dart';
 import '../features/planning/ui/planning_ai_screen.dart';
 import '../features/planning/ui/ui_design_generator_screen.dart';
 import '../features/planning/ui/project_prototype_screen.dart';
@@ -267,6 +269,20 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             name: 'gitu-permissions',
             pageBuilder: (context, state) =>
                 buildTransitionPage(child: const GituPermissionsScreen()),
+          ),
+          GoRoute(
+            path: '/gitu-agents',
+            name: 'gitu-agents',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const AgentsScreen()),
+          ),
+          GoRoute(
+            path: '/gitu-agents/:id',
+            name: 'gitu-agent-detail',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id']!;
+              return buildTransitionPage(child: AgentDetailScreen(agentId: id));
+            },
           ),
           // API key management has been moved to the web admin panel
           // Users can no longer manage API keys from the mobile app

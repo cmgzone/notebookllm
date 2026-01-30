@@ -78,7 +78,54 @@ export interface PlatformDetection {
 
 class GituMessageGateway {
   private messageHandlers: Map<Platform, MessageHandler[]> = new Map();
+  private outboundHandlers: Map<Platform, (userId: string, text: string) => Promise<void>> = new Map();
   private globalHandlers: MessageHandler[] = [];
+
+  /**
+   * Register a handler for sending outbound messages to a platform.
+   * This allows the gateway to send notifications without hard dependencies on adapters.
+   */
+  registerOutboundHandler(platform: Platform, handler: (userId: string, text: string) => Promise<void>): void {
+    this.outboundHandlers.set(platform, handler);
+    console.log(`[Gitu Gateway] Registered outbound handler for ${platform}`);
+  }
+
+  /**
+   * Send a notification to a user across all their connected platforms.
+   */
+  async notifyUser(userId: string, message: string): Promise<void> {
+    try {
+      // Find all connected platforms for this user
+      const result = await pool.query(
+        `SELECT platform, platform_user_id FROM gitu_linked_accounts 
+         WHERE user_id = $1 AND status = 'active'`,
+        [userId]
+      );
+
+      const notifications: Promise<void>[] = [];
+
+      for (const row of result.rows) {
+        const platform = row.platform as Platform;
+        const platformUserId = row.platform_user_id;
+        const handler = this.outboundHandlers.get(platform);
+
+        if (handler) {
+          // We pass the platformUserId (JID/ChatID) to the handler
+          // The handler signature in registerOutboundHandler expects (targetId, text)
+          notifications.push(
+            handler(platformUserId, message).catch(err => 
+              console.error(`Failed to notify user ${userId} on ${platform}:`, err)
+            )
+          );
+        }
+      }
+
+      await Promise.all(notifications);
+      
+    } catch (error) {
+      console.error(`[Gitu Gateway] Failed to notify user ${userId}:`, error);
+    }
+  }
 
   /**
    * Normalize a raw message from any platform into the standard IncomingMessage format.

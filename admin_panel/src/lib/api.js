@@ -176,6 +176,10 @@ class ApiService {
         return this.put(`/admin/users/${userId}/status`, { isActive });
     }
 
+    async updateShellPermissions(userId, permissions) {
+        return this.put(`/gitu/shell/permissions`, { ...permissions, targetUserId: userId });
+    }
+
     // ============ ADMIN - AI MODELS ============
     async getAIModels() {
         return this.get('/admin/models');

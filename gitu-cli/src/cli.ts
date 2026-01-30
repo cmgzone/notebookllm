@@ -9,6 +9,12 @@ import { SessionsCommand } from './commands/sessions.js';
 import { DevicesCommand } from './commands/devices.js';
 import { ConfigCommand } from './commands/config.js';
 import { HealthCommand } from './commands/health.js';
+import { AgentCommand } from './commands/agent.js';
+import { ChatCommand } from './commands/chat.js';
+import { RunCommand } from './commands/run.js';
+import { NotebookCommand } from './commands/notebook.js';
+import { InitCommand } from './commands/init.js';
+import { AliasCommand } from './commands/alias.js';
 
 const program = new Command();
 const config = new ConfigManager();
@@ -18,6 +24,16 @@ program
   .name('gitu')
   .description('Gitu Universal Assistant CLI')
   .version('1.0.0');
+
+program
+  .command('init')
+  .description('Initialize Gitu CLI configuration')
+  .action(() => InitCommand.start(api));
+
+program
+  .command('alias [shell]')
+  .description('Generate shell alias script (bash/zsh/powershell)')
+  .action((shell) => AliasCommand.show(shell));
 
 // Config commands
 const configCmd = program
@@ -106,6 +122,59 @@ program
   .description('Check system health and connection')
   .option('--json', 'Output as JSON')
   .action((options) => HealthCommand.check(api, options));
+
+// Agent commands
+const agentCmd = program
+  .command('agent')
+  .description('Manage autonomous agents');
+
+agentCmd
+  .command('list')
+  .description('List active agents')
+  .option('--json', 'Output as JSON')
+  .action((options) => AgentCommand.list(api, options));
+
+agentCmd
+  .command('spawn <task>')
+  .description('Spawn a new agent')
+  .option('--json', 'Output as JSON')
+  .action((task, options) => AgentCommand.spawn(api, task, options));
+
+agentCmd
+  .command('watch <agentId>')
+  .description('Watch agent progress')
+  .option('--json', 'Output as JSON')
+  .action((agentId, options) => AgentCommand.watch(api, agentId, options));
+
+// Chat command
+program
+  .command('chat')
+  .description('Start interactive chat session')
+  .action(() => ChatCommand.start(api));
+
+// Run command
+program
+  .command('run <command>')
+  .description('Execute a single natural language instruction')
+  .option('--json', 'Output as JSON')
+  .action((command, options) => RunCommand.execute(api, command, options));
+
+// Notebook commands
+const notebookCmd = program
+  .command('notebook')
+  .description('Manage notebooks');
+
+notebookCmd
+  .command('list')
+  .description('List your notebooks')
+  .option('--json', 'Output as JSON')
+  .action((options) => NotebookCommand.list(api, options));
+
+notebookCmd
+  .command('query <notebookId> <question>')
+  .description('Ask a question to a notebook')
+  .option('--json', 'Output as JSON')
+  .action((notebookId, question, options) => NotebookCommand.query(api, notebookId, question, options));
 
 // Whoami command
 program

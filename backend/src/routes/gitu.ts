@@ -19,6 +19,7 @@ import { gituPluginSystem } from '../services/gituPluginSystem.js';
 import { gituTerminalService } from '../services/gituTerminalService.js';
 import { gituGmailManager } from '../services/gituGmailManager.js';
 import { gituShopifyManager } from '../services/gituShopifyManager.js';
+import { gituAgentManager } from '../services/gituAgentManager.js';
 import { whatsappAdapter } from '../adapters/whatsappAdapter.js';
 import {
   listMessages as gmailList,
@@ -34,6 +35,7 @@ import {
   analyzeSentiment,
 } from '../services/gituGmailAI.js';
 import { gituAIRouter } from '../services/gituAIRouter.js';
+import { generateEmbedding } from '../services/aiService.js';
 
 const router = express.Router();
 const normalizeScopePath = (p: string) =>
@@ -43,6 +45,29 @@ const normalizeScopePath = (p: string) =>
     .replace(/\\/g, '/')
     .replace(/\/+/g, '/')
     .replace(/\/$/, '');
+
+router.post('/message', async (req: AuthRequest, res: Response) => {
+  try {
+    const { message, context } = req.body;
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ error: 'message is required' });
+    }
+
+    // Route through GituAIRouter
+    const response = await gituAIRouter.route({
+      userId: req.userId!,
+      platform: 'cli',
+      platformUserId: 'cli-user',
+      content: message,
+      taskType: 'chat',
+      useRetrieval: true // Enable RAG by default for CLI
+    });
+
+    res.json({ success: true, content: response.content });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to process message', message: error.message });
+  }
+});
 
 router.post('/terminal/link', async (req: AuthRequest, res: Response) => {
   try {
@@ -140,6 +165,80 @@ router.post('/terminal/unlink', authenticateToken, async (req: AuthRequest, res:
       return res.status(404).json({ error: 'Device not found' });
     }
     res.status(500).json({ error: 'Failed to unlink device', message: error.message });
+  }
+});
+
+router.post('/terminal/source', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { code, filename, notebookId } = req.body as any;
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ error: 'code is required' });
+    }
+    const name = filename || 'CLI Upload';
+    
+    // Find or use provided notebook
+    let targetNotebookId = notebookId;
+    if (!targetNotebookId) {
+        // Try to find a recent notebook or default
+        const result = await pool.query(
+            `SELECT id FROM notebooks WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1`,
+            [req.userId]
+        );
+        if (result.rows.length > 0) {
+            targetNotebookId = result.rows[0].id;
+        } else {
+            // Create default notebook
+            const newNb = await pool.query(
+                `INSERT INTO notebooks (user_id, title, description) VALUES ($1, 'CLI Uploads', 'Auto-generated for CLI') RETURNING id`,
+                [req.userId]
+            );
+            targetNotebookId = newNb.rows[0].id;
+        }
+    }
+
+    // Insert Source
+    const sourceId = uuidv4();
+    await pool.query(
+        `INSERT INTO sources (id, notebook_id, title, type, content, created_at)
+         VALUES ($1, $2, $3, 'text', $4, NOW())`,
+        [sourceId, targetNotebookId, name, code]
+    );
+
+    // Chunking & Embedding
+    const chunkSize = 1000;
+    const overlap = 100;
+    const chunks: string[] = [];
+    
+    for (let i = 0; i < code.length; i += (chunkSize - overlap)) {
+        chunks.push(code.substring(i, i + chunkSize));
+    }
+
+    // Process chunks
+    for (let i = 0; i < chunks.length; i++) {
+        const chunkText = chunks[i];
+        try {
+            const embedding = await generateEmbedding(chunkText);
+            const vectorStr = `[${embedding.join(',')}]`;
+            
+            await pool.query(
+                `INSERT INTO chunks (id, source_id, content_text, chunk_index, embedding)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [uuidv4(), sourceId, chunkText, i, vectorStr]
+            );
+        } catch (e) {
+            console.error(`Failed to embed chunk ${i}:`, e);
+            // Insert without embedding as fallback
+             await pool.query(
+                `INSERT INTO chunks (id, source_id, content_text, chunk_index)
+                 VALUES ($1, $2, $3, $4)`,
+                [uuidv4(), sourceId, chunkText, i]
+            );
+        }
+    }
+
+    res.json({ success: true, sourceId, notebookId: targetNotebookId, chunks: chunks.length });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to upload source', message: error.message });
   }
 });
 
@@ -1133,6 +1232,14 @@ router.put('/shell/permissions', async (req: AuthRequest, res: Response) => {
 
     const allowUnsandboxed = body.allowUnsandboxed === true;
 
+    if (allowUnsandboxed) {
+      const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [req.userId]);
+      const role = userResult.rows[0]?.role || 'user';
+      if (role !== 'admin') {
+        return res.status(403).json({ error: 'FORBIDDEN', message: 'Only admins can enable unsandboxed mode' });
+      }
+    }
+
     if (allowedCommands.length === 0) {
       const count = await gituPermissionManager.revokeAllPermissions(req.userId!, 'shell');
       return res.json({ success: true, active: false, revoked: count, allowedCommands: [], allowedPaths: [] });
@@ -1478,6 +1585,41 @@ router.post('/files/write', async (req: AuthRequest, res: Response) => {
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to write file', message: error.message });
+  }
+});
+
+// ==================== GITU AGENTS ====================
+
+router.get('/agents', async (req: AuthRequest, res: Response) => {
+  try {
+    const agents = await gituAgentManager.listAgents(req.userId!);
+    res.json({ success: true, agents });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to list agents', message: error.message });
+  }
+});
+
+router.post('/agents', async (req: AuthRequest, res: Response) => {
+  try {
+    const { task, parentAgentId, memory } = req.body;
+    if (!task) return res.status(400).json({ error: 'task is required' });
+    
+    const agent = await gituAgentManager.spawnAgent(req.userId!, task, parentAgentId, memory);
+    res.status(201).json({ success: true, agent });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to spawn agent', message: error.message });
+  }
+});
+
+router.get('/agents/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const agent = await gituAgentManager.getAgent(req.params.id);
+    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    if (agent.userId !== req.userId) return res.status(403).json({ error: 'Access denied' });
+    
+    res.json({ success: true, agent });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to get agent', message: error.message });
   }
 });
 

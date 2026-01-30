@@ -26,6 +26,8 @@ import { gituSessionService } from '../services/gituSessionService.js';
 import { gituAIRouter } from '../services/gituAIRouter.js';
 import pool from '../config/database.js';
 
+import { gituAgentManager } from '../services/gituAgentManager.js';
+
 // ==================== INTERFACES ====================
 
 export interface WhatsAppAdapterConfig {
@@ -57,11 +59,19 @@ class WhatsAppAdapter {
         }
 
         this.config = {
-            authDir: config.authDir || path.join(process.cwd(), 'auth_info_baileys'),
+            authDir: config.authDir || process.env.GITU_WHATSAPP_AUTH_DIR || path.join(process.cwd(), 'auth_info_baileys'),
             printQRInTerminal: config.printQRInTerminal !== false, // Default true
         };
 
         await this.connectToWhatsApp();
+        
+        // Register outbound handler
+        gituMessageGateway.registerOutboundHandler('whatsapp', async (jid, text) => {
+            if (this.connectionState === 'connected') {
+                await this.sendMessage(jid, text);
+            }
+        });
+
         this.initialized = true;
     }
 
@@ -111,40 +121,38 @@ class WhatsAppAdapter {
             }
 
             if (connection === 'close') {
-                const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-                this.logger.info(`Connection closed due to ${lastDisconnect?.error}, reconnecting: ${shouldReconnect}`);
+                const error = lastDisconnect?.error as Boom | undefined;
+                const statusCode = error?.output?.statusCode;
                 
-                // Special handling for conflict errors (Stream Errored)
-                const isConflict = (lastDisconnect?.error as any)?.message?.includes('conflict') || 
-                                   (lastDisconnect?.error as any)?.output?.statusCode === 409;
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+                this.logger.info(`Connection closed: ${statusCode}, reconnecting: ${shouldReconnect}`);
 
-                if (isConflict) {
-                     this.logger.warn('Conflict detected (Stream Errored). Clearning auth session and restarting...');
-                     // Clear auth directory to force fresh login
+                // Conflict (409) or Logged Out
+                const isConflict = statusCode === 409 || error?.message?.includes('conflict');
+                const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+
+                if (isConflict || isLoggedOut) {
+                     this.logger.warn(`Session terminated (${isConflict ? 'Conflict' : 'Logged Out'}). Clearing session.`);
+                     
+                     // Clear auth directory
                      if (this.config?.authDir && fs.existsSync(this.config.authDir)) {
-                         fs.rmSync(this.config.authDir, { recursive: true, force: true });
+                         try {
+                            fs.rmSync(this.config.authDir, { recursive: true, force: true });
+                         } catch (e) {
+                             this.logger.error({ err: e }, 'Failed to clear auth dir');
+                         }
                      }
-                     // Reconnect will generate a new QR code
+                     
+                     // Restart to generate new QR
+                     this.connectionState = 'disconnected';
+                     this.connectedAccountJid = null;
+                     this.connectedAccountName = null;
                      await this.connectToWhatsApp();
                 } else if (shouldReconnect) {
+                    // Generic disconnect - Just reconnect, preserve session
                     await this.connectToWhatsApp();
                 } else {
-                    this.logger.info('Connection closed. You are logged out. Auto-clearing session and restarting.');
                     this.connectionState = 'disconnected';
-                    this.connectedAccountJid = null;
-                    this.connectedAccountName = null;
-                    
-                    // Auto-cleanup on logout to ensure fresh start
-                    if (this.config?.authDir && fs.existsSync(this.config.authDir)) {
-                        try {
-                            fs.rmSync(this.config.authDir, { recursive: true, force: true });
-                        } catch (e) {
-                            this.logger.error({ err: e }, 'Failed to clear auth dir on logout');
-                        }
-                    }
-                    
-                    // Restart connection flow immediately to generate new QR
-                    await this.connectToWhatsApp();
                 }
             } else if (connection === 'open') {
                 this.logger.info('Opened connection to WhatsApp');
@@ -296,6 +304,45 @@ class WhatsAppAdapter {
                 }
             }
             
+            // ================== COMMAND HANDLING ==================
+            if (text.startsWith('/agent')) {
+                const parts = text.split(' ');
+                const command = parts[1];
+                const args = parts.slice(2).join(' ');
+
+                if (command === 'spawn' || command === 'create') {
+                    if (!args) {
+                        await this.sendMessage(remoteJid, '⚠️ Usage: /agent spawn <task description>');
+                        return;
+                    }
+                    await this.sendMessage(remoteJid, `🤖 Spawning agent for: "${args}"...`);
+                    try {
+                        const agent = await gituAgentManager.spawnAgent(userId, args);
+                        await this.sendMessage(remoteJid, `✅ Agent spawned! ID: ${agent.id.substring(0, 8)}\nI will notify you when it completes.`);
+                    } catch (e: any) {
+                        await this.sendMessage(remoteJid, `❌ Failed to spawn agent: ${e.message}`);
+                    }
+                    return;
+                }
+
+                if (command === 'list') {
+                    const agents = await gituAgentManager.listAgents(userId);
+                    if (agents.length === 0) {
+                        await this.sendMessage(remoteJid, 'No active agents found.');
+                        return;
+                    }
+                    const list = agents.map(a => 
+                        `- *${a.task.substring(0, 30)}...*\n  Status: ${a.status}\n  ID: ${a.id.substring(0, 8)}`
+                    ).join('\n\n');
+                    await this.sendMessage(remoteJid, `📋 *Your Agents:*\n\n${list}`);
+                    return;
+                }
+                
+                await this.sendMessage(remoteJid, 'ℹ️ Available commands:\n/agent spawn <task>\n/agent list');
+                return;
+            }
+            // ======================================================
+
             // Route to AI
             try {
                 const aiResponse = await gituAIRouter.route({
@@ -307,7 +354,9 @@ class WhatsAppAdapter {
                         isNoteToSelf,
                         messageId: msg.key.id,
                         pushName: msg.pushName
-                    }
+                    },
+                    taskType: 'chat',
+                    useRetrieval: true // Enable RAG so AI knows about notebooks/sources
                 });
 
                 // Send response

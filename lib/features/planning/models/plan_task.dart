@@ -33,7 +33,7 @@ class StatusChange with _$StatusChange {
   factory StatusChange.fromJson(Map<String, dynamic> json) =>
       _$StatusChangeFromJson(json);
 
-  factory StatusChange.fromBackendJson(Map<String, dynamic> json) =>
+  factory StatusChange.fromBackendJson(Map<String, Object?> json) =>
       StatusChange(
         status: _parseTaskStatus((json['status']) as String?),
         changedAt: json['changedAt'] != null
@@ -63,7 +63,7 @@ class AgentOutput with _$AgentOutput {
   factory AgentOutput.fromJson(Map<String, dynamic> json) =>
       _$AgentOutputFromJson(json);
 
-  factory AgentOutput.fromBackendJson(Map<String, dynamic> json) => AgentOutput(
+  factory AgentOutput.fromBackendJson(Map<String, Object?> json) => AgentOutput(
         id: json['id'] as String? ?? '',
         taskId: (json['taskId'] ?? json['task_id']) as String? ?? '',
         agentSessionId:
@@ -72,7 +72,9 @@ class AgentOutput with _$AgentOutput {
         outputType:
             (json['outputType'] ?? json['output_type']) as String? ?? 'comment',
         content: json['content'] as String? ?? '',
-        metadata: Map<String, dynamic>.from(json['metadata'] ?? {}),
+        metadata: json['metadata'] != null
+            ? Map<String, dynamic>.from(json['metadata'] as Map)
+            : {},
         createdAt: json['createdAt'] != null
             ? DateTime.parse(json['createdAt'] as String)
             : json['created_at'] != null
@@ -118,7 +120,7 @@ class PlanTask with _$PlanTask {
   factory PlanTask.fromJson(Map<String, dynamic> json) =>
       _$PlanTaskFromJson(json);
 
-  factory PlanTask.fromBackendJson(Map<String, dynamic> json) {
+  factory PlanTask.fromBackendJson(Map<String, Object?> json) {
     final agentOutputsList = json['agentOutputs'] ?? json['agent_outputs'];
     final statusHistoryList = json['statusHistory'] ?? json['status_history'];
     final subTasksList = json['subTasks'] ?? json['sub_tasks'];
@@ -141,7 +143,7 @@ class PlanTask with _$PlanTask {
       agentOutputs: agentOutputsList != null && agentOutputsList is List
           ? agentOutputsList
               .map(
-                  (o) => AgentOutput.fromBackendJson(o as Map<String, dynamic>))
+                  (o) => AgentOutput.fromBackendJson(o as Map<String, Object?>))
               .toList()
           : <AgentOutput>[],
       timeSpentMinutes:
@@ -149,14 +151,14 @@ class PlanTask with _$PlanTask {
       statusHistory: statusHistoryList != null && statusHistoryList is List
           ? statusHistoryList
               .map((s) =>
-                  StatusChange.fromBackendJson(s as Map<String, dynamic>))
+                  StatusChange.fromBackendJson(s as Map<String, Object?>))
               .toList()
           : <StatusChange>[],
       blockingReason:
           (json['blockingReason'] ?? json['blocking_reason']) as String?,
       subTasks: subTasksList != null && subTasksList is List
           ? subTasksList
-              .map((t) => PlanTask.fromBackendJson(t as Map<String, dynamic>))
+              .map((t) => PlanTask.fromBackendJson(t as Map<String, Object?>))
               .toList()
           : <PlanTask>[],
       createdAt: json['createdAt'] != null

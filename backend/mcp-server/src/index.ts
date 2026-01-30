@@ -1577,7 +1577,7 @@ const CreateAgentNotebookSchema = z.object({
   category: z.string().optional(),
   webhookUrl: z.string().url().optional(),
   webhookSecret: z.string().min(16).optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 const SaveCodeWithContextSchema = z.object({
@@ -1764,7 +1764,7 @@ const AddTaskOutputSchema = z.object({
   type: z.enum(['comment', 'code', 'file', 'completion']),
   content: z.string().min(1),
   agentName: z.string().optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 const CompleteTaskSchema = z.object({
@@ -1825,7 +1825,7 @@ const planningApi = axios.create({
 const server = new Server(
   {
     name: 'coding-agent-mcp',
-    version: '1.0.0',
+    version: '1.1.0',
   },
   {
     capabilities: {

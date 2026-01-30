@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import { Users, Shield, Ban, Check, Search, Loader2 } from 'lucide-react';
+import { Users, Shield, Ban, Check, Search, Loader2, Terminal, AlertTriangle, X } from 'lucide-react';
 
 export default function UserManagement() {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
+    
+    // Permission Modal State
+    const [showPermModal, setShowPermModal] = useState(false);
+    const [selectedUser, setSelectedUser] = useState(null);
+    const [unsandboxed, setUnsandboxed] = useState(false);
+    const [savingPerms, setSavingPerms] = useState(false);
 
     useEffect(() => {
         loadUsers();
@@ -40,6 +46,31 @@ export default function UserManagement() {
             await loadUsers();
         } catch (err) {
             alert('Failed to update status: ' + err.message);
+        }
+    };
+
+    const openPermModal = (user) => {
+        setSelectedUser(user);
+        // In a real app, you might fetch current permissions here
+        // For now, we assume false or rely on what's in the user object if available
+        setUnsandboxed(false); 
+        setShowPermModal(true);
+    };
+
+    const savePermissions = async () => {
+        if (!selectedUser) return;
+        setSavingPerms(true);
+        try {
+            await api.updateShellPermissions(selectedUser.id, {
+                allowUnsandboxed: unsandboxed,
+                allowedCommands: unsandboxed ? ['*'] : [], // Default to all if unsandboxed, else restricted
+            });
+            alert(`Permissions updated for ${selectedUser.display_name}`);
+            setShowPermModal(false);
+        } catch (err) {
+            alert('Failed to update permissions: ' + err.message);
+        } finally {
+            setSavingPerms(false);
         }
     };
 
@@ -195,6 +226,13 @@ export default function UserManagement() {
                                         >
                                             {user.role === 'admin' ? 'Demote' : 'Promote'}
                                         </button>
+                                        <button
+                                            onClick={() => openPermModal(user)}
+                                            className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+                                        >
+                                            <Terminal className="h-3 w-3" />
+                                            Perms
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -206,6 +244,72 @@ export default function UserManagement() {
             {filteredUsers.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                     No users found matching "{searchTerm}"
+                </div>
+            )}
+
+            {/* Permission Modal */}
+            {showPermModal && selectedUser && (
+                <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-card border border-border rounded-xl shadow-lg max-w-md w-full p-6">
+                        <div className="flex justify-between items-start mb-4">
+                            <div>
+                                <h2 className="text-xl font-bold">Shell Permissions</h2>
+                                <p className="text-sm text-muted-foreground">For {selectedUser.display_name}</p>
+                            </div>
+                            <button 
+                                onClick={() => setShowPermModal(false)}
+                                className="text-muted-foreground hover:text-foreground"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4 mb-6">
+                            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 flex gap-3">
+                                <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                                <div className="text-sm">
+                                    <p className="font-medium text-amber-500 mb-1">Warning: Unsandboxed Mode</p>
+                                    <p className="text-muted-foreground">
+                                        Enabling this allows the user's AI agents to execute ANY command on the host server with the privileges of the Node.js process.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                                <div>
+                                    <p className="font-medium">Unsandboxed Mode</p>
+                                    <p className="text-xs text-muted-foreground">Bypass Docker isolation</p>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        className="sr-only peer"
+                                        checked={unsandboxed}
+                                        onChange={(e) => setUnsandboxed(e.target.checked)}
+                                    />
+                                    <div className="w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-background after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowPermModal(false)}
+                                className="px-4 py-2 text-sm font-medium hover:bg-muted rounded-lg"
+                                disabled={savingPerms}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={savePermissions}
+                                disabled={savingPerms}
+                                className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg flex items-center gap-2"
+                            >
+                                {savingPerms && <Loader2 className="h-4 w-4 animate-spin" />}
+                                Save Permissions
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

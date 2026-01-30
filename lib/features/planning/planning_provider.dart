@@ -76,14 +76,6 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
   bool _disposed = false;
 
   // WebSocket configuration
-  // Derive WebSocket URL from API base URL
-  static String get _wsBaseUrl {
-    const apiBaseUrl = 'https://notebookllm-ufj7.onrender.com';
-    return apiBaseUrl
-        .replaceFirst('https://', 'wss://')
-        .replaceFirst('http://', 'ws://');
-  }
-
   static const Duration _reconnectDelay = Duration(seconds: 5);
 
   PlanningNotifier(this.ref) : super(const PlanningState()) {
@@ -1018,11 +1010,28 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
 
   /// Handle incoming WebSocket messages
   /// Implements Requirement 6.1: Reflect changes within 5 seconds
-  void _handleWebSocketMessage(dynamic message) {
+  void _handleWebSocketMessage(Object? message) {
+    if (message is! String) {
+      developer.log(
+        '[PLANNING_PROVIDER] Received non-string WebSocket message',
+        name: 'PlanningProvider',
+      );
+      return;
+    }
+
     try {
-      final data = jsonDecode(message as String) as Map<String, dynamic>;
+      final Object? decoded = jsonDecode(message);
+      if (decoded is! Map<String, Object?>) {
+        developer.log(
+          '[PLANNING_PROVIDER] WebSocket message is not a JSON object',
+          name: 'PlanningProvider',
+        );
+        return;
+      }
+
+      final data = decoded;
       final type = data['type'] as String?;
-      final payload = data['payload'] as Map<String, dynamic>?;
+      final payload = data['payload'] as Map<String, Object?>?;
 
       developer.log(
         '[PLANNING_PROVIDER] WebSocket message: $type',
@@ -1031,19 +1040,19 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
 
       switch (type) {
         case 'task_updated':
-          _handleTaskUpdate(payload);
+          if (payload != null) _handleTaskUpdate(payload);
           break;
         case 'task_created':
-          _handleTaskCreated(payload);
+          if (payload != null) _handleTaskCreated(payload);
           break;
         case 'task_deleted':
-          _handleTaskDeleted(payload);
+          if (payload != null) _handleTaskDeleted(payload);
           break;
         case 'plan_updated':
-          _handlePlanUpdate(payload);
+          if (payload != null) _handlePlanUpdate(payload);
           break;
         case 'agent_output':
-          _handleAgentOutput(payload);
+          if (payload != null) _handleAgentOutput(payload);
           break;
         case 'ping':
           // Respond to ping with pong
@@ -1066,7 +1075,7 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
   }
 
   /// Send a message via WebSocket
-  void _sendWebSocketMessage(Map<String, dynamic> message) {
+  void _sendWebSocketMessage(Map<String, Object?> message) {
     if (_wsChannel != null) {
       _wsChannel!.sink.add(jsonEncode(message));
     }
@@ -1074,9 +1083,7 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
 
   /// Handle task update from WebSocket
   /// Implements Requirement 6.1: Real-time task updates
-  void _handleTaskUpdate(Map<String, dynamic>? payload) {
-    if (payload == null) return;
-
+  void _handleTaskUpdate(Map<String, Object?> payload) {
     try {
       final task = PlanTask.fromBackendJson(payload);
 
@@ -1097,9 +1104,7 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
   }
 
   /// Handle task created from WebSocket
-  void _handleTaskCreated(Map<String, dynamic>? payload) {
-    if (payload == null) return;
-
+  void _handleTaskCreated(Map<String, Object?> payload) {
     try {
       final task = PlanTask.fromBackendJson(payload);
 
@@ -1126,9 +1131,7 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
   }
 
   /// Handle task deleted from WebSocket
-  void _handleTaskDeleted(Map<String, dynamic>? payload) {
-    if (payload == null) return;
-
+  void _handleTaskDeleted(Map<String, Object?> payload) {
     final taskId = payload['taskId'] as String?;
     final planId = payload['planId'] as String?;
 
@@ -1152,9 +1155,7 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
   }
 
   /// Handle plan update from WebSocket
-  void _handlePlanUpdate(Map<String, dynamic>? payload) {
-    if (payload == null) return;
-
+  void _handlePlanUpdate(Map<String, Object?> payload) {
     try {
       final plan = Plan.fromBackendJson(payload);
       _updatePlanInList(plan);
@@ -1177,9 +1178,7 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
 
   /// Handle agent output from WebSocket
   /// Implements Requirement 6.2: Display agent comments/outputs
-  void _handleAgentOutput(Map<String, dynamic>? payload) {
-    if (payload == null) return;
-
+  void _handleAgentOutput(Map<String, Object?> payload) {
     try {
       final output = AgentOutput.fromBackendJson(payload);
       final taskId = output.taskId;

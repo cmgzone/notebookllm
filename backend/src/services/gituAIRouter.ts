@@ -7,7 +7,7 @@
  */
 
 import pool from '../config/database.js';
-import { generateWithGemini, generateWithOpenRouter } from './aiService.js';
+import { generateWithGemini, generateWithOpenRouter, generateEmbedding } from './aiService.js';
 
 // ==================== INTERFACES ====================
 
@@ -46,13 +46,18 @@ export interface ModelPreferences {
  */
 export interface AIRequest {
   userId: string;
-  sessionId: string;
-  prompt: string;
-  context: string[];
-  taskType: TaskType;
+  sessionId?: string; // Optional, can be inferred or created
+  prompt?: string;    // Optional if content is provided
+  content?: string;   // Alternative to prompt
+  context?: string[]; // Optional, defaults to empty array
+  taskType?: TaskType; // Optional, defaults to chat
   maxTokens?: number;
   temperature?: number;
   preferredModel?: string;
+  platform?: string;       // Source platform (whatsapp, telegram, etc)
+  platformUserId?: string; // User ID on source platform
+  metadata?: Record<string, any>; // Extra metadata
+  useRetrieval?: boolean; // Enable RAG context injection
 }
 
 /**
@@ -186,25 +191,69 @@ class GituAIRouter {
   }
 
   /**
+   * Retrieve relevant context from chunks using vector similarity.
+   */
+  async retrieveContext(query: string, userId: string, limit: number = 5): Promise<string[]> {
+    try {
+      const embedding = await generateEmbedding(query);
+      const vectorStr = `[${embedding.join(',')}]`;
+      
+      const result = await pool.query(
+        `SELECT content_text 
+         FROM chunks 
+         JOIN sources ON chunks.source_id = sources.id
+         JOIN notebooks ON sources.notebook_id = notebooks.id
+         WHERE notebooks.user_id = $1
+         ORDER BY embedding <=> $2
+         LIMIT $3`,
+        [userId, vectorStr, limit]
+      );
+      
+      return result.rows.map(row => row.content_text);
+    } catch (error) {
+      console.error('[Gitu AI Router] Retrieval error:', error);
+      return [];
+    }
+  }
+
+  /**
    * Route an AI request to the appropriate model and generate a response.
    * 
    * @param request - The AI request parameters
    * @returns The AI response with metadata
    */
   async route(request: AIRequest): Promise<AIResponse> {
+    // Normalize request
+    const prompt = request.prompt || request.content || '';
+    if (!prompt) {
+        throw new Error('Prompt or content is required');
+    }
+    
+    const taskType = request.taskType || 'chat';
+    const context = request.context || [];
+
+    // Retrieval (RAG)
+    if (request.useRetrieval) {
+        const retrieved = await this.retrieveContext(prompt, request.userId);
+        if (retrieved.length > 0) {
+            console.log(`[Gitu AI Router] Injected ${retrieved.length} chunks of context.`);
+            context.push(...retrieved);
+        }
+    }
+
     // Get user's model preferences
     const preferences = await this.getUserPreferences(request.userId);
     
     // Select the best model for this request, considering explicit preference override
     const model = await this.selectModel(
-        request.taskType, 
+        taskType, 
         preferences, 
-        request.context, 
+        context, 
         request.preferredModel
     );
     
     // Estimate cost before execution
-    const estimate = await this.estimateCost(request.prompt, request.context, model);
+    const estimate = await this.estimateCost(prompt, context, model);
     
     // Generate response using the selected model
     const startTime = Date.now();
@@ -215,16 +264,16 @@ class GituAIRouter {
       if (model.provider === 'gemini') {
         content = await generateWithGemini(
           [
-            ...request.context.map(ctx => ({ role: 'user' as const, content: ctx })),
-            { role: 'user' as const, content: request.prompt }
+            ...context.map(ctx => ({ role: 'user' as const, content: ctx })),
+            { role: 'user' as const, content: prompt }
           ],
           model.modelId
         );
       } else if (model.provider === 'openrouter') {
         content = await generateWithOpenRouter(
           [
-            ...request.context.map(ctx => ({ role: 'user' as const, content: ctx })),
-            { role: 'user' as const, content: request.prompt }
+            ...context.map(ctx => ({ role: 'user' as const, content: ctx })),
+            { role: 'user' as const, content: prompt }
           ],
           model.modelId,
           request.maxTokens
@@ -234,7 +283,7 @@ class GituAIRouter {
       }
       
       // Estimate tokens used (rough approximation: 1 token ≈ 4 characters)
-      tokensUsed = Math.ceil((request.prompt.length + content.length) / 4);
+      tokensUsed = Math.ceil((prompt.length + content.length) / 4);
       
       const cost = (tokensUsed / 1000) * model.costPer1kTokens;
       
@@ -247,6 +296,14 @@ class GituAIRouter {
       };
     } catch (error: any) {
       console.error(`AI Router error with model ${model.modelId}:`, error);
+
+      // Improved Error Handling
+      if (error.message.includes('429') || error.message.includes('Quota exceeded')) {
+           throw new Error('AI Provider Rate Limit Exceeded. Please try again later.');
+      }
+      if (error.message.includes('401') || error.message.includes('API key')) {
+           throw new Error('AI Provider Authentication Failed. Check API Keys.');
+      }
       
       // Try fallback model
       const fallbackModel = await this.fallback(model, error);

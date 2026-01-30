@@ -2,10 +2,13 @@ import pool from '../config/database.js';
 import { gituMemoryService } from './gituMemoryService.js';
 import gituSessionService from './gituSessionService.js';
 
+import { gituAgentManager } from './gituAgentManager.js';
+
 type AllowedAction =
   | 'memories.detectContradictions'
   | 'memories.expireUnverified'
-  | 'sessions.cleanupOldSessions';
+  | 'sessions.cleanupOldSessions'
+  | 'agents.processQueue';
 
 interface ScheduledTask {
   id: string;
@@ -183,6 +186,9 @@ class GituScheduler {
         break;
       case 'sessions.cleanupOldSessions':
         await gituSessionService.cleanupOldSessions(payload?.days ?? 30);
+        break;
+      case 'agents.processQueue':
+        await gituAgentManager.processAgentQueue(task.userId);
         break;
       default:
         throw new Error(`Unknown action: ${task.action}`);

@@ -11,6 +11,7 @@ import { gituMessageGateway, IncomingMessage, RawMessage } from '../services/git
 import { gituSessionService } from '../services/gituSessionService.js';
 import { gituAIRouter } from '../services/gituAIRouter.js';
 import { gituPermissionManager } from '../services/gituPermissionManager.js';
+import { gituAgentManager } from '../services/gituAgentManager.js';
 import pool from '../config/database.js';
 
 // ==================== INTERFACES ====================
@@ -85,6 +86,13 @@ class TelegramAdapter {
 
     // Set up command handlers
     this.setupCommandHandlers();
+
+    // Register outbound handler
+    gituMessageGateway.registerOutboundHandler('telegram', async (chatId, text) => {
+      if (this.bot) {
+        await this.sendMessage(chatId, { text });
+      }
+    });
 
     this.initialized = true;
     console.log('Telegram adapter initialized successfully');
@@ -351,6 +359,49 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
         });
       }
     });
+
+    // /agent command
+    this.bot.onText(/\/agent (.+)/, async (msg, match) => {
+      const chatId = msg.chat.id.toString();
+      try {
+        const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId;
+        const userId = await this.getUserIdFromChatId(platformUserId);
+        
+        const fullCommand = match ? match[1] : '';
+        const parts = fullCommand.split(' ');
+        const subCommand = parts[0];
+        const args = parts.slice(1).join(' ');
+
+        if (subCommand === 'spawn' || subCommand === 'create') {
+            if (!args) {
+                await this.sendMessage(chatId, { text: '⚠️ Usage: /agent spawn <task description>' });
+                return;
+            }
+            await this.sendMessage(chatId, { text: `🤖 Spawning agent for: "${args}"...` });
+            const agent = await gituAgentManager.spawnAgent(userId, args);
+            await this.sendMessage(chatId, { text: `✅ Agent spawned! ID: ${agent.id.substring(0, 8)}\nI will notify you when it completes.` });
+            return;
+        }
+
+        if (subCommand === 'list') {
+            const agents = await gituAgentManager.listAgents(userId);
+            if (agents.length === 0) {
+                await this.sendMessage(chatId, { text: 'No active agents found.' });
+                return;
+            }
+            const list = agents.map(a => 
+                `- *${a.task.substring(0, 30)}...*\n  Status: ${a.status}\n  ID: \`${a.id.substring(0, 8)}\``
+            ).join('\n\n');
+            await this.sendMessage(chatId, { markdown: `📋 *Your Agents:*\n\n${list}` });
+            return;
+        }
+
+        await this.sendMessage(chatId, { text: 'ℹ️ Available commands:\n/agent spawn <task>\n/agent list' });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await this.sendMessage(chatId, { text: `❌ Error: ${errorMessage}` });
+      }
+    });
   }
 
   /**
@@ -404,6 +455,7 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
       prompt: userText,
       context,
       taskType: 'chat',
+      useRetrieval: true, // Enable RAG so AI knows about notebooks/sources
     });
 
     session.context.conversationHistory.push({

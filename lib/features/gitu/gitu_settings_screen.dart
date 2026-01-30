@@ -367,6 +367,14 @@ class GituSettingsScreen extends ConsumerWidget {
               ),
               const Divider(height: 1),
               ListTile(
+                leading: const Icon(Icons.psychology),
+                title: const Text('Autonomous Agents'),
+                subtitle: const Text('Manage sub-agents and their tasks'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/gitu-agents'),
+              ),
+              const Divider(height: 1),
+              ListTile(
                 leading: const Icon(Icons.account_tree),
                 title: const Text('Rules'),
                 subtitle: const Text('Build IF-THEN automation rules'),

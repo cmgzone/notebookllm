@@ -423,6 +423,25 @@ export async function generateFlashcards(
 }
 
 /**
+ * Generate embedding for text using Gemini
+ */
+export async function generateEmbedding(text: string): Promise<number[]> {
+    if (!genAI) {
+        throw new Error('Gemini API key not configured');
+    }
+
+    try {
+        const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
+        const result = await model.embedContent(text);
+        return result.embedding.values;
+    } catch (error: any) {
+        console.error('Embedding generation error:', error);
+        // Fallback or rethrow
+        throw new Error(`Failed to generate embedding: ${error.message}`);
+    }
+}
+
+/**
  * Generate quiz questions from content
  */
 export async function generateQuiz(

@@ -9,6 +9,8 @@ class GituPlugin {
   final String? sourceCatalogId;
   final String? sourceCatalogVersion;
   final bool enabled;
+  final String type; // 'script' or 'mcp'
+  final Map<String, dynamic> mcpConfig;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -23,6 +25,8 @@ class GituPlugin {
     required this.sourceCatalogId,
     required this.sourceCatalogVersion,
     required this.enabled,
+    this.type = 'script',
+    this.mcpConfig = const {},
     required this.createdAt,
     required this.updatedAt,
   });
@@ -39,6 +43,8 @@ class GituPlugin {
       sourceCatalogId: json['sourceCatalogId'],
       sourceCatalogVersion: json['sourceCatalogVersion'],
       enabled: json['enabled'] ?? true,
+      type: json['type'] ?? 'script',
+      mcpConfig: Map<String, dynamic>.from(json['mcp_config'] ?? const {}),
       createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt']) : null,
       updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt']) : null,
     );
@@ -52,6 +58,8 @@ class GituPlugin {
       'entrypoint': entrypoint,
       'config': config,
       'enabled': enabled,
+      'type': type,
+      'mcp_config': mcpConfig,
     };
   }
 }

@@ -77,4 +77,36 @@ export class ApiClient {
   async whoami() {
     return this.get('/api/auth/me');
   }
+
+  // Agent endpoints
+  async listAgents() {
+    return this.get('/api/gitu/agents');
+  }
+
+  async spawnAgent(task: string) {
+    return this.post('/api/gitu/agents', { task });
+  }
+
+  async getAgent(agentId: string) {
+    return this.get(`/api/gitu/agents/${agentId}`);
+  }
+
+  // Chat endpoints
+  async sendMessage(message: string, context?: string[]) {
+    return this.post('/api/gitu/message', { message, context });
+  }
+
+  // Shell endpoints
+  async executeShell(command: string) {
+    return this.post('/api/gitu/shell/execute', { command });
+  }
+
+  // Notebook endpoints
+  async listNotebooks() {
+    return this.get('/api/notebooks');
+  }
+
+  async queryNotebook(notebookId: string, query: string) {
+    return this.post(`/api/notebooks/${notebookId}/query`, { query });
+  }
 }

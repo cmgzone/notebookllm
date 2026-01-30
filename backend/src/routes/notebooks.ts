@@ -213,4 +213,52 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     }
 });
 
+// Query a notebook
+router.post('/:id/query', async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { query } = req.body;
+
+        if (!query) {
+            return res.status(400).json({ error: 'Query is required' });
+        }
+
+        // Verify ownership
+        const check = await pool.query(
+            'SELECT id FROM notebooks WHERE id = $1 AND user_id = $2',
+            [id, req.userId]
+        );
+        if (check.rows.length === 0) {
+            return res.status(404).json({ error: 'Notebook not found' });
+        }
+
+        // TODO: Import this properly at top of file
+        const { gituAIRouter } = await import('../services/gituAIRouter.js');
+        
+        // Retrieve context from this specific notebook
+        const context = await gituAIRouter.retrieveContext(query, req.userId!, id);
+        
+        // Generate answer
+        const response = await gituAIRouter.generateWithGemini(
+            query,
+            context,
+            [], // history
+            'chat'
+        );
+
+        res.json({
+            success: true,
+            answer: response.content,
+            sources: context.map(c => ({
+                title: c.sourceTitle,
+                score: c.score,
+                content: c.content
+            }))
+        });
+    } catch (error: any) {
+        console.error('Query notebook error:', error);
+        res.status(500).json({ error: 'Failed to query notebook', message: error.message });
+    }
+});
+
 export default router;
