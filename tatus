@@ -1,0 +1,5 @@
+[33mcommit 13276c23c18683351486c2c058361ccd7b82e3ef[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m
+Author: cmgmerlin <cmgmerlin@users.noreply.github.com>
+Date:   Fri Jan 30 05:09:16 2026 -0800
+
+    Fix Gitu Assistant tests, enable web platform, and update adapters

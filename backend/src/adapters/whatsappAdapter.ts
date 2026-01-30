@@ -123,6 +123,16 @@ class WhatsAppAdapter {
                 const name = (this.sock as any)?.user?.name;
                 this.connectedAccountJid = typeof jid === 'string' ? jid : null;
                 this.connectedAccountName = typeof name === 'string' ? name : null;
+
+                // Attempt to send welcome message to self if linked
+                if (this.connectedAccountJid) {
+                    try {
+                        const userId = await this.getUserIdFromJid(this.connectedAccountJid);
+                        await this.sendMessage(this.connectedAccountJid, '🟢 *Gitu is Online*\n\nI am ready to assist you! Send me a message here (Note to Self) to start chatting.');
+                    } catch (e) {
+                        // Not linked yet, silent fail
+                    }
+                }
             }
         });
 
@@ -221,21 +231,28 @@ class WhatsAppAdapter {
             this.logger.error({ err: error }, 'Failed to download media');
         }
 
-        if (!text && !mediaBuffer) return; // Skip empty messages
-
-        this.logger.info(`Received message from ${remoteJid}: ${text}`);
-
-        // TODO: Map WhatsApp user to Gitu user
-        // For now, we need a way to link accounts. 
-        // Maybe we can reuse the "link-telegram" logic but for WhatsApp?
-        // Or assume a single-user mode for now if running locally?
+        // Check for Note to Self or direct user messages
+        const isNoteToSelf = msg.key.fromMe || remoteJid === this.connectedAccountJid;
         
-        // Let's try to find the user in `gitu_linked_accounts`
-        // We need to implement the linking flow first.
-        // For testing, we can print the JID so the developer can manually insert it into DB.
+        // If it's not a note to self and not a direct message from a user, we might want to ignore it
+        // But for now, let's process everything that looks like a user message
         
+        this.logger.info(`Received message from ${remoteJid}: ${text} (Note to Self: ${isNoteToSelf})`);
+
         try {
-            const userId = await this.getUserIdFromJid(remoteJid);
+            // Attempt to get user ID, with auto-linking check if needed
+            let userId: string;
+            try {
+                userId = await this.getUserIdFromJid(remoteJid);
+            } catch (error) {
+                // If it's a note to self, we might be able to auto-link if we have a pending session
+                if (isNoteToSelf && this.connectedAccountJid) {
+                     // Try to match against connected account JID variations
+                     userId = await this.getUserIdFromJid(this.connectedAccountJid);
+                } else {
+                    throw error;
+                }
+            }
             
             // Build raw message
             const rawMessage: RawMessage = {
@@ -251,52 +268,85 @@ class WhatsAppAdapter {
                 metadata: {
                     messageId: msg.key.id,
                     pushName: msg.pushName,
+                    isNoteToSelf
                 },
             };
 
             // Process through gateway
             const normalizedMessage = await gituMessageGateway.processMessage(rawMessage);
             
-            // Send typing indicator
-            await this.sock.sendPresenceUpdate('composing', remoteJid);
+            // Only reply if it's a Note to Self OR if we have explicit permission/logic for other users
+            // For now, Gitu only replies to the linked owner
+            if (isNoteToSelf) {
+                // Send typing indicator
+                await this.sock.sendPresenceUpdate('composing', remoteJid);
 
-            const session = await gituSessionService.getOrCreateSession(userId, 'universal');
-            
-            session.context.conversationHistory.push({
-                role: 'user',
-                content: text,
-                timestamp: new Date(),
-                platform: 'whatsapp',
-            });
+                const session = await gituSessionService.getOrCreateSession(userId, 'universal');
+                
+                session.context.conversationHistory.push({
+                    role: 'user',
+                    content: text,
+                    timestamp: new Date(),
+                    platform: 'whatsapp',
+                });
 
-            const context = session.context.conversationHistory
-                .slice(-101, -1)
-                .map(m => `${m.role}: ${m.content}`);
+                const context = session.context.conversationHistory
+                    .slice(-101, -1)
+                    .map(m => `${m.role}: ${m.content}`);
 
-            const aiResponse = await gituAIRouter.route({
-                userId: userId,
-                sessionId: session.id,
-                prompt: text,
-                context,
-                taskType: 'chat',
-            });
+                const aiResponse = await gituAIRouter.route({
+                    userId: userId,
+                    sessionId: session.id,
+                    prompt: text,
+                    context,
+                    taskType: 'chat',
+                });
 
-            session.context.conversationHistory.push({
-                role: 'assistant',
-                content: aiResponse.content,
-                timestamp: new Date(),
-                platform: 'whatsapp',
-            });
+                session.context.conversationHistory.push({
+                    role: 'assistant',
+                    content: aiResponse.content,
+                    timestamp: new Date(),
+                    platform: 'whatsapp',
+                });
 
-            await gituSessionService.updateSession(session.id, { context: session.context });
+                await gituSessionService.updateSession(session.id, { context: session.context });
 
-            // Send response
-            await this.sendMessage(remoteJid, aiResponse.content);
+                // Send response
+                await this.sendMessage(remoteJid, aiResponse.content);
+            } else {
+                this.logger.info(`Ignoring message from ${remoteJid} (not Note to Self)`);
+            }
 
         } catch (error) {
             this.logger.warn(`User not linked for JID: ${remoteJid}. Run manual linking script.`);
-            // Optionally reply with "Account not linked" if we want to be helpful
-            // await this.sendMessage(remoteJid, 'Account not linked. Please link your WhatsApp account.');
+            
+            // If it's a Note to Self but linking failed, send a helpful error
+            if (isNoteToSelf) {
+                 await this.sendMessage(remoteJid, '⚠️ *Gitu Error*: Your WhatsApp account is not correctly linked to your Gitu profile. Please re-link via the app.');
+            }
+        }
+    }
+
+    /**
+     * Send a proactive message to a user (e.g. Welcome or Reminder)
+     */
+    async sendProactiveMessage(userId: string, text: string): Promise<void> {
+        if (!this.sock) return; // Silent fail if not connected, or throw?
+        
+        try {
+            // Find the JID for this user
+            const result = await pool.query(
+                `SELECT platform_user_id FROM gitu_linked_accounts 
+                 WHERE user_id = $1 AND platform = 'whatsapp' AND status = 'active'`,
+                [userId]
+            );
+            
+            if (result.rows.length > 0) {
+                const jid = result.rows[0].platform_user_id;
+                await this.sendMessage(jid, text);
+            }
+        } catch (error) {
+            this.logger.error({ err: error }, `Failed to send proactive message to user ${userId}`);
         }
     }
 
@@ -324,11 +374,25 @@ class WhatsAppAdapter {
      * Get user ID from JID.
      */
     private async getUserIdFromJid(jid: string): Promise<string> {
-        const result = await pool.query(
+        // Normalize JID: remove device specific suffix (e.g. :12@s.whatsapp.net -> @s.whatsapp.net)
+        // Standard user JID format: 1234567890@s.whatsapp.net
+        const normalizedJid = jid.split(':')[0].split('@')[0] + '@s.whatsapp.net';
+
+        // Try exact match first
+        let result = await pool.query(
             `SELECT user_id FROM gitu_linked_accounts 
              WHERE platform = 'whatsapp' AND platform_user_id = $1 AND status = 'active'`,
             [jid]
         );
+
+        if (result.rows.length === 0) {
+            // Try normalized match
+            result = await pool.query(
+                `SELECT user_id FROM gitu_linked_accounts 
+                 WHERE platform = 'whatsapp' AND platform_user_id = $1 AND status = 'active'`,
+                [normalizedJid]
+            );
+        }
 
         if (result.rows.length === 0) {
             throw new Error('WhatsApp account not linked.');
