@@ -87,8 +87,8 @@ interface DBModel {
   model_id: string;
   provider: string;
   context_window: number;
-  input_cost_per_token: number;
-  output_cost_per_token: number;
+  cost_input: number | string | null;
+  cost_output: number | string | null;
   is_active: boolean;
 }
 
@@ -134,7 +134,7 @@ class GituAIRouter {
     try {
       const result = await pool.query(
         `SELECT id, name, model_id, provider, context_window, 
-                input_cost_per_token, output_cost_per_token, is_active
+                cost_input, cost_output, is_active
          FROM ai_models 
          WHERE is_active = true
          ORDER BY provider, name`
@@ -145,13 +145,15 @@ class GituAIRouter {
       for (const row of result.rows) {
         const dbModel = row as DBModel;
         
-        // Calculate average cost per 1k tokens (input + output average)
-        const avgCostPer1kTokens = ((dbModel.input_cost_per_token + dbModel.output_cost_per_token) / 2) * 1000;
+        const inputCostPer1k = Number(dbModel.cost_input ?? 0) || 0;
+        const outputCostPer1k = Number(dbModel.cost_output ?? 0) || 0;
+        const avgCostPer1kTokens = (inputCostPer1k + outputCostPer1k) / 2;
+        const contextWindow = typeof dbModel.context_window === 'number' && dbModel.context_window > 0 ? dbModel.context_window : 128000;
         
         models[dbModel.model_id] = {
           provider: mapProviderName(dbModel.provider),
           modelId: dbModel.model_id,
-          contextWindow: dbModel.context_window,
+          contextWindow,
           costPer1kTokens: avgCostPer1kTokens,
         };
       }

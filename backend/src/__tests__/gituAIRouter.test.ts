@@ -51,8 +51,8 @@ describe('GituAIRouter', () => {
       model_id: 'gemini-2.0-flash',
       provider: 'google',
       context_window: 1000000,
-      input_cost_per_token: 0.00000015,
-      output_cost_per_token: 0.00000015,
+      cost_input: 0.00015,
+      cost_output: 0.00015,
       is_active: true,
     },
     {
@@ -61,8 +61,8 @@ describe('GituAIRouter', () => {
       model_id: 'gemini-1.5-pro',
       provider: 'google',
       context_window: 2000000,
-      input_cost_per_token: 0.00000125,
-      output_cost_per_token: 0.00000125,
+      cost_input: 0.00125,
+      cost_output: 0.00125,
       is_active: true,
     },
     {
@@ -71,8 +71,8 @@ describe('GituAIRouter', () => {
       model_id: 'gemini-1.5-flash',
       provider: 'google',
       context_window: 1000000,
-      input_cost_per_token: 0.000000075,
-      output_cost_per_token: 0.000000075,
+      cost_input: 0.000075,
+      cost_output: 0.000075,
       is_active: true,
     },
     {
@@ -81,8 +81,8 @@ describe('GituAIRouter', () => {
       model_id: 'anthropic/claude-3.5-sonnet',
       provider: 'openrouter',
       context_window: 200000,
-      input_cost_per_token: 0.000003,
-      output_cost_per_token: 0.000015,
+      cost_input: 0.003,
+      cost_output: 0.015,
       is_active: true,
     },
     {
@@ -91,8 +91,8 @@ describe('GituAIRouter', () => {
       model_id: 'meta-llama/llama-3.3-70b-instruct',
       provider: 'openrouter',
       context_window: 128000,
-      input_cost_per_token: 0.00000088,
-      output_cost_per_token: 0.00000088,
+      cost_input: 0.00088,
+      cost_output: 0.00088,
       is_active: true,
     },
     {
@@ -101,8 +101,8 @@ describe('GituAIRouter', () => {
       model_id: 'openai/gpt-4-turbo',
       provider: 'openrouter',
       context_window: 128000,
-      input_cost_per_token: 0.00001,
-      output_cost_per_token: 0.00003,
+      cost_input: 0.01,
+      cost_output: 0.03,
       is_active: true,
     },
   ];
@@ -125,7 +125,7 @@ describe('GituAIRouter', () => {
     // Explicitly set the mock implementation for this test run
     mockPool.query.mockImplementation((query: any) => {
       // Handle the model loading query specifically
-      if (typeof query === 'string' && query.includes('FROM admin_ai_models')) {
+      if (typeof query === 'string' && query.includes('FROM ai_models')) {
         return Promise.resolve({
           rows: mockModelsData,
           rowCount: mockModelsData.length,
@@ -153,17 +153,8 @@ describe('GituAIRouter', () => {
       });
     });
 
-    // Force reload of models in GituAIRouter
-    // Since we cannot access private methods, we can try to rely on the fact that
-    // `selectModel` calls `getModels` which calls `loadModelsFromDatabase` if cache is empty or expired.
-    // If we can't clear the cache, we might be stuck with the real DB results from the first failed run (which were empty/error).
-    
-    // HACK: Reset the singleton state if exposed, or re-instantiate if possible.
-    // Since it's a singleton export `export const gituAIRouter = new GituAIRouter();`, we are stuck with the instance.
-    
-    // Let's try to modify the private `models` property using `any` casting
-    (gituAIRouter as any).models = {};
-    (gituAIRouter as any).lastModelUpdate = 0; // Force refresh
+    (gituAIRouter as any).modelsCache = {};
+    (gituAIRouter as any).modelsCacheTimestamp = 0;
   });
 
   describe('selectModel', () => {

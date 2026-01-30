@@ -185,6 +185,7 @@ export async function initializeFeatureTables() {
                 context_window INTEGER DEFAULT 0,
                 is_active BOOLEAN DEFAULT true,
                 is_premium BOOLEAN DEFAULT false,
+                is_default BOOLEAN DEFAULT false,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );

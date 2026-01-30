@@ -56,9 +56,14 @@ import { planningWebSocketService } from './services/planningWebSocketService.js
 import { gituQRAuthWebSocketService } from './services/gituQRAuthWebSocketService.js';
 import { connectRedis, disconnectRedis } from './config/redis.js';
 import { gituScheduler } from './services/gituScheduler.js';
+import { ensureGituSchema } from './config/gituSchema.js';
 
 // Load environment variables
 dotenv.config();
+
+ensureGituSchema()
+    .then(() => console.log('✅ Gitu schema ensured'))
+    .catch(err => console.error('❌ Failed to ensure Gitu schema:', err));
 
 // Initialize Redis
 connectRedis().catch(err => {

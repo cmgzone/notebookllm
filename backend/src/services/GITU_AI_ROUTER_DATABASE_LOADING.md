@@ -33,10 +33,10 @@ The service now correctly maps database provider names to the AIModel interface:
 
 ### 3. Cost Calculation
 
-Models loaded from database include separate `input_cost_per_token` and `output_cost_per_token` fields. The service calculates an average cost per 1k tokens for the `AIModel` interface:
+Models loaded from database include separate `cost_input` and `cost_output` fields (stored as USD per 1k tokens). The service calculates an average cost per 1k tokens for the `AIModel` interface:
 
 ```typescript
-const avgCostPer1kTokens = ((dbModel.input_cost_per_token + dbModel.output_cost_per_token) / 2) * 1000;
+const avgCostPer1kTokens = (dbModel.cost_input + dbModel.cost_output) / 2;
 ```
 
 ### 4. Cache Management
@@ -68,8 +68,8 @@ The service expects the following columns in the `ai_models` table:
 - `model_id` (TEXT) - Used as the key in the models cache
 - `provider` (TEXT) - Mapped to AIModel provider type
 - `context_window` (INTEGER)
-- `input_cost_per_token` (DECIMAL)
-- `output_cost_per_token` (DECIMAL)
+- `cost_input` (DECIMAL) - USD per 1k tokens
+- `cost_output` (DECIMAL) - USD per 1k tokens
 - `is_active` (BOOLEAN) - Only active models are loaded
 
 ## Benefits

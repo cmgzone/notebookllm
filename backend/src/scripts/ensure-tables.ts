@@ -111,6 +111,7 @@ async function ensureTables() {
                 context_window INTEGER DEFAULT 0,
                 is_active BOOLEAN DEFAULT true,
                 is_premium BOOLEAN DEFAULT false,
+                is_default BOOLEAN DEFAULT false,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
@@ -160,15 +161,17 @@ async function ensureTables() {
             );
 
             CREATE TABLE IF NOT EXISTS gitu_linked_accounts (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 platform TEXT NOT NULL,
                 platform_user_id TEXT NOT NULL,
                 display_name TEXT,
-                verified BOOLEAN DEFAULT false,
-                status TEXT DEFAULT 'active',
                 settings JSONB DEFAULT '{}',
-                created_at TIMESTAMPTZ DEFAULT NOW(),
+                linked_at TIMESTAMPTZ DEFAULT NOW(),
                 last_used_at TIMESTAMPTZ DEFAULT NOW(),
+                verified BOOLEAN DEFAULT false,
+                is_primary BOOLEAN DEFAULT false,
+                status TEXT DEFAULT 'active',
                 UNIQUE(platform, platform_user_id)
             );
 

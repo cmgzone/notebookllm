@@ -99,16 +99,32 @@ class TelegramAdapter {
 
     // Handle text messages
     this.bot.on('message', async (msg) => {
+      const rawText = typeof msg.text === 'string' ? msg.text.trim() : '';
+      if (rawText.startsWith('/')) {
+        return;
+      }
       try {
         console.log(`📨 Received message from Telegram chat ID: ${msg.chat.id}`);
         await this.handleIncomingMessage(msg);
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         console.error('Error handling Telegram message:', error);
         console.error(`❌ Error occurred for chat ID: ${msg.chat.id}`);
-        console.error(`💡 To link this account, run: npx tsx src/scripts/link-telegram-test-account.ts ${msg.chat.id}`);
+        if (
+          errorMessage.includes('not linked') ||
+          errorMessage.includes('Platform account not linked')
+        ) {
+          console.error(`💡 To link this account, run: npx tsx src/scripts/link-telegram-test-account.ts ${msg.chat.id}`);
+          await this.sendErrorMessage(
+            msg.chat.id,
+            `Telegram not linked.\n\nYour Chat ID: ${msg.chat.id}\n\nIn NotebookLLM, open Gitu → Linked Accounts and link Telegram with this Chat ID, then send /start again.`
+          );
+          return;
+        }
+
         await this.sendErrorMessage(
           msg.chat.id,
-          `Telegram not linked.\n\nYour Chat ID: ${msg.chat.id}\n\nIn NotebookLLM, open Gitu → Linked Accounts and link Telegram with this Chat ID, then send /start again.`
+          `Temporary server error.\n\nPlease try again in a moment.`
         );
       }
     });
@@ -222,8 +238,15 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
           });
         }
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('not linked') || errorMessage.includes('Platform account not linked')) {
+          await this.sendMessage(chatId.toString(), {
+            text: '❌ You need to link your Telegram account in the NotebookLLM app first.',
+          });
+          return;
+        }
         await this.sendMessage(chatId.toString(), {
-          text: '❌ You need to link your Telegram account in the NotebookLLM app first.',
+          text: 'Temporary server error.\n\nPlease try again in a moment.',
         });
       }
     });
