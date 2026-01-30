@@ -128,11 +128,13 @@ export class GituAgentManager {
     if (shellMatch) {
       const command = shellMatch[1];
       try {
-        const result = await gituShellManager.execute({
-          command: command,
-          userId: agent.userId,
-          sandboxed: true
-        });
+        const result = await gituShellManager.execute(
+          agent.userId,
+          command,
+          {
+            sandboxed: true
+          }
+        );
         toolOutput = `\nTool Output: ${result.stdout || result.stderr}`;
       } catch (e: any) {
         toolOutput = `\nTool Error: ${e.message}`;

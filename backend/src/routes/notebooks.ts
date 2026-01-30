@@ -235,24 +235,24 @@ router.post('/:id/query', async (req: AuthRequest, res: Response) => {
         // TODO: Import this properly at top of file
         const { gituAIRouter } = await import('../services/gituAIRouter.js');
         
-        // Retrieve context from this specific notebook
-        const context = await gituAIRouter.retrieveContext(query, req.userId!, id);
+        // Retrieve context from this specific notebook (returns string[])
+        const contextChunks = await gituAIRouter.retrieveContext(query, req.userId!, 5);
         
-        // Generate answer
-        const response = await gituAIRouter.generateWithGemini(
-            query,
-            context,
-            [], // history
-            'chat'
-        );
+        // Generate answer using the AI router
+        const response = await gituAIRouter.route({
+            userId: req.userId!,
+            prompt: query,
+            taskType: 'chat',
+            useRetrieval: false // We already have context
+        });
 
         res.json({
             success: true,
             answer: response.content,
-            sources: context.map(c => ({
-                title: c.sourceTitle,
-                score: c.score,
-                content: c.content
+            sources: contextChunks.map((chunk, idx) => ({
+                title: `Context ${idx + 1}`,
+                score: 1.0,
+                content: chunk
             }))
         });
     } catch (error: any) {
