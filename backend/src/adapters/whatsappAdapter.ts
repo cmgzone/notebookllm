@@ -129,12 +129,22 @@ class WhatsAppAdapter {
                 } else if (shouldReconnect) {
                     await this.connectToWhatsApp();
                 } else {
-                    this.logger.info('Connection closed. You are logged out.');
+                    this.logger.info('Connection closed. You are logged out. Auto-clearing session and restarting.');
                     this.connectionState = 'disconnected';
                     this.connectedAccountJid = null;
                     this.connectedAccountName = null;
-                    // Clean up auth dir if logged out to force fresh login next time?
-                    // Maybe not, user might want to re-login manually.
+                    
+                    // Auto-cleanup on logout to ensure fresh start
+                    if (this.config?.authDir && fs.existsSync(this.config.authDir)) {
+                        try {
+                            fs.rmSync(this.config.authDir, { recursive: true, force: true });
+                        } catch (e) {
+                            this.logger.error({ err: e }, 'Failed to clear auth dir on logout');
+                        }
+                    }
+                    
+                    // Restart connection flow immediately to generate new QR
+                    await this.connectToWhatsApp();
                 }
             } else if (connection === 'open') {
                 this.logger.info('Opened connection to WhatsApp');
