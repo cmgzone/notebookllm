@@ -272,6 +272,12 @@ class WhatsAppAdapter {
         
         this.logger.info(`Received message from ${remoteJid}: ${text} (fromMe: ${msg.key.fromMe}, Connected: ${this.connectedAccountJid}, Note to Self: ${isNoteToSelf})`);
 
+        // Debug command: Ping
+        if (text.toLowerCase() === 'ping' && isNoteToSelf) {
+            await this.sendMessage(remoteJid, 'pong 🏓 (Connection Verified)');
+            return;
+        }
+
         try {
             // Attempt to get user ID, with auto-linking check if needed
             let userId: string;
@@ -290,75 +296,39 @@ class WhatsAppAdapter {
                 }
             }
             
-            // Build raw message
-            const rawMessage: RawMessage = {
-                platform: 'whatsapp',
-                platformUserId: remoteJid,
-                content: { 
-                    message: msg.message,
-                    text,
-                    media: mediaBuffer,
-                    mediaType
-                },
-                timestamp: new Date((msg.messageTimestamp as number) * 1000),
-                metadata: {
-                    messageId: msg.key.id,
-                    pushName: msg.pushName,
-                    isNoteToSelf
-                },
-            };
-
-            // Process through gateway
-            const normalizedMessage = await gituMessageGateway.processMessage(rawMessage);
-            
-            // Only reply if it's a Note to Self OR if we have explicit permission/logic for other users
-            // For now, Gitu only replies to the linked owner
-            if (isNoteToSelf) {
-                // Send typing indicator
-                await this.sock.sendPresenceUpdate('composing', remoteJid);
-
-                const session = await gituSessionService.getOrCreateSession(userId, 'universal');
-                
-                session.context.conversationHistory.push({
-                    role: 'user',
-                    content: text,
-                    timestamp: new Date(),
-                    platform: 'whatsapp',
-                });
-
-                const context = session.context.conversationHistory
-                    .slice(-101, -1)
-                    .map(m => `${m.role}: ${m.content}`);
-
+            // Route to AI
+            try {
                 const aiResponse = await gituAIRouter.route({
-                    userId: userId,
-                    sessionId: session.id,
-                    prompt: text,
-                    context,
-                    taskType: 'chat',
-                });
-
-                session.context.conversationHistory.push({
-                    role: 'assistant',
-                    content: aiResponse.content,
-                    timestamp: new Date(),
+                    userId,
                     platform: 'whatsapp',
+                    platformUserId: remoteJid, // Use original remoteJid for routing context
+                    content: text,
+                    metadata: {
+                        isNoteToSelf,
+                        messageId: msg.key.id,
+                        pushName: msg.pushName
+                    }
                 });
-
-                await gituSessionService.updateSession(session.id, { context: session.context });
 
                 // Send response
-                await this.sendMessage(remoteJid, aiResponse.content);
-            } else {
-                this.logger.info(`Ignoring message from ${remoteJid} (not Note to Self). Connected: ${this.connectedAccountJid}, Remote: ${normalizedRemoteJid}`);
+                if (aiResponse && aiResponse.content) {
+                    await this.sendMessage(remoteJid, aiResponse.content);
+                }
+            } catch (aiError) {
+                this.logger.error({ err: aiError }, 'Error processing AI response');
+                if (isNoteToSelf) {
+                    await this.sendMessage(remoteJid, `⚠️ AI Error: ${aiError instanceof Error ? aiError.message : 'Unknown error'}`);
+                }
             }
 
-        } catch (error) {
-            this.logger.warn(`User not linked for JID: ${remoteJid}. Run manual linking script.`);
-            
-            // If it's a Note to Self but linking failed, send a helpful error
+        } catch (authError) {
+            // This catch block handles User ID lookup failures (Auth errors)
+            this.logger.warn(`User not linked or lookup failed for ${remoteJid}: ${authError}`);
             if (isNoteToSelf) {
-                 await this.sendMessage(remoteJid, '⚠️ *Gitu Error*: Your WhatsApp account is not correctly linked to your Gitu profile. Please re-link via the app.');
+                 await this.sendMessage(remoteJid, 
+                    '⚠️ Account not linked properly.\n' +
+                    'Please open the Gitu App > Settings > Link WhatsApp and click "Link Current Session".'
+                );
             }
         }
     }
