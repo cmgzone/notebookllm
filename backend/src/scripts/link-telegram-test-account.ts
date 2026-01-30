@@ -54,7 +54,6 @@ async function linkTelegramTestAccount() {
       } else {
         console.log('   Linked at: (unknown)\n');
       }
-      await pool.end();
       return;
     }
 
@@ -107,7 +106,9 @@ async function linkTelegramTestAccount() {
     console.error('❌ Error linking Telegram account:', error);
     process.exit(1);
   } finally {
-    await pool.end();
+    try {
+      await pool.end();
+    } catch {}
   }
 }
 
