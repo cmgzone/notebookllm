@@ -81,7 +81,7 @@ async function testTelegramAdapter() {
       console.log(`✅ Found ${result.rows.length} linked account(s):`);
       result.rows.forEach((row, index) => {
         console.log(`   ${index + 1}. User: ${row.user_id}`);
-        console.log(`      Chat ID: ${row.platform_user_id}`);
+        console.log(`      Telegram User ID: ${row.platform_user_id}`);
         console.log(`      Name: ${row.display_name || 'N/A'}`);
         console.log(`      Linked: ${new Date(row.linked_at).toLocaleString()}`);
       });

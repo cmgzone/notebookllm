@@ -10,6 +10,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import { gituMessageGateway, IncomingMessage, RawMessage } from '../services/gituMessageGateway.js';
 import { gituSessionService } from '../services/gituSessionService.js';
 import { gituAIRouter } from '../services/gituAIRouter.js';
+import { gituPermissionManager } from '../services/gituPermissionManager.js';
 import pool from '../config/database.js';
 
 // ==================== INTERFACES ====================
@@ -103,6 +104,7 @@ class TelegramAdapter {
       if (rawText.startsWith('/')) {
         return;
       }
+      const platformUserId = msg.from?.id ? msg.from.id.toString() : msg.chat.id.toString();
       try {
         console.log(`📨 Received message from Telegram chat ID: ${msg.chat.id}`);
         await this.handleIncomingMessage(msg);
@@ -114,10 +116,10 @@ class TelegramAdapter {
           errorMessage.includes('not linked') ||
           errorMessage.includes('Platform account not linked')
         ) {
-          console.error(`💡 To link this account, run: npx tsx src/scripts/link-telegram-test-account.ts ${msg.chat.id}`);
+          console.error(`💡 To link this account, run: npx tsx src/scripts/link-telegram-test-account.ts ${platformUserId}`);
           await this.sendErrorMessage(
             msg.chat.id,
-            `Telegram not linked.\n\nYour Chat ID: ${msg.chat.id}\n\nIn NotebookLLM, open Gitu → Linked Accounts and link Telegram with this Chat ID, then send /start again.`
+            `Telegram not linked.\n\nYour Telegram User ID: ${platformUserId}\nYour Chat ID: ${msg.chat.id}\n\nIn NotebookLLM, open Gitu → Linked Accounts and link Telegram with your Telegram User ID, then send /start again.`
           );
           return;
         }
@@ -186,7 +188,7 @@ Use /help to see available commands.
 📖 *Available Commands:*
 
 /start - Start the bot
-/id - Show your Telegram Chat ID (for linking)
+/id - Show your Telegram User ID (for linking)
 /help - Show this help message
 /status - Check your Gitu status
 /notebooks - List your notebooks
@@ -204,7 +206,8 @@ You can also just chat with me naturally! I'll understand your requests and help
 
     this.bot.onText(/\/id/, async (msg) => {
       const chatId = msg.chat.id.toString();
-      const text = `Your Chat ID: ${chatId}\n\nIn NotebookLLM → Gitu → Linked Accounts, link Telegram with this Chat ID.`;
+      const userId = msg.from?.id ? msg.from.id.toString() : chatId;
+      const text = `Your Telegram User ID: ${userId}\nYour Chat ID: ${chatId}\n\nIn NotebookLLM → Gitu → Linked Accounts, link Telegram with your Telegram User ID.`;
       await this.sendMessage(chatId, { text });
     });
 
@@ -212,7 +215,8 @@ You can also just chat with me naturally! I'll understand your requests and help
     this.bot.onText(/\/status/, async (msg) => {
       const chatId = msg.chat.id;
       try {
-        const userId = await this.getUserIdFromChatId(chatId.toString());
+        const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId.toString();
+        const userId = await this.getUserIdFromChatId(platformUserId);
         const session = await gituSessionService.getActiveSession(userId, 'telegram');
         
         if (session) {
@@ -251,11 +255,85 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
       }
     });
 
+    this.bot.onText(/\/notebooks/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      try {
+        const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId;
+        const linked = await this.getLinkedAccountFromChatId(platformUserId);
+        if (!linked.verified) {
+          await this.sendMessage(chatId, {
+            text: 'Your Telegram account is linked but not verified.\n\nOpen NotebookLLM → Gitu → Linked Accounts and verify Telegram to enable notebook access.',
+          });
+          return;
+        }
+
+        const hasPermission = await gituPermissionManager.checkPermission(linked.userId, {
+          resource: 'notebooks',
+          action: 'read',
+        });
+
+        if (!hasPermission) {
+          await gituPermissionManager.requestPermission(
+            linked.userId,
+            {
+              resource: 'notebooks',
+              actions: ['read'],
+              scope: {},
+              expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            },
+            'Telegram requested permission to list notebooks'
+          );
+
+          await this.sendMessage(chatId, {
+            text: "I don’t have permission to access your notebooks from Telegram yet.\n\nOpen NotebookLLM → Gitu → Permissions Requests and approve “notebooks:read”, then run /notebooks again.",
+          });
+          return;
+        }
+
+        const result = await pool.query(
+          `SELECT id::text AS id, title, is_agent_notebook, updated_at
+           FROM notebooks
+           WHERE user_id::text = $1
+           ORDER BY updated_at DESC
+           LIMIT 10`,
+          [linked.userId]
+        );
+
+        if (result.rows.length === 0) {
+          await this.sendMessage(chatId, { text: 'No notebooks found for your account.' });
+          return;
+        }
+
+        const lines = result.rows.map((row: any, index: number) => {
+          const badge = row.is_agent_notebook ? ' [agent]' : '';
+          const id = typeof row.id === 'string' ? row.id : String(row.id);
+          const shortId = id.slice(0, 8);
+          return `${index + 1}. ${row.title}${badge} (${shortId})`;
+        });
+
+        await this.sendMessage(chatId, {
+          text: `Your notebooks (latest 10):\n\n${lines.join('\n')}\n\nTip: I can add /open <id> next if you want.`,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('not linked') || errorMessage.includes('Platform account not linked')) {
+          await this.sendMessage(chatId, {
+            text: '❌ You need to link your Telegram account in the NotebookLLM app first.\n\nUse /id to get your Chat ID.',
+          });
+          return;
+        }
+        await this.sendMessage(chatId, {
+          text: 'Temporary server error.\n\nPlease try again in a moment.',
+        });
+      }
+    });
+
     // /clear command
     this.bot.onText(/\/clear/, async (msg) => {
       const chatId = msg.chat.id;
       try {
-        const userId = await this.getUserIdFromChatId(chatId.toString());
+        const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId.toString();
+        const userId = await this.getUserIdFromChatId(platformUserId);
         const session = await gituSessionService.getActiveSession(userId, 'telegram');
         
         if (session) {
@@ -280,6 +358,7 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
    */
   private async handleIncomingMessage(msg: TelegramBot.Message): Promise<void> {
     const chatId = msg.chat.id.toString();
+    const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId;
     
     // Skip if it's a command (already handled by command handlers)
     if (msg.text && msg.text.startsWith('/')) {
@@ -289,7 +368,7 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
     // Build raw message
     const rawMessage: RawMessage = {
       platform: 'telegram',
-      platformUserId: chatId,
+      platformUserId,
       content: msg,
       timestamp: new Date(msg.date * 1000),
       metadata: {
@@ -505,6 +584,23 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
     }
 
     return result.rows[0].user_id;
+  }
+
+  private async getLinkedAccountFromChatId(chatId: string): Promise<{ userId: string; verified: boolean }> {
+    const result = await pool.query(
+      `SELECT user_id, verified
+       FROM gitu_linked_accounts
+       WHERE platform = 'telegram' AND platform_user_id = $1 AND status = 'active'
+       LIMIT 1`,
+      [chatId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Telegram account not linked. Please link your account in the NotebookLLM app.');
+    }
+
+    const row = result.rows[0] as any;
+    return { userId: String(row.user_id), verified: Boolean(row.verified) };
   }
 
   /**

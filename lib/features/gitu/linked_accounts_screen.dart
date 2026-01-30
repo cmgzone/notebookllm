@@ -111,7 +111,7 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
               ListTile(
                 leading: const Icon(LucideIcons.send),
                 title: const Text('Link Telegram'),
-                subtitle: const Text('Use your Telegram Chat ID from /id command'),
+                subtitle: const Text('Use your Telegram User ID from /id command'),
                 onTap: () {
                   Navigator.pop(context);
                   _linkTelegram(context, ref);
@@ -143,13 +143,13 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('In Telegram, message the bot and send /id to get your Chat ID.'),
+            const Text('In Telegram, message the bot and send /id to get your Telegram User ID.'),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                labelText: 'Telegram Chat ID',
+                labelText: 'Telegram User ID',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -163,9 +163,9 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
     );
     if (ok != true) return;
     try {
-      final chatId = controller.text.trim();
-      if (chatId.isEmpty) throw Exception('Chat ID is required');
-      await ref.read(identityServiceProvider).link('telegram', chatId);
+      final telegramUserId = controller.text.trim();
+      if (telegramUserId.isEmpty) throw Exception('Telegram User ID is required');
+      await ref.read(identityServiceProvider).link('telegram', telegramUserId);
       ref.invalidate(linkedAccountsProvider);
       messenger.showSnackBar(const SnackBar(content: Text('Telegram linked')));
     } catch (e) {

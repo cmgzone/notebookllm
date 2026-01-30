@@ -1,17 +1,17 @@
 /**
  * Link a test Telegram account for testing the Telegram adapter
  * 
- * This script links a Telegram chat ID to an existing NotebookLLM user.
+ * This script links a Telegram user ID to an existing NotebookLLM user.
  * 
  * Usage:
- *   npx tsx src/scripts/link-telegram-test-account.ts <telegram_chat_id> <user_id_or_email>
+ *   npx tsx src/scripts/link-telegram-test-account.ts <telegram_user_id> <user_id_or_email>
  * 
  * Example:
  *   npx tsx src/scripts/link-telegram-test-account.ts 123456789 65aa5d12-2454-44fe-97ec-ea97f1dd63c1
  * 
- * To get your Telegram chat ID:
+ * To get your Telegram user ID:
  * 1. Message your bot on Telegram
- * 2. Check the error message or bot logs for the chat ID
+ * 2. Send /id and copy the "Telegram User ID"
  */
 
 import dotenv from 'dotenv';
@@ -20,16 +20,16 @@ import pool from '../config/database.js';
 dotenv.config();
 
 async function linkTelegramTestAccount() {
-  const telegramChatId = process.argv[2];
+  const telegramUserId = process.argv[2];
   const userIdOrEmail = process.argv[3];
 
-  if (!telegramChatId || !userIdOrEmail) {
-    console.error('❌ Please provide a Telegram chat ID and a user ID (or email)');
+  if (!telegramUserId || !userIdOrEmail) {
+    console.error('❌ Please provide a Telegram user ID and a user ID (or email)');
     console.log('\nUsage:');
-    console.log('  npx tsx src/scripts/link-telegram-test-account.ts <telegram_chat_id> <user_id_or_email>');
-    console.log('\nTo get your Telegram chat ID:');
+    console.log('  npx tsx src/scripts/link-telegram-test-account.ts <telegram_user_id> <user_id_or_email>');
+    console.log('\nTo get your Telegram user ID:');
     console.log('  1. Message your bot on Telegram');
-    console.log('  2. Check the error logs for the chat ID');
+    console.log('  2. Send /id and copy the "Telegram User ID"');
     console.log('\nTo get your NotebookLLM user ID:');
     console.log('  - Open the app and copy it from your profile/settings, or');
     console.log("  - Query the database: SELECT id, email FROM users WHERE email = '<your email>';\n");
@@ -65,7 +65,7 @@ async function linkTelegramTestAccount() {
     const existingLink = await pool.query(
       `SELECT * FROM gitu_linked_accounts 
        WHERE platform = 'telegram' AND platform_user_id = $1`,
-      [telegramChatId]
+      [telegramUserId]
     );
 
     if (existingLink.rows.length > 0) {
@@ -73,7 +73,7 @@ async function linkTelegramTestAccount() {
       if (currentUserId === userId) {
         console.log('✅ Telegram account already linked!');
         console.log(`   User ID: ${existingLink.rows[0].user_id}`);
-        console.log(`   Chat ID: ${existingLink.rows[0].platform_user_id}`);
+        console.log(`   Telegram User ID: ${existingLink.rows[0].platform_user_id}`);
         console.log(`   Status: ${existingLink.rows[0].status ?? 'active'}`);
         if (existingLink.rows[0].linked_at) {
           console.log(`   Linked at: ${new Date(existingLink.rows[0].linked_at).toLocaleString()}\n`);
@@ -86,7 +86,7 @@ async function linkTelegramTestAccount() {
         `UPDATE gitu_linked_accounts
          SET user_id = $1, status = 'active', last_used_at = NOW()
          WHERE platform = 'telegram' AND platform_user_id = $2`,
-        [userId, telegramChatId]
+        [userId, telegramUserId]
       );
       console.log('✅ Telegram account re-linked to a different user.\n');
     }
@@ -102,13 +102,13 @@ async function linkTelegramTestAccount() {
            status = 'active',
            last_used_at = NOW()
        RETURNING *`,
-      [userId, telegramChatId, 'Telegram']
+      [userId, telegramUserId, 'Telegram']
     );
 
     console.log('✅ Telegram account linked successfully!\n');
     console.log('📋 Account Details:');
     console.log(`   User ID: ${inserted.rows[0].user_id}`);
-    console.log(`   Telegram Chat ID: ${inserted.rows[0].platform_user_id}`);
+    console.log(`   Telegram User ID: ${inserted.rows[0].platform_user_id}`);
     console.log(`   Status: ${inserted.rows[0].status ?? 'active'}\n`);
 
     console.log('🎉 You can now test the Telegram bot!');
