@@ -49,7 +49,11 @@ async function linkTelegramTestAccount() {
       console.log(`   User ID: ${existingLink.rows[0].user_id}`);
       console.log(`   Chat ID: ${existingLink.rows[0].platform_user_id}`);
       console.log(`   Status: ${existingLink.rows[0].status}`);
-      console.log(`   Linked at: ${new Date(existingLink.rows[0].linked_at).toLocaleString()}\n`);
+      if (existingLink.rows[0].linked_at) {
+        console.log(`   Linked at: ${new Date(existingLink.rows[0].linked_at).toLocaleString()}\n`);
+      } else {
+        console.log('   Linked at: (unknown)\n');
+      }
       await pool.end();
       return;
     }
@@ -82,8 +86,8 @@ async function linkTelegramTestAccount() {
     // Link Telegram account
     await pool.query(
       `INSERT INTO gitu_linked_accounts 
-       (user_id, platform, platform_user_id, display_name, status, linked_at)
-       VALUES ($1, 'telegram', $2, $3, 'active', NOW())`,
+       (user_id, platform, platform_user_id, display_name, status)
+       VALUES ($1, 'telegram', $2, $3, 'active')`,
       [userId, telegramChatId, 'Telegram Test User']
     );
 

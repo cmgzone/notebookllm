@@ -180,6 +180,11 @@ async function runMigration() {
     console.log('✅ Created gitu_linked_accounts table');
 
     await client.query(`
+      ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS display_name TEXT;
+      ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS linked_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS verified BOOLEAN DEFAULT false;
+      ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS is_primary BOOLEAN DEFAULT false;
       ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
       UPDATE gitu_linked_accounts SET status = 'active' WHERE status IS NULL;
       DO $$
