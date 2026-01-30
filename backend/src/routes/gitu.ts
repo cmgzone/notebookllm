@@ -19,6 +19,7 @@ import { gituPluginSystem } from '../services/gituPluginSystem.js';
 import { gituTerminalService } from '../services/gituTerminalService.js';
 import { gituGmailManager } from '../services/gituGmailManager.js';
 import { gituShopifyManager } from '../services/gituShopifyManager.js';
+import { whatsappAdapter } from '../adapters/whatsappAdapter.js';
 import {
   listMessages as gmailList,
   getMessage as gmailGet,
@@ -191,6 +192,74 @@ router.post('/settings', async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to update settings', message: error.message });
+  }
+});
+
+router.get('/whatsapp/status', async (req: AuthRequest, res: Response) => {
+  try {
+    const state = whatsappAdapter.getConnectionState();
+    const qr = whatsappAdapter.getQRCode();
+    const account = whatsappAdapter.getConnectedAccount();
+    const status =
+      state === 'connected'
+        ? 'connected'
+        : qr
+            ? 'scanning'
+            : 'disconnected';
+    res.json({
+      success: true,
+      status,
+      qrCode: qr,
+      device: account?.name || null,
+      platformUserId: account?.jid || null,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to get WhatsApp status', message: error.message });
+  }
+});
+
+router.post('/whatsapp/connect', async (req: AuthRequest, res: Response) => {
+  try {
+    await whatsappAdapter.reconnect();
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to start WhatsApp connection', message: error.message });
+  }
+});
+
+router.post('/whatsapp/disconnect', async (req: AuthRequest, res: Response) => {
+  try {
+    await whatsappAdapter.disconnect();
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to disconnect WhatsApp', message: error.message });
+  }
+});
+
+router.post('/whatsapp/link-current', async (req: AuthRequest, res: Response) => {
+  try {
+    const account = whatsappAdapter.getConnectedAccount();
+    if (!account?.jid) {
+      return res.status(409).json({ error: 'WHATSAPP_NOT_CONNECTED' });
+    }
+
+    const displayName = account.name || account.jid;
+
+    await pool.query(
+      `INSERT INTO gitu_linked_accounts (user_id, platform, platform_user_id, display_name, verified, status)
+       VALUES ($1, 'whatsapp', $2, $3, true, 'active')
+       ON CONFLICT (platform, platform_user_id) DO UPDATE
+       SET user_id = EXCLUDED.user_id,
+           display_name = EXCLUDED.display_name,
+           verified = true,
+           status = 'active',
+           last_used_at = NOW()`,
+      [req.userId, account.jid, displayName]
+    );
+
+    res.json({ success: true, platformUserId: account.jid, displayName });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to link WhatsApp account', message: error.message });
   }
 });
 

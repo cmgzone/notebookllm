@@ -108,7 +108,7 @@ class TelegramAdapter {
         console.error(`💡 To link this account, run: npx tsx src/scripts/link-telegram-test-account.ts ${msg.chat.id}`);
         await this.sendErrorMessage(
           msg.chat.id,
-          'Telegram not linked. In NotebookLLM, open Gitu → Linked Accounts and link Telegram, then send /start again.'
+          `Telegram not linked.\n\nYour Chat ID: ${msg.chat.id}\n\nIn NotebookLLM, open Gitu → Linked Accounts and link Telegram with this Chat ID, then send /start again.`
         );
       }
     });
@@ -170,6 +170,7 @@ Use /help to see available commands.
 📖 *Available Commands:*
 
 /start - Start the bot
+/id - Show your Telegram Chat ID (for linking)
 /help - Show this help message
 /status - Check your Gitu status
 /notebooks - List your notebooks
@@ -183,6 +184,12 @@ You can also just chat with me naturally! I'll understand your requests and help
       await this.sendMessage(chatId.toString(), {
         markdown: helpMessage,
       });
+    });
+
+    this.bot.onText(/\/id/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const text = `Your Chat ID: ${chatId}\n\nIn NotebookLLM → Gitu → Linked Accounts, link Telegram with this Chat ID.`;
+      await this.sendMessage(chatId, { text });
     });
 
     // /status command

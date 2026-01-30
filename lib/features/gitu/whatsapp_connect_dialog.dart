@@ -182,7 +182,7 @@ class WhatsAppConnectDialog extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 24),
-              _buildContent(context, state, notifier),
+              _buildContent(context, ref, state, notifier),
             ],
           ),
         ),
@@ -190,7 +190,7 @@ class WhatsAppConnectDialog extends ConsumerWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, WhatsAppConnectionState state,
+  Widget _buildContent(BuildContext context, WidgetRef ref, WhatsAppConnectionState state,
       WhatsAppConnectionNotifier notifier) {
     switch (state.status) {
       case ConnectionStatus.connected:
@@ -218,6 +218,26 @@ class WhatsAppConnectDialog extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
                 child: const Text('Disconnect'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    final api = ref.read(apiServiceProvider);
+                    await api.post('/gitu/whatsapp/link-current', {});
+                    messenger.showSnackBar(const SnackBar(content: Text('WhatsApp linked to your account')));
+                  } catch (e) {
+                    messenger.showSnackBar(SnackBar(content: Text('Failed to link: $e')));
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: const Text('Link This WhatsApp Session'),
               ),
             ),
           ],

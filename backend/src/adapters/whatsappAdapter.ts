@@ -41,6 +41,9 @@ class WhatsAppAdapter {
     private config: WhatsAppAdapterConfig | null = null;
     private logger = pino({ level: 'info' });
     private qrCode: string | null = null;
+    private connectionState: 'connected' | 'disconnected' | 'connecting' = 'disconnected';
+    private connectedAccountJid: string | null = null;
+    private connectedAccountName: string | null = null;
 
     /**
      * Initialize the WhatsApp Adapter.
@@ -67,6 +70,9 @@ class WhatsAppAdapter {
      */
     private async connectToWhatsApp(): Promise<void> {
         if (!this.config) throw new Error('Config not initialized');
+        this.connectionState = 'connecting';
+        this.connectedAccountJid = null;
+        this.connectedAccountName = null;
 
         const { state, saveCreds } = await useMultiFileAuthState(this.config.authDir!);
         const { version, isLatest } = await fetchLatestBaileysVersion();
@@ -90,6 +96,7 @@ class WhatsAppAdapter {
 
             if (qr) {
                 this.qrCode = qr;
+                this.connectionState = 'connecting';
                 this.logger.info('QR Code received');
                 // TODO: Emit QR code to frontend via WebSocket if needed
             }
@@ -102,12 +109,20 @@ class WhatsAppAdapter {
                     await this.connectToWhatsApp();
                 } else {
                     this.logger.info('Connection closed. You are logged out.');
+                    this.connectionState = 'disconnected';
+                    this.connectedAccountJid = null;
+                    this.connectedAccountName = null;
                     // Clean up auth dir if logged out to force fresh login next time?
                     // Maybe not, user might want to re-login manually.
                 }
             } else if (connection === 'open') {
                 this.logger.info('Opened connection to WhatsApp');
                 this.qrCode = null;
+                this.connectionState = 'connected';
+                const jid = (this.sock as any)?.user?.id;
+                const name = (this.sock as any)?.user?.name;
+                this.connectedAccountJid = typeof jid === 'string' ? jid : null;
+                this.connectedAccountName = typeof name === 'string' ? name : null;
             }
         });
 
@@ -334,11 +349,16 @@ class WhatsAppAdapter {
      */
     getConnectionState(): 'connected' | 'disconnected' | 'connecting' {
         if (!this.initialized) return 'disconnected';
-        // Basic check, Baileys doesn't expose a simple "state" property on sock directly usually, 
-        // but we can infer from sock existence and events. 
-        // For now, if sock exists we assume connected/connecting.
-        // We could track state more explicitly in connection.update event.
-        return this.sock ? 'connected' : 'disconnected';
+        return this.connectionState;
+    }
+
+    getConnectedAccount(): { jid: string; name?: string } | null {
+        if (this.connectionState !== 'connected') return null;
+        if (!this.connectedAccountJid) return null;
+        return {
+            jid: this.connectedAccountJid,
+            name: this.connectedAccountName || undefined,
+        };
     }
 
     /**
@@ -359,6 +379,10 @@ class WhatsAppAdapter {
             this.sock = null;
         }
         this.initialized = false;
+        this.connectionState = 'disconnected';
+        this.qrCode = null;
+        this.connectedAccountJid = null;
+        this.connectedAccountName = null;
     }
 }
 

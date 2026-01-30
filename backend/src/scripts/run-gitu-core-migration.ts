@@ -169,6 +169,7 @@ async function runMigration() {
         last_used_at TIMESTAMPTZ DEFAULT NOW(),
         verified BOOLEAN DEFAULT false,
         is_primary BOOLEAN DEFAULT false,
+        status TEXT DEFAULT 'active',
         UNIQUE(platform, platform_user_id),
         CONSTRAINT valid_linked_account_platform CHECK (platform IN ('flutter', 'whatsapp', 'telegram', 'email', 'terminal'))
       );
@@ -177,6 +178,21 @@ async function runMigration() {
       CREATE INDEX IF NOT EXISTS idx_gitu_linked_accounts_platform ON gitu_linked_accounts(platform, platform_user_id);
     `);
     console.log('✅ Created gitu_linked_accounts table');
+
+    await client.query(`
+      ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+      UPDATE gitu_linked_accounts SET status = 'active' WHERE status IS NULL;
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'valid_linked_account_status'
+        ) THEN
+          ALTER TABLE gitu_linked_accounts
+            ADD CONSTRAINT valid_linked_account_status
+            CHECK (status IN ('active','inactive','suspended'));
+        END IF;
+      END $$;
+    `);
     
     // ============================================================================
     // PERMISSIONS

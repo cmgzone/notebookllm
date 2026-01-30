@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import '../../core/api/api_service.dart';
 import '../../theme/app_theme.dart';
 import 'services/identity_service.dart';
 import 'models/linked_account.dart';
@@ -18,6 +19,12 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
         ),
         title: const Text('Linked Accounts', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(LucideIcons.plus),
+            onPressed: () => _showLinkOptions(context, ref),
+          ),
+        ],
       ),
       body: accountsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -38,14 +45,41 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
         ),
         data: (accounts) {
           if (accounts.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(LucideIcons.link, size: 64, color: Colors.grey),
-                  SizedBox(height: 12),
-                  Text('No linked accounts'),
-                ],
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(LucideIcons.link, size: 64, color: Colors.grey),
+                    const SizedBox(height: 12),
+                    const Text('No linked accounts'),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => _linkTelegram(context, ref),
+                        child: const Text('Link Telegram'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => _linkWhatsAppCurrentSession(context, ref),
+                        child: const Text('Link WhatsApp (Current Session)'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () => ref.invalidate(linkedAccountsProvider),
+                        child: const Text('Refresh'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }
@@ -63,6 +97,92 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  static Future<void> _showLinkOptions(BuildContext context, WidgetRef ref) async {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(LucideIcons.send),
+                title: const Text('Link Telegram'),
+                subtitle: const Text('Use your Telegram Chat ID from /id command'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _linkTelegram(context, ref);
+                },
+              ),
+              ListTile(
+                leading: const Icon(LucideIcons.messageCircle),
+                title: const Text('Link WhatsApp'),
+                subtitle: const Text('Link the currently connected WhatsApp session'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _linkWhatsAppCurrentSession(context, ref);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static Future<void> _linkTelegram(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController();
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Link Telegram'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('In Telegram, message the bot and send /id to get your Chat ID.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Telegram Chat ID',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Link')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final chatId = controller.text.trim();
+      if (chatId.isEmpty) throw Exception('Chat ID is required');
+      await ref.read(identityServiceProvider).link('telegram', chatId);
+      ref.invalidate(linkedAccountsProvider);
+      messenger.showSnackBar(const SnackBar(content: Text('Telegram linked')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Failed to link Telegram: $e')));
+    }
+  }
+
+  static Future<void> _linkWhatsAppCurrentSession(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final api = ref.read(apiServiceProvider);
+      await api.post('/gitu/whatsapp/link-current', {});
+      ref.invalidate(linkedAccountsProvider);
+      messenger.showSnackBar(const SnackBar(content: Text('WhatsApp linked')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Failed to link WhatsApp: $e')));
+    }
   }
 }
 

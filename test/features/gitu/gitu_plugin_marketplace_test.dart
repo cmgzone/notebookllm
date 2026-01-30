@@ -59,7 +59,7 @@ void main() {
   testWidgets('Marketplace installs a plugin', (tester) async {
     final service = TestMarketplacePluginsService(
       plugins: [],
-      catalog: const [
+      catalog: [
         PluginCatalogItem(
           id: 'c1',
           slug: 'echo',
@@ -95,4 +95,3 @@ void main() {
     expect(find.text('Echo Plugin'), findsOneWidget);
   });
 }
-
