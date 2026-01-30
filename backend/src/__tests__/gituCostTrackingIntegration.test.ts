@@ -17,18 +17,18 @@ describe('Gitu Cost Tracking Integration Tests', () => {
 
     // Set custom limits for testing
     await pool.query(
-      `INSERT INTO mcp_limits (user_id, daily_limit_usd, per_task_limit_usd, monthly_limit_usd, hard_stop)
-       VALUES ($1, 10.0, 5.0, 100.0, true)
+      `INSERT INTO gitu_usage_limits (user_id, daily_limit_usd, per_task_limit_usd, monthly_limit_usd, hard_stop, alert_thresholds)
+       VALUES ($1, 10.0, 5.0, 100.0, true, $2)
        ON CONFLICT (user_id) DO UPDATE 
        SET daily_limit_usd = EXCLUDED.daily_limit_usd`,
-      [testUserId]
+      [testUserId, [0.5, 0.75, 0.9]]
     );
   });
 
   afterEach(async () => {
     // Clean up usage logs
-    await pool.query('DELETE FROM ai_usage_logs WHERE user_id = $1', [testUserId]);
-    await pool.query('DELETE FROM mcp_limits WHERE user_id = $1', [testUserId]);
+    await pool.query('DELETE FROM gitu_usage_records WHERE user_id = $1', [testUserId]);
+    await pool.query('DELETE FROM gitu_usage_limits WHERE user_id = $1', [testUserId]);
     await pool.query('DELETE FROM users WHERE id = $1', [testUserId]);
   });
 

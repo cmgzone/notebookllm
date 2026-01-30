@@ -217,7 +217,7 @@ You can also just chat with me naturally! I'll understand your requests and help
       try {
         const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId.toString();
         const userId = await this.getUserIdFromChatId(platformUserId);
-        const session = await gituSessionService.getActiveSession(userId, 'telegram');
+        const session = await gituSessionService.getActiveSession(userId, 'universal');
         
         if (session) {
           const stats = await gituSessionService.getSessionStats(userId);
@@ -334,7 +334,7 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
       try {
         const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId.toString();
         const userId = await this.getUserIdFromChatId(platformUserId);
-        const session = await gituSessionService.getActiveSession(userId, 'telegram');
+        const session = await gituSessionService.getActiveSession(userId, 'universal');
         
         if (session) {
           // Clear conversation history
@@ -384,7 +384,7 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
     // Send typing indicator
     await this.sendChatAction(chatId, 'typing');
 
-    const session = await gituSessionService.getOrCreateSession(normalizedMessage.userId, 'telegram');
+    const session = await gituSessionService.getOrCreateSession(normalizedMessage.userId, 'universal');
     const userText = normalizedMessage.content.text || '[attachment]';
 
     session.context.conversationHistory.push({
@@ -395,7 +395,7 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
     });
 
     const context = session.context.conversationHistory
-      .slice(-21, -1)
+      .slice(-101, -1)
       .map(m => `${m.role}: ${m.content}`);
 
     const aiResponse = await gituAIRouter.route({

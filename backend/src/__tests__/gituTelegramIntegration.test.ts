@@ -141,7 +141,7 @@ describe('Gitu Telegram Integration Tests', () => {
     };
 
     // Ensure session exists
-    await gituSessionService.getOrCreateSession(testUserId, 'telegram');
+    await gituSessionService.getOrCreateSession(testUserId, 'universal');
 
     await statusHandler(incomingMsg);
 

@@ -184,7 +184,7 @@ class FlutterAdapter {
 
           const normalized = await gituMessageGateway.processMessage(rawMessage);
 
-          const session = await gituSessionService.getOrCreateSession(connection.userId, 'flutter');
+          const session = await gituSessionService.getOrCreateSession(connection.userId, 'universal');
           session.context.conversationHistory.push({
             role: 'user',
             content: normalized.content.text || text,
@@ -193,7 +193,7 @@ class FlutterAdapter {
           });
 
           const context = session.context.conversationHistory
-            .slice(-21, -1)
+            .slice(-101, -1)
             .map(m => `${m.role}: ${m.content}`);
 
           const aiResponse = await gituAIRouter.route({

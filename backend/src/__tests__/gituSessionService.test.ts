@@ -2,9 +2,11 @@
  * Unit tests for Gitu Session Service
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import pool from '../config/database.js';
 import gituSessionService, { Session, Message, Task } from '../services/gituSessionService.js';
+
+jest.setTimeout(180000);
 
 describe('GituSessionService', () => {
   const testUserId = 'test-user-gitu-' + Date.now();

@@ -49,7 +49,7 @@ export interface SessionContext {
 export interface Session {
   id: string;
   userId: string;
-  platform: 'flutter' | 'whatsapp' | 'telegram' | 'email' | 'terminal' | 'web';
+  platform: 'flutter' | 'whatsapp' | 'telegram' | 'email' | 'terminal' | 'web' | 'universal';
   status: 'active' | 'paused' | 'ended';
   context: SessionContext;
   startedAt: Date;
@@ -61,7 +61,7 @@ export interface Session {
  * Options for creating or updating a session
  */
 export interface SessionOptions {
-  platform: 'flutter' | 'whatsapp' | 'telegram' | 'email' | 'terminal' | 'web';
+  platform: 'flutter' | 'whatsapp' | 'telegram' | 'email' | 'terminal' | 'web' | 'universal';
   initialContext?: Partial<SessionContext>;
 }
 

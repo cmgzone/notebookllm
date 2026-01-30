@@ -1176,7 +1176,7 @@ ${chalk.gray('>')} Help me write a function to sort an array
         await handler(normalizedMessage);
       }
 
-      const session = await gituSessionService.getOrCreateSession(this.credentials.userId, 'terminal');
+      const session = await gituSessionService.getOrCreateSession(this.credentials.userId, 'universal');
       
       // Check for preferred model
       const settings = await gituTerminalService.getDeviceSettings(this.credentials.userId, this.deviceId);
@@ -1192,7 +1192,7 @@ ${chalk.gray('>')} Help me write a function to sort an array
       });
 
       const context = session.context.conversationHistory
-        .slice(-21, -1)
+        .slice(-101, -1)
         .map(m => `${m.role}: ${m.content}`);
 
       const aiResponse = await gituAIRouter.route({

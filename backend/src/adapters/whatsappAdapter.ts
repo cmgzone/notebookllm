@@ -260,7 +260,7 @@ class WhatsAppAdapter {
             // Send typing indicator
             await this.sock.sendPresenceUpdate('composing', remoteJid);
 
-            const session = await gituSessionService.getOrCreateSession(userId, 'whatsapp');
+            const session = await gituSessionService.getOrCreateSession(userId, 'universal');
             
             session.context.conversationHistory.push({
                 role: 'user',
@@ -270,7 +270,7 @@ class WhatsAppAdapter {
             });
 
             const context = session.context.conversationHistory
-                .slice(-21, -1)
+                .slice(-101, -1)
                 .map(m => `${m.role}: ${m.content}`);
 
             const aiResponse = await gituAIRouter.route({

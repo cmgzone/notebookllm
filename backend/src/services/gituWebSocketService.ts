@@ -36,19 +36,26 @@ class GituWebSocketService {
   private connectionCounter = 0;
   private gatewaySubscribed = false;
 
+  // Constructor injection for testing
+  private _wsServerConstructor: any = WebSocketServer;
+
+  setWebSocketServerConstructor(ctor: any) {
+    this._wsServerConstructor = ctor;
+  }
+
   initialize(server: any): void {
     if (this.wss) return;
 
-    this.wss = new WebSocketServer({
+    this.wss = new this._wsServerConstructor({
       server,
       path: '/ws/gitu-web',
     });
 
-    this.wss.on('error', (error) => {
+    this.wss?.on('error', (error) => {
       console.error('[Gitu Web WS] Server error:', error);
     });
 
-    this.wss.on('connection', (ws, req) => this.handleConnection(ws, req));
+    this.wss?.on('connection', (ws, req) => this.handleConnection(ws, req));
 
     this.pingInterval = setInterval(() => {
       this.pingAllConnections();

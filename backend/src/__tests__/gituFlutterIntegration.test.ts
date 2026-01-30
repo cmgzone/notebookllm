@@ -1,22 +1,33 @@
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { WebSocketServer } from 'ws';
-import jwt from 'jsonwebtoken';
 import pool from '../config/database.js';
 import { gituWebSocketService } from '../services/gituWebSocketService.js';
 import { gituSessionService } from '../services/gituSessionService.js';
 import { gituAIRouter } from '../services/gituAIRouter.js';
-
-// Mock dependencies
-jest.mock('ws');
-jest.mock('jsonwebtoken');
-jest.mock('../services/gituAIRouter.js');
 
 describe('Gitu Flutter/Web Integration Tests', () => {
   const testUserId = 'test-user-flutter-' + Date.now();
   const testToken = 'valid-jwt-token';
   let mockWss: any;
   let mockWs: any;
+
+  // Fix DB constraints to allow 'web' platform
+  beforeAll(async () => {
+    try {
+      await pool.query(`
+        ALTER TABLE gitu_messages DROP CONSTRAINT IF EXISTS valid_message_platform;
+        ALTER TABLE gitu_messages ADD CONSTRAINT valid_message_platform 
+          CHECK (platform IN ('flutter', 'whatsapp', 'telegram', 'email', 'terminal', 'web'));
+          
+        ALTER TABLE gitu_linked_accounts DROP CONSTRAINT IF EXISTS valid_linked_account_platform;
+        ALTER TABLE gitu_linked_accounts ADD CONSTRAINT valid_linked_account_platform 
+          CHECK (platform IN ('flutter', 'whatsapp', 'telegram', 'email', 'terminal', 'web'));
+      `);
+    } catch (e) {
+      console.warn('Failed to update DB constraints (might already exist or permission denied):', e);
+    }
+  });
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -33,8 +44,12 @@ describe('Gitu Flutter/Web Integration Tests', () => {
     mockWss = {
       on: jest.fn(),
       close: jest.fn(),
+      clients: new Set(),
     };
-    (WebSocketServer as unknown as jest.Mock).mockImplementation(() => mockWss);
+    
+    // Inject mock constructor
+    const MockWebSocketServer = jest.fn(() => mockWss);
+    gituWebSocketService.setWebSocketServerConstructor(MockWebSocketServer);
 
     // Mock WebSocket Client
     mockWs = {
@@ -44,11 +59,11 @@ describe('Gitu Flutter/Web Integration Tests', () => {
       readyState: 1, // OPEN
     };
 
-    // Mock JWT
-    (jwt.verify as jest.Mock).mockReturnValue({ userId: testUserId });
-
-    // Mock AIRouter
-    (gituAIRouter.route as any).mockImplementation(async () => ({
+    // Mock verifyJwt
+    jest.spyOn(gituWebSocketService as any, 'verifyJwt').mockReturnValue(testUserId);
+    
+    // Mock AIRouter via spyOn
+    jest.spyOn(gituAIRouter, 'route').mockImplementation(async () => ({
       content: 'Flutter response',
       model: 'gemini-2.0-flash',
       tokensUsed: 10,
@@ -67,6 +82,7 @@ describe('Gitu Flutter/Web Integration Tests', () => {
     await pool.query('DELETE FROM gitu_sessions WHERE user_id = $1', [testUserId]);
     await pool.query('DELETE FROM gitu_linked_accounts WHERE user_id = $1', [testUserId]);
     await pool.query('DELETE FROM users WHERE id = $1', [testUserId]);
+    jest.restoreAllMocks();
   });
 
   it('should handle full chat flow via WebSocket', async () => {
