@@ -6,7 +6,7 @@ import 'package:notebook_llm/features/gitu/gitu_provider.dart';
 
 // Fake Notifier to avoid real timers in widget tests
 class FakeGituChatNotifier extends GituChatNotifier {
-  FakeGituChatNotifier(Ref ref) : super(ref);
+  FakeGituChatNotifier(super.ref);
 
   @override
   Future<void> connect() async {

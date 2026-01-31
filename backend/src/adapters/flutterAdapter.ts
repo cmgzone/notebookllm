@@ -40,8 +40,7 @@ class FlutterAdapter {
     if (this.wss) return;
 
     this.wss = new WebSocketServer({
-      server,
-      path: '/ws/gitu',
+      noServer: true
     });
 
     this.wss.on('error', (error) => {
@@ -62,6 +61,12 @@ class FlutterAdapter {
     }
   }
 
+  handleUpgrade(req: IncomingMessage, socket: any, head: Buffer): void {
+    this.wss?.handleUpgrade(req, socket, head, (ws) => {
+      this.wss?.emit('connection', ws, req);
+    });
+  }
+
   shutdown(): void {
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
@@ -71,7 +76,7 @@ class FlutterAdapter {
     for (const [, connection] of this.connections) {
       try {
         connection.ws.close(1000, 'Server shutting down');
-      } catch {}
+      } catch { }
     }
     this.connections.clear();
     this.userConnections.clear();
@@ -271,7 +276,7 @@ class FlutterAdapter {
     if (!connection || connection.ws.readyState !== WebSocket.OPEN) return;
     try {
       connection.ws.send(JSON.stringify(event));
-    } catch {}
+    } catch { }
   }
 
   private broadcastToUser(userId: string, event: FlutterWSEvent): void {
@@ -289,7 +294,7 @@ class FlutterAdapter {
       if (msSincePing > 2 * 60 * 1000) {
         try {
           conn.ws.close(1000, 'Ping timeout');
-        } catch {}
+        } catch { }
         this.handleDisconnect(id);
         continue;
       }
@@ -297,7 +302,7 @@ class FlutterAdapter {
       if (conn.ws.readyState === WebSocket.OPEN) {
         try {
           conn.ws.send(JSON.stringify({ type: 'ping' }));
-        } catch {}
+        } catch { }
       }
     }
   }

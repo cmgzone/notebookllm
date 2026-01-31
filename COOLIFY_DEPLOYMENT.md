@@ -86,6 +86,18 @@ Once the deployment is "Healthy":
 *   **Build Fails**: Check if you set the **Docker Context** directory correctly to `/backend`. The Dockerfile expects to be built from within that directory context to find `package.json`.
 *   **Database Connection Failed**: Double-check your `DATABASE_URL` in the Environment Variables. Ensure Coolify allows outbound traffic to Neon (port 5432).
 *   **Application Error**: Check the "Application Logs" in Coolify for startup errors.
+*   **WebSockets Not Working (Offline/Connection Closed)**:
+    *   If using Cloudflare Proxy, ensure WebSockets are enabled.
+    *   **Symptom**: If you see `{"error":"Route not found","path":"/ws/gitu"}` in the response, it means the request reached the backend but as **HTTP**, not WebSocket. The Proxy stripped the headers.
+    *   **Coolify Proxy**: Ensure your proxy configuration forwards `Upgrade` and `Connection` headers. You may need to add custom Nginx configuration:
+        ```nginx
+        location /ws/ {
+            proxy_pass http://host.docker.internal:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+        ```
 
 ## Next Steps
 

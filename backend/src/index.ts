@@ -3,6 +3,7 @@ import cors from 'cors';
 import compression from 'compression';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
+import { parse } from 'url';
 
 // Import all routes
 import authRoutes from './routes/auth.js';
@@ -117,7 +118,7 @@ process.on('SIGTERM', async () => {
     console.log('SIGTERM received, shutting down gracefully...');
     gituScheduler.stop();
     whatsappHealthMonitor.stop();
-    try { await telegramAdapter.disconnect(); } catch {}
+    try { await telegramAdapter.disconnect(); } catch { }
     await disconnectRedis();
     process.exit(0);
 });
@@ -126,7 +127,7 @@ process.on('SIGINT', async () => {
     console.log('SIGINT received, shutting down gracefully...');
     gituScheduler.stop();
     whatsappHealthMonitor.stop();
-    try { await telegramAdapter.disconnect(); } catch {}
+    try { await telegramAdapter.disconnect(); } catch { }
     await disconnectRedis();
     process.exit(0);
 });
@@ -257,6 +258,35 @@ const startListening = () => {
     }
 
     isStartingServer = true;
+
+    // Add debugging for WebSocket upgrades
+    server.on('upgrade', (req, socket, head) => {
+        const url = parse(req.url || '').pathname || '';
+        console.log(`[WS UPGRADE] Request for ${url}`);
+
+        // Manual routing for Flutter Gitu WebSocket
+        if (url === '/ws/gitu' || url === '/ws/gitu/') {
+            console.log(`[WS UPGRADE] Routing to Flutter Adapter`);
+            flutterAdapter.handleUpgrade(req, socket, head);
+            return;
+        }
+
+        // Manual routing for Web Gitu WebSocket
+        if (url === '/ws/gitu-web' || url === '/ws/gitu-web/') {
+            console.log(`[WS UPGRADE] Routing to Web Service`);
+            gituWebSocketService.handleUpgrade(req, socket, head);
+            return;
+        }
+
+        if (url.startsWith('/ws/')) {
+            // Let the other specialized handlers deal with it if they are still using auto-attach
+            // Note: We should eventually migrate all to manual for consistency
+            return;
+        }
+
+        console.log(`[WS UPGRADE] Unhandled path: ${url}`);
+    });
+
     server.listen(activePort, () => {
         isStartingServer = false;
         console.log(`🚀 Server is running on http://localhost:${activePort}`);

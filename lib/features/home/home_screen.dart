@@ -231,7 +231,8 @@ class HomeScreen extends ConsumerWidget {
 
     final grouped = <String, int>{};
     for (final n in notebooks) {
-      final category = n.category.trim().isEmpty ? 'General' : n.category.trim();
+      final category =
+          n.category.trim().isEmpty ? 'General' : n.category.trim();
       grouped.update(category, (count) => count + 1, ifAbsent: () => 1);
     }
 
@@ -268,8 +269,8 @@ class HomeScreen extends ConsumerWidget {
                   '/category/${Uri.encodeComponent(category)}',
                 ),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   decoration: BoxDecoration(
                     color: Theme.of(context)
                         .colorScheme
@@ -303,9 +304,10 @@ class HomeScreen extends ConsumerWidget {
                       Expanded(
                         child: Text(
                           category,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -377,7 +379,9 @@ class CategoryNotebooksScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notebooks = ref
         .watch(notebookProvider)
-        .where((n) => (n.category.trim().isEmpty ? 'General' : n.category.trim()) == category)
+        .where((n) =>
+            (n.category.trim().isEmpty ? 'General' : n.category.trim()) ==
+            category)
         .toList()
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
@@ -393,7 +397,9 @@ class CategoryNotebooksScreen extends ConsumerWidget {
           IconButton(
             onPressed: () => showDialog(
               context: context,
-              builder: (_) => CreateNotebookDialog(initialCategory: category),
+              builder: (_) => CreateNotebookDialog(
+                initialCategory: category,
+              ),
             ),
             icon: const Icon(Icons.add),
             tooltip: 'New Notebook',

@@ -49,8 +49,7 @@ class GituWebSocketService {
     if (this.wss) return;
 
     this.wss = new this._wsServerConstructor({
-      server,
-      path: '/ws/gitu-web',
+      noServer: true
     });
 
     this.wss?.on('error', (error) => {
@@ -70,6 +69,12 @@ class GituWebSocketService {
         this.broadcastToUser(message.userId, { type: 'incoming_message', payload: message });
       });
     }
+  }
+
+  handleUpgrade(req: IncomingMessage, socket: any, head: Buffer): void {
+    this.wss?.handleUpgrade(req, socket, head, (ws) => {
+      this.wss?.emit('connection', ws, req);
+    });
   }
 
   shutdown(): void {

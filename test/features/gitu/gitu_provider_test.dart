@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:riverpod/riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'dart:async';
 
@@ -63,11 +63,9 @@ class FakeWebSocketSink implements WebSocketSink {
 void main() {
   late ProviderContainer container;
   late FakeApiService fakeApiService;
-  late FakeWebSocketChannel fakeChannel;
-
   setUp(() {
     fakeApiService = FakeApiService();
-    fakeChannel = FakeWebSocketChannel();
+    // fakeChannel = FakeWebSocketChannel(); // Unused
 
     container = ProviderContainer(
       overrides: [
