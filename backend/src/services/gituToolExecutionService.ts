@@ -98,7 +98,7 @@ class GituToolExecutionService {
                 // If AI fails, format the result ourselves
                 console.warn('[ToolExecution] AI formatting failed, using raw result');
                 return {
-                    response: this.formatToolResultFallback(forcedTool.name, result),
+                    response: this.formatToolResultFallback(forcedTool.name, result, userId),
                     toolsUsed,
                     model: 'fallback',
                     tokensUsed: 0,
@@ -252,7 +252,7 @@ Please provide a friendly, well-formatted response to the user based on this ACT
     /**
      * Format tool result as fallback when AI is unavailable.
      */
-    private formatToolResultFallback(toolName: string, result: ToolResult): string {
+    private formatToolResultFallback(toolName: string, result: ToolResult, userId?: string): string {
         if (result.error) {
             return `❌ Error executing ${toolName}: ${result.error}`;
         }
@@ -260,7 +260,7 @@ Please provide a friendly, well-formatted response to the user based on this ACT
         if (toolName === 'list_notebooks' && result.result?.notebooks) {
             const notebooks = result.result.notebooks;
             if (notebooks.length === 0) {
-                return "You don't have any notebooks yet. Create one in the app to get started!";
+                return `**No notebooks found.** 😕\n\nI can see your account is linked, but I didn't find any notebooks in the database.\n\n**Troubleshooting:**\n1. Ensure you have created notebooks in the app.\n2. Check if your app is connected to the same server/database.\n3. Your User ID is: \`${userId || 'unknown'}\``;
             }
             const lines = notebooks.map((nb: any, i: number) =>
                 `${i + 1}. **${nb.title}**${nb.is_agent_notebook ? ' [agent]' : ''} - ${nb.source_count || 0} sources`
