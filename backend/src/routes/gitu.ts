@@ -20,6 +20,7 @@ import { gituTerminalService } from '../services/gituTerminalService.js';
 import { gituGmailManager } from '../services/gituGmailManager.js';
 import { gituShopifyManager } from '../services/gituShopifyManager.js';
 import { gituAgentManager } from '../services/gituAgentManager.js';
+import { gituMemoryService } from '../services/gituMemoryService.js';
 import { whatsappAdapter } from '../adapters/whatsappAdapter.js';
 import {
   listMessages as gmailList,
@@ -722,6 +723,73 @@ router.get('/plugins/:id/executions', async (req: AuthRequest, res: Response) =>
     res.json({ success: true, executions });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to list plugin executions', message: error.message });
+  }
+});
+
+// ==================== MEMORIES ====================
+
+router.get('/memories', async (req: AuthRequest, res: Response) => {
+  try {
+    const { category, verified, tags, limit, offset, query } = req.query as any;
+
+    // Check if it's a search or list
+    if (typeof query === 'string' && query.length > 0) {
+      const memories = await gituMemoryService.searchMemories(
+        req.userId!,
+        query,
+        limit ? Number(limit) : 20
+      );
+      return res.json({ success: true, memories });
+    }
+
+    // List with filters
+    const filters: any = {};
+    if (category) filters.category = category;
+    if (verified !== undefined) filters.verified = verified === 'true';
+    if (tags) filters.tags = Array.isArray(tags) ? tags : [tags];
+    if (limit) filters.limit = Number(limit);
+    if (offset) filters.offset = Number(offset);
+
+    const memories = await gituMemoryService.listMemories(req.userId!, filters);
+    res.json({ success: true, memories });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to list memories', message: error.message });
+  }
+});
+
+router.post('/memories/:id/confirm', async (req: AuthRequest, res: Response) => {
+  try {
+    const memory = await gituMemoryService.confirmMemory(req.params.id);
+    res.json({ success: true, memory });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to confirm memory', message: error.message });
+  }
+});
+
+router.post('/memories/:id/request-verification', async (req: AuthRequest, res: Response) => {
+  try {
+    const memory = await gituMemoryService.requestVerification(req.params.id);
+    res.json({ success: true, memory });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to request verification', message: error.message });
+  }
+});
+
+router.post('/memories/:id/correct', async (req: AuthRequest, res: Response) => {
+  try {
+    const memory = await gituMemoryService.correctMemory(req.params.id, req.body);
+    res.json({ success: true, memory });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to correct memory', message: error.message });
+  }
+});
+
+router.delete('/memories/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    await gituMemoryService.deleteMemory(req.params.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to delete memory', message: error.message });
   }
 });
 
