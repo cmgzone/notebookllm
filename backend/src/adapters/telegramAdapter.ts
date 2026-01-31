@@ -539,6 +539,22 @@ _Click buttons below to change settings:_
     const chatId = msg.chat.id.toString();
     const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId;
 
+    // Handle /unlink command
+    if (msg.text && msg.text.startsWith('/unlink')) {
+      try {
+        await pool.query(
+          `UPDATE gitu_linked_accounts SET status = 'inactive' 
+           WHERE platform = 'telegram' AND platform_user_id = $1`,
+          [chatId]
+        );
+        await this.sendMessage(chatId, { text: '✅ Account unlinked successfully. You can now link this Telegram account to a different NotebookLLM user.' });
+      } catch (error) {
+        console.error('Unlink error:', error);
+        await this.sendMessage(chatId, { text: '❌ Failed to unlink account.' });
+      }
+      return;
+    }
+
     // Skip if it's a command (already handled by command handlers)
     if (msg.text && msg.text.startsWith('/')) {
       return;
