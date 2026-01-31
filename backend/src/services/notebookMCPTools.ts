@@ -114,6 +114,72 @@ const searchSourcesTool: MCPTool = {
 };
 
 /**
+ * Tool: List Sources (in a specific notebook)
+ */
+const listSourcesTool: MCPTool = {
+  name: 'list_sources',
+  description: 'List all sources inside a notebook. Use this to see what files or links are in a notebook.',
+  schema: {
+    type: 'object',
+    properties: {
+      notebookName: { type: 'string', description: 'The name of the notebook to find sources from' },
+      notebookId: { type: 'string', description: 'The specific ID of the notebook (if known)' },
+      limit: { type: 'number', default: 20 }
+    }
+  },
+  handler: async (args: any, context: MCPContext) => {
+    const { notebookName, notebookId, limit = 20 } = args;
+    let targetNotebookId = notebookId;
+
+    // Resolve notebook ID from name if necessary
+    if (!targetNotebookId && notebookName) {
+      // 1. Try exact match
+      const exactMatch = await pool.query(
+        `SELECT id FROM notebooks WHERE user_id = $1 AND title ILIKE $2 LIMIT 1`,
+        [context.userId, notebookName]
+      );
+
+      if (exactMatch.rows.length > 0) {
+        targetNotebookId = exactMatch.rows[0].id;
+      } else {
+        // 2. Try partial match
+        const partialMatch = await pool.query(
+          `SELECT id, title FROM notebooks WHERE user_id = $1 AND title ILIKE $2 ORDER BY updated_at DESC LIMIT 1`,
+          [context.userId, `%${notebookName}%`]
+        );
+
+        if (partialMatch.rows.length > 0) {
+          targetNotebookId = partialMatch.rows[0].id;
+          console.log(`[ListSources] Resolved "${notebookName}" to notebook "${partialMatch.rows[0].title}" (${targetNotebookId})`);
+        }
+      }
+    }
+
+    if (!targetNotebookId) {
+      return {
+        error: `Could not find a notebook matching "${notebookName}". Please try listing your notebooks first.`
+      };
+    }
+
+    // Now list sources for this notebook
+    const result = await pool.query(
+      `SELECT id, title, type, created_at,
+              substring(content from 1 for 100) as snippet
+       FROM sources
+       WHERE notebook_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [targetNotebookId, limit]
+    );
+
+    return {
+      notebookId: targetNotebookId,
+      sources: result.rows
+    };
+  }
+};
+
+/**
  * Tool: Verify Code
  */
 const verifyCodeTool: MCPTool = {
@@ -521,6 +587,7 @@ export function registerNotebookTools() {
   gituMCPHub.registerTool(listNotebooksTool);
   gituMCPHub.registerTool(getSourceTool);
   gituMCPHub.registerTool(searchSourcesTool);
+  gituMCPHub.registerTool(listSourcesTool);
   gituMCPHub.registerTool(verifyCodeTool);
   gituMCPHub.registerTool(reviewCodeTool);
   gituMCPHub.registerTool(scheduleReminderTool);
