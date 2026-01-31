@@ -64,7 +64,7 @@ class WhatsAppAdapter {
         };
 
         await this.connectToWhatsApp();
-        
+
         // Register outbound handler
         gituMessageGateway.registerOutboundHandler('whatsapp', async (jid, text) => {
             if (this.connectionState === 'connected') {
@@ -95,7 +95,7 @@ class WhatsAppAdapter {
 
         const { state, saveCreds } = await useMultiFileAuthState(this.config.authDir!);
         const { version, isLatest } = await fetchLatestBaileysVersion();
-        
+
         this.logger.info(`Using WhatsApp v${version.join('.')}, isLatest: ${isLatest}`);
 
         this.sock = makeWASocket({
@@ -107,6 +107,7 @@ class WhatsAppAdapter {
                 keys: makeCacheableSignalKeyStore(state.keys, this.logger),
             },
             generateHighQualityLinkPreview: true,
+            syncFullHistory: true, // Help with decryption of older messages
         });
 
         // Handle connection update
@@ -123,7 +124,7 @@ class WhatsAppAdapter {
             if (connection === 'close') {
                 const error = lastDisconnect?.error as Boom | undefined;
                 const statusCode = error?.output?.statusCode;
-                
+
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                 this.logger.info(`Connection closed: ${statusCode}, reconnecting: ${shouldReconnect}`);
 
@@ -132,22 +133,22 @@ class WhatsAppAdapter {
                 const isLoggedOut = statusCode === DisconnectReason.loggedOut;
 
                 if (isConflict || isLoggedOut) {
-                     this.logger.warn(`Session terminated (${isConflict ? 'Conflict' : 'Logged Out'}). Clearing session.`);
-                     
-                     // Clear auth directory
-                     if (this.config?.authDir && fs.existsSync(this.config.authDir)) {
-                         try {
+                    this.logger.warn(`Session terminated (${isConflict ? 'Conflict' : 'Logged Out'}). Clearing session.`);
+
+                    // Clear auth directory
+                    if (this.config?.authDir && fs.existsSync(this.config.authDir)) {
+                        try {
                             fs.rmSync(this.config.authDir, { recursive: true, force: true });
-                         } catch (e) {
-                             this.logger.error({ err: e }, 'Failed to clear auth dir');
-                         }
-                     }
-                     
-                     // Restart to generate new QR
-                     this.connectionState = 'disconnected';
-                     this.connectedAccountJid = null;
-                     this.connectedAccountName = null;
-                     await this.connectToWhatsApp();
+                        } catch (e) {
+                            this.logger.error({ err: e }, 'Failed to clear auth dir');
+                        }
+                    }
+
+                    // Restart to generate new QR
+                    this.connectionState = 'disconnected';
+                    this.connectedAccountJid = null;
+                    this.connectedAccountName = null;
+                    await this.connectToWhatsApp();
                 } else if (shouldReconnect) {
                     // Generic disconnect - Just reconnect, preserve session
                     await this.connectToWhatsApp();
@@ -183,6 +184,13 @@ class WhatsAppAdapter {
             try {
                 if (upsert.type === 'notify') {
                     for (const msg of upsert.messages) {
+                        const jid = msg.key.remoteJid || '';
+
+                        // Ignore newsletters, broadcasts, and status updates
+                        if (jid.includes('@newsletter') || jid.includes('@broadcast') || jid === 'status@broadcast') {
+                            continue;
+                        }
+
                         if (!msg.key.fromMe) {
                             await this.handleIncomingMessage(msg);
                         }
@@ -222,11 +230,11 @@ class WhatsAppAdapter {
         if (!remoteJid) return;
 
         // Basic text extraction
-        let text = msg.message?.conversation || 
-                     msg.message?.extendedTextMessage?.text || 
-                     msg.message?.videoMessage?.caption || 
-                     msg.message?.documentMessage?.caption || 
-                     '';
+        let text = msg.message?.conversation ||
+            msg.message?.extendedTextMessage?.text ||
+            msg.message?.videoMessage?.caption ||
+            msg.message?.documentMessage?.caption ||
+            '';
 
         // Check for media
         let mediaBuffer: Buffer | undefined;
@@ -238,7 +246,7 @@ class WhatsAppAdapter {
                 mediaBuffer = await downloadMediaMessage(
                     toWAMessage(msg),
                     'buffer',
-                    { }
+                    {}
                 ) as Buffer;
                 if (!text) text = '[Image]';
             } else if (msg.message?.videoMessage) {
@@ -246,7 +254,7 @@ class WhatsAppAdapter {
                 mediaBuffer = await downloadMediaMessage(
                     toWAMessage(msg),
                     'buffer',
-                    { }
+                    {}
                 ) as Buffer;
                 if (!text) text = '[Video]';
             } else if (msg.message?.audioMessage) {
@@ -254,7 +262,7 @@ class WhatsAppAdapter {
                 mediaBuffer = await downloadMediaMessage(
                     toWAMessage(msg),
                     'buffer',
-                    { }
+                    {}
                 ) as Buffer;
                 if (!text) text = '[Audio]';
             } else if (msg.message?.documentMessage) {
@@ -262,7 +270,7 @@ class WhatsAppAdapter {
                 mediaBuffer = await downloadMediaMessage(
                     toWAMessage(msg),
                     'buffer',
-                    { }
+                    {}
                 ) as Buffer;
                 if (!text) text = '[Document]';
             }
@@ -274,10 +282,10 @@ class WhatsAppAdapter {
         // Trust msg.key.fromMe explicitly for sent messages (Note to Self)
         const normalizedRemoteJid = this.normalizeJid(remoteJid);
         const isNoteToSelf = msg.key.fromMe || normalizedRemoteJid === this.connectedAccountJid;
-        
+
         // If it's not a note to self and not a direct message from a user, we might want to ignore it
         // But for now, let's process everything that looks like a user message
-        
+
         this.logger.info(`Received message from ${remoteJid}: ${text} (fromMe: ${msg.key.fromMe}, Connected: ${this.connectedAccountJid}, Note to Self: ${isNoteToSelf})`);
 
         // Debug command: Ping
@@ -297,13 +305,13 @@ class WhatsAppAdapter {
             } catch (error) {
                 // If it's a note to self, we might be able to auto-link if we have a pending session
                 if (isNoteToSelf && this.connectedAccountJid) {
-                     // Try to match against connected account JID variations
-                     userId = await this.getUserIdFromJid(this.connectedAccountJid);
+                    // Try to match against connected account JID variations
+                    userId = await this.getUserIdFromJid(this.connectedAccountJid);
                 } else {
                     throw error;
                 }
             }
-            
+
             // ================== COMMAND HANDLING ==================
             if (text.startsWith('/agent')) {
                 const parts = text.split(' ');
@@ -331,13 +339,13 @@ class WhatsAppAdapter {
                         await this.sendMessage(remoteJid, 'No active agents found.');
                         return;
                     }
-                    const list = agents.map(a => 
+                    const list = agents.map(a =>
                         `- *${a.task.substring(0, 30)}...*\n  Status: ${a.status}\n  ID: ${a.id.substring(0, 8)}`
                     ).join('\n\n');
                     await this.sendMessage(remoteJid, `📋 *Your Agents:*\n\n${list}`);
                     return;
                 }
-                
+
                 await this.sendMessage(remoteJid, 'ℹ️ Available commands:\n/agent spawn <task>\n/agent list');
                 return;
             }
@@ -372,9 +380,11 @@ class WhatsAppAdapter {
 
         } catch (authError) {
             // This catch block handles User ID lookup failures (Auth errors)
-            this.logger.warn(`User not linked or lookup failed for ${remoteJid}: ${authError}`);
+            // Downgrade to info as this is common for unlinked users
+            this.logger.info(`Message from unlinked or unsupported WhatsApp account ${remoteJid}: ${authError instanceof Error ? authError.message : authError}`);
+
             if (isNoteToSelf) {
-                 await this.sendMessage(remoteJid, 
+                await this.sendMessage(remoteJid,
                     '⚠️ Account not linked properly.\n' +
                     'Please open the Gitu App > Settings > Link WhatsApp and click "Link Current Session".'
                 );
@@ -387,7 +397,7 @@ class WhatsAppAdapter {
      */
     async sendProactiveMessage(userId: string, text: string): Promise<void> {
         if (!this.sock) return; // Silent fail if not connected, or throw?
-        
+
         try {
             // Find the JID for this user
             const result = await pool.query(
@@ -395,7 +405,7 @@ class WhatsAppAdapter {
                  WHERE user_id = $1 AND platform = 'whatsapp' AND status = 'active'`,
                 [userId]
             );
-            
+
             if (result.rows.length > 0) {
                 const jid = result.rows[0].platform_user_id;
                 await this.sendMessage(jid, text);
@@ -410,13 +420,13 @@ class WhatsAppAdapter {
      */
     async sendMessage(jid: string, text: string): Promise<void> {
         if (!this.sock) throw new Error('Socket not initialized');
-        
+
         // Format text (Markdown -> WhatsApp)
         // **bold** -> *bold*
         // *italic* -> _italic_
         // ~~strike~~ -> ~strike~
         // `code` -> ```code```
-        
+
         let formattedText = text
             .replace(/\*\*(.*?)\*\*/g, '*$1*') // Bold
             .replace(/\*(.*?)\*/g, '_$1_')     // Italic (single asterisk to underscore)
