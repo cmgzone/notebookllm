@@ -74,4 +74,19 @@ class MissionControlNotifier
       return null;
     }
   }
+
+  Future<bool> stopMission(String missionId) async {
+    try {
+      final api = ref.read(apiServiceProvider);
+      final response = await api.post('/gitu/mission/$missionId/stop', {});
+
+      if (response['success'] == true) {
+        await fetchActiveMissions();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
 }

@@ -115,6 +115,41 @@ class _SwarmDashboardState extends ConsumerState<SwarmDashboard> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.stop_circle, color: Colors.redAccent),
+                  tooltip: 'Stop Mission',
+                  onPressed: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: AppColors.cardBackground,
+                        title: const Text('Stop Mission?',
+                            style: TextStyle(color: Colors.white)),
+                        content: const Text(
+                            'This will abort all running agents and cancel the objective.',
+                            style: TextStyle(color: Colors.grey)),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('KEEP RUNNING'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('STOP NOW',
+                                style: TextStyle(color: Colors.redAccent)),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirmed == true) {
+                      await ref
+                          .read(missionControlProvider.notifier)
+                          .stopMission(activeMission.id);
+                    }
+                  },
+                ),
               ],
             ),
             const SizedBox(height: 12),

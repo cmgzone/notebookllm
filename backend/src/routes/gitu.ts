@@ -1916,4 +1916,17 @@ router.get('/mission/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+/**
+ * POST /mission/:id/stop
+ * Stop a mission and its agents
+ */
+router.post('/mission/:id/stop', async (req: AuthRequest, res: Response) => {
+  try {
+    await gituMissionControl.stopMission(req.params.id, req.userId!);
+    res.json({ success: true, message: 'Mission stopped' });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to stop mission', message: error.message });
+  }
+});
+
 export default router;

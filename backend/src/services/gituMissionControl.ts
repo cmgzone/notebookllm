@@ -158,6 +158,27 @@ class GituMissionControl {
         );
     }
 
+    /**
+     * Stop a mission and all its associated agents
+     */
+    async stopMission(missionId: string, userId: string): Promise<void> {
+        const mission = await this.getMission(missionId);
+        if (!mission || mission.userId !== userId) throw new Error('Mission not found or unauthorized');
+
+        await this.updateMissionState(missionId, {
+            status: 'failed',
+            logEntry: 'Mission stopped by user.'
+        });
+
+        // Fail all pending/active agents for this mission
+        await pool.query(
+            `UPDATE gitu_agents 
+             SET status = 'failed', result = '{"error": "Mission cancelled by user"}'::jsonb, updated_at = NOW()
+             WHERE user_id = $1 AND (memory->>'missionId') = $2 AND status IN ('pending', 'active')`,
+            [userId, missionId]
+        );
+    }
+
     private mapRowToMission(row: any): Mission {
         return {
             id: row.id,
