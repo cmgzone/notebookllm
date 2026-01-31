@@ -12,7 +12,6 @@
 import { gituMCPHub, MCPContext } from './gituMCPHub.js';
 import { gituAIRouter, AIRequest, AIResponse } from './gituAIRouter.js';
 import { gituSystemPromptBuilder } from './gituSystemPromptBuilder.js';
-import { generateWithGemini } from './aiService.js';
 
 const MAX_TOOL_CALLS = 5; // Prevent infinite loops
 
@@ -59,83 +58,71 @@ class GituToolExecutionService {
         const { platform = 'web', sessionId, notebookId } = options;
         const toolsUsed: ToolResult[] = [];
 
-        // Build system prompt with tools
-        const promptResult = await gituSystemPromptBuilder.buildSystemPrompt({
-            userId,
-            platform,
-            sessionId,
-            notebookId,
-            includeTools: true,
-            includeMemories: true,
-        });
-
         // Get available tools
         const tools = await gituMCPHub.listTools(userId);
 
-        // Build the conversation with tool definitions
-        const messages: Array<{ role: string; content: string }> = [
-            { role: 'system', content: promptResult.systemPrompt },
-        ];
-
-        // Add conversation history
-        for (const turn of conversationHistory) {
-            messages.push({ role: turn.role, content: turn.content });
-        }
-
-        // Add the new user message
-        messages.push({ role: 'user', content: userMessage });
-
-        // Add tool instructions if tools are available
+        // Build tool instructions if tools are available
+        let toolInstructions = '';
         if (tools.length > 0) {
-            const toolInstructions = this.buildToolInstructions(tools);
-            messages.push({ role: 'system', content: toolInstructions });
+            toolInstructions = this.buildToolInstructions(tools);
         }
 
-        let currentMessages = [...messages];
+        // Build context from conversation history
+        const contextMessages = conversationHistory.map(turn => turn.content);
+
+        // Combine user message with tool instructions
+        const fullPrompt = toolInstructions
+            ? `${userMessage}\n\n${toolInstructions}`
+            : userMessage;
+
+        let currentPrompt = fullPrompt;
         let toolCallCount = 0;
         let finalResponse = '';
         let tokensUsed = 0;
+        let selectedModel = '';
 
         // Tool execution loop
         while (toolCallCount < MAX_TOOL_CALLS) {
-            // Get AI response
-            const aiResponse = await generateWithGemini(
-                currentMessages.map(m => ({
-                    role: m.role as 'user' | 'assistant' | 'system',
-                    content: m.content
-                })),
-                'gemini-2.0-flash'
-            );
+            // Use gituAIRouter to select and call the appropriate model
+            const aiRequest: AIRequest = {
+                userId,
+                sessionId,
+                prompt: currentPrompt,
+                context: contextMessages,
+                taskType: 'chat',
+                platform,
+                includeSystemPrompt: true,
+                includeTools: true,
+            };
 
-            tokensUsed += Math.ceil(aiResponse.length / 4);
+            const aiResponse = await gituAIRouter.route(aiRequest);
+            selectedModel = aiResponse.model;
+            tokensUsed += aiResponse.tokensUsed;
 
             // Check if AI wants to call a tool
-            const toolCall = this.parseToolCall(aiResponse);
+            const toolCall = this.parseToolCall(aiResponse.content);
 
             if (toolCall) {
                 toolCallCount++;
-                console.log(`[ToolExecution] Tool call ${toolCallCount}: ${toolCall.name}`);
+                console.log(`[ToolExecution] Tool call ${toolCallCount}: ${toolCall.name} (using model: ${selectedModel})`);
 
                 // Execute the tool
                 const result = await this.executeTool(toolCall, { userId, sessionId, notebookId });
                 toolsUsed.push(result);
 
-                // Add tool call and result to conversation
-                currentMessages.push({
-                    role: 'assistant',
-                    content: `I'll use the ${toolCall.name} tool to help with that.`
-                });
-                currentMessages.push({
-                    role: 'user',
-                    content: `Tool result for ${toolCall.name}:\n${JSON.stringify(result.result, null, 2)}${result.error ? `\nError: ${result.error}` : ''}`
-                });
+                // Update context with tool result for next iteration
+                contextMessages.push(`I'll use the ${toolCall.name} tool to help with that.`);
+                contextMessages.push(`Tool result for ${toolCall.name}:\n${JSON.stringify(result.result, null, 2)}${result.error ? `\nError: ${result.error}` : ''}`);
+
+                // Update prompt for next iteration
+                currentPrompt = `Based on the tool result above, please provide your response to the user's original request: ${userMessage}`;
 
                 // Continue the loop to let AI process the result
                 continue;
             }
 
             // No tool call, this is the final response
-            finalResponse = aiResponse;
+            finalResponse = aiResponse.content;
             break;
         }
 
@@ -147,7 +134,7 @@ class GituToolExecutionService {
         return {
             response: finalResponse,
             toolsUsed,
-            model: 'gemini-2.0-flash',
+            model: selectedModel || 'unknown',
             tokensUsed,
         };
     }

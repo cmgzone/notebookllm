@@ -77,7 +77,7 @@ class CodeReviewService {
    */
   private extractImports(code: string, language: string): string[] {
     const imports: string[] = [];
-    
+
     switch (language.toLowerCase()) {
       case 'typescript':
       case 'javascript':
@@ -98,7 +98,7 @@ class CodeReviewService {
           }
         }
         break;
-        
+
       case 'python':
         // from X import Y or import X
         const pyImports = code.matchAll(/(?:from\s+(\S+)\s+import|import\s+(\S+))/g);
@@ -110,7 +110,7 @@ class CodeReviewService {
           }
         }
         break;
-        
+
       case 'dart':
         // import 'package:X' or import 'X.dart'
         const dartImports = code.matchAll(/import\s+['"]([^'"]+)['"]/g);
@@ -120,7 +120,7 @@ class CodeReviewService {
           }
         }
         break;
-        
+
       case 'java':
       case 'kotlin':
         // import com.example.Class
@@ -131,7 +131,7 @@ class CodeReviewService {
           }
         }
         break;
-        
+
       case 'go':
         // import "path/to/package"
         const goImports = code.matchAll(/import\s+(?:\(\s*)?["']([^"']+)["']/g);
@@ -141,7 +141,7 @@ class CodeReviewService {
           }
         }
         break;
-        
+
       case 'rust':
         // use crate::module or mod module
         const rustImports = code.matchAll(/(?:use\s+crate::(\w+)|mod\s+(\w+))/g);
@@ -151,7 +151,7 @@ class CodeReviewService {
         }
         break;
     }
-    
+
     return [...new Set(imports)]; // Remove duplicates
   }
 
@@ -161,7 +161,7 @@ class CodeReviewService {
   private resolveImportPath(importPath: string, language: string, currentFilePath?: string): string {
     // Remove leading ./ or ../
     let resolved = importPath.replace(/^\.\//, '').replace(/^\.\.\//, '');
-    
+
     // Add extension if missing
     const extensions: Record<string, string[]> = {
       typescript: ['.ts', '.tsx', '/index.ts', '/index.tsx'],
@@ -169,13 +169,13 @@ class CodeReviewService {
       tsx: ['.tsx', '.ts', '/index.tsx', '/index.ts'],
       jsx: ['.jsx', '.js', '/index.jsx', '/index.js'],
     };
-    
+
     const langExtensions = extensions[language.toLowerCase()];
     if (langExtensions && !langExtensions.some(ext => resolved.endsWith(ext))) {
       // Return base path, we'll try multiple extensions when fetching
       return resolved;
     }
-    
+
     return resolved;
   }
 
@@ -190,17 +190,17 @@ class CodeReviewService {
   ): Promise<RelatedFile[]> {
     const relatedFiles: RelatedFile[] = [];
     const imports = this.extractImports(code, language);
-    
+
     if (imports.length === 0) {
       console.log('[Code Review] No imports detected in code');
       return relatedFiles;
     }
-    
+
     console.log(`[Code Review] Detected ${imports.length} imports:`, imports);
-    
+
     const maxFiles = options.maxFiles || 5;
     const maxFileSize = options.maxFileSize || 50000; // 50KB max per file
-    
+
     // Get repo tree to find matching files
     let repoTree: Array<{ path: string; type: string; size?: number }> = [];
     try {
@@ -209,26 +209,26 @@ class CodeReviewService {
       console.log('[Code Review] Failed to get repo tree:', error.message);
       return relatedFiles;
     }
-    
+
     // Find matching files for each import
     const filesToFetch: string[] = [];
     const extensions = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
-    
+
     for (const importPath of imports) {
       if (filesToFetch.length >= maxFiles) break;
-      
+
       const resolved = this.resolveImportPath(importPath, language);
-      
+
       // Try to find matching file in repo tree
       for (const ext of extensions) {
         const possiblePath = resolved + ext;
-        const match = repoTree.find(item => 
-          item.type === 'blob' && 
-          (item.path === possiblePath || 
-           item.path.endsWith('/' + possiblePath) ||
-           item.path.includes(resolved))
+        const match = repoTree.find(item =>
+          item.type === 'blob' &&
+          (item.path === possiblePath ||
+            item.path.endsWith('/' + possiblePath) ||
+            item.path.includes(resolved))
         );
-        
+
         if (match && match.size && match.size < maxFileSize) {
           if (!filesToFetch.includes(match.path)) {
             filesToFetch.push(match.path);
@@ -237,20 +237,20 @@ class CodeReviewService {
         }
       }
     }
-    
+
     console.log(`[Code Review] Fetching ${filesToFetch.length} related files:`, filesToFetch);
-    
+
     // Fetch file contents
     for (const filePath of filesToFetch) {
       try {
         const fileContent = await githubService.getFileContent(
-          userId, 
-          options.owner, 
-          options.repo, 
+          userId,
+          options.owner,
+          options.repo,
           filePath,
           options.branch
         );
-        
+
         if (fileContent.content) {
           relatedFiles.push({
             path: filePath,
@@ -262,7 +262,7 @@ class CodeReviewService {
         console.log(`[Code Review] Failed to fetch ${filePath}:`, error.message);
       }
     }
-    
+
     return relatedFiles;
   }
 
@@ -373,12 +373,45 @@ class CodeReviewService {
       }
     }
 
-    // Try Gemini first (default fallback)
+    // Try getting the default model from database first
+    const defaultModel = await this.getDefaultModel();
+    if (defaultModel) {
+      try {
+        if (defaultModel.provider === 'gemini' && genAI) {
+          const genModel = genAI.getGenerativeModel({ model: defaultModel.model_id });
+          const result = await genModel.generateContent(prompt);
+          return { text: result.response.text(), provider: 'gemini', modelName: defaultModel.name };
+        } else if (defaultModel.provider === 'openrouter' && openRouterApiKey) {
+          const response = await axios.post(
+            'https://openrouter.ai/api/v1/chat/completions',
+            {
+              model: defaultModel.model_id,
+              messages: [{ role: 'user', content: prompt }],
+              max_tokens: 4096,
+            },
+            {
+              timeout: 120000,
+              headers: {
+                'Authorization': `Bearer ${openRouterApiKey}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://notebookllm.app',
+                'X-Title': 'Notebook LLM Code Review'
+              }
+            }
+          );
+          return { text: response.data.choices[0].message.content, provider: 'openrouter', modelName: defaultModel.name };
+        }
+      } catch (error: any) {
+        console.log(`[Code Review] Default model ${defaultModel.name} failed, using direct API fallback:`, error.message);
+      }
+    }
+
+    // Fallback to direct Gemini API if available
     if (genAI) {
       try {
         const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
-        const text = await generateWithGemini(messages, 'gemini-2.0-flash');
-        return { text, provider: 'gemini', modelName: 'Gemini 2.0 Flash' };
+        const text = await generateWithGemini(messages);
+        return { text, provider: 'gemini', modelName: 'Gemini (Direct)' };
       } catch (error: any) {
         console.log('[Code Review] Gemini failed, trying OpenRouter:', error.message);
       }
@@ -388,8 +421,8 @@ class CodeReviewService {
     if (openRouterApiKey) {
       try {
         const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
-        const text = await generateWithOpenRouter(messages, 'meta-llama/llama-3.3-70b-instruct', 4096);
-        return { text, provider: 'openrouter', modelName: 'Llama 3.3 70B' };
+        const text = await generateWithOpenRouter(messages);
+        return { text, provider: 'openrouter', modelName: 'OpenRouter (Fallback)' };
       } catch (error: any) {
         console.log('[Code Review] OpenRouter also failed:', error.message);
         throw error;
@@ -432,21 +465,21 @@ class CodeReviewService {
 
     // Generate AI review with user's preferred model and context
     const reviewResult = await this.generateAIReview(code, language, reviewType, context, modelId || undefined, relatedFiles);
-    
+
     if (saveReview) {
       // Save to database
       const result = await pool.query(
         `INSERT INTO code_reviews (user_id, code, language, review_type, score, summary, issues, suggestions, context, related_files_used)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
-        [userId, code, language, reviewType, reviewResult.score, reviewResult.summary, 
-         JSON.stringify(reviewResult.issues), JSON.stringify(reviewResult.suggestions), context,
-         relatedFiles.length > 0 ? JSON.stringify(relatedFiles.map(f => f.path)) : null]
+        [userId, code, language, reviewType, reviewResult.score, reviewResult.summary,
+          JSON.stringify(reviewResult.issues), JSON.stringify(reviewResult.suggestions), context,
+          relatedFiles.length > 0 ? JSON.stringify(relatedFiles.map(f => f.path)) : null]
       );
-      
+
       return this.mapRowToReview(result.rows[0]);
     }
-    
+
     return {
       id: 'temp-' + Date.now(),
       userId,
@@ -640,8 +673,8 @@ ${relatedFiles && relatedFiles.length > 0 ? '\nNote: Include "integration" categ
       `INSERT INTO code_review_comparisons 
        (user_id, original_code, updated_code, language, original_score, updated_score, improvement, resolved_issues, new_issues, summary)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [userId, originalCode, updatedCode, language, originalReview.score, updatedReview.score, 
-       improvement, JSON.stringify(resolvedIssues), JSON.stringify(newIssues), summary]
+      [userId, originalCode, updatedCode, language, originalReview.score, updatedReview.score,
+        improvement, JSON.stringify(resolvedIssues), JSON.stringify(newIssues), summary]
     );
 
     return {
@@ -666,7 +699,7 @@ ${relatedFiles && relatedFiles.length > 0 ? '\nNote: Include "integration" categ
       issues: typeof row.issues === 'string' ? JSON.parse(row.issues) : row.issues,
       suggestions: typeof row.suggestions === 'string' ? JSON.parse(row.suggestions) : row.suggestions,
       context: row.context,
-      relatedFilesUsed: row.related_files_used 
+      relatedFilesUsed: row.related_files_used
         ? (typeof row.related_files_used === 'string' ? JSON.parse(row.related_files_used) : row.related_files_used)
         : undefined,
       createdAt: row.created_at,

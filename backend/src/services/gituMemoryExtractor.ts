@@ -10,7 +10,7 @@
  */
 
 import { gituMemoryService, MemoryCategory } from './gituMemoryService.js';
-import { generateWithGemini } from './aiService.js';
+import { gituAIRouter } from './gituAIRouter.js';
 
 export interface ExtractedFact {
     content: string;
@@ -18,6 +18,9 @@ export interface ExtractedFact {
     confidence: number;
     source: string;
 }
+
+// System user ID for internal AI operations
+const SYSTEM_USER_ID = 'system';
 
 class GituMemoryExtractor {
     /**
@@ -42,7 +45,7 @@ class GituMemoryExtractor {
 
         try {
             // Use AI to extract facts
-            const facts = await this.extractFactsWithAI(userMessage, assistantResponse);
+            const facts = await this.extractFactsWithAI(userId, userMessage, assistantResponse);
 
             // Store extracted facts
             for (const fact of facts) {
@@ -92,7 +95,7 @@ class GituMemoryExtractor {
     /**
      * Use AI to extract facts from a conversation.
      */
-    private async extractFactsWithAI(userMessage: string, assistantResponse: string): Promise<ExtractedFact[]> {
+    private async extractFactsWithAI(userId: string, userMessage: string, assistantResponse: string): Promise<ExtractedFact[]> {
         const prompt = `Analyze this conversation and extract any personal facts about the user that should be remembered for future conversations.
 
 User said: "${userMessage}"
@@ -118,13 +121,17 @@ Only include facts that are clearly stated or strongly implied. Don't make assum
 JSON response:`;
 
         try {
-            const response = await generateWithGemini(
-                [{ role: 'user', content: prompt }],
-                'gemini-2.0-flash'
-            );
+            // Use gituAIRouter for dynamic model selection
+            const response = await gituAIRouter.route({
+                userId: userId || SYSTEM_USER_ID,
+                prompt,
+                taskType: 'analysis',
+                includeSystemPrompt: false, // Don't need Gitu identity for fact extraction
+                includeTools: false,
+            });
 
             // Parse the JSON response
-            const jsonMatch = response.match(/\[[\s\S]*\]/);
+            const jsonMatch = response.content.match(/\[[\s\S]*\]/);
             if (!jsonMatch) {
                 return [];
             }

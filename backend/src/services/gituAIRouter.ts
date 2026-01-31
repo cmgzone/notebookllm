@@ -108,15 +108,17 @@ let modelsCacheTimestamp: number = 0;
 const MODELS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Default model recommendations by task type (model IDs from database)
+ * Default model recommendations by task type.
+ * These are preferred model patterns - actual model will be selected from available database models.
+ * Format: provider preference, then any available model.
  */
-const DEFAULT_TASK_MODELS: Record<TaskType, string> = {
-  chat: 'gemini-2.0-flash',
-  research: 'gemini-1.5-pro',
-  coding: 'anthropic/claude-3.5-sonnet',
-  analysis: 'gemini-1.5-pro',
-  summarization: 'gemini-1.5-flash',
-  creative: 'anthropic/claude-3.5-sonnet',
+const DEFAULT_TASK_PROVIDER_HINTS: Record<TaskType, string[]> = {
+  chat: ['gemini', 'openrouter'],           // Fast models preferred
+  research: ['gemini', 'openrouter'],       // Large context preferred
+  coding: ['anthropic', 'openrouter', 'gemini'],  // Claude preferred for code
+  analysis: ['gemini', 'openrouter'],       // Large context preferred
+  summarization: ['gemini', 'openrouter'],  // Fast models preferred
+  creative: ['anthropic', 'openrouter', 'gemini'], // Creative models preferred
 };
 
 /**
@@ -374,10 +376,16 @@ class GituAIRouter {
       const preferredModelId = preferences.taskSpecificModels[taskType] || preferences.defaultModel;
       model = models[preferredModelId];
 
-      // If preferred model not found, use default for task type
+      // If preferred model not found, try to find a model matching provider hints for task type
       if (!model) {
-        const defaultModelId = DEFAULT_TASK_MODELS[taskType];
-        model = models[defaultModelId];
+        const providerHints = DEFAULT_TASK_PROVIDER_HINTS[taskType] || ['gemini', 'openrouter'];
+        for (const preferredProvider of providerHints) {
+          const matchingModel = Object.values(models).find(m => m.provider === preferredProvider);
+          if (matchingModel) {
+            model = matchingModel;
+            break;
+          }
+        }
       }
     }
 
@@ -564,8 +572,8 @@ class GituAIRouter {
       const modelPrefs = gituSettings.modelPreferences || gituSettings;
 
       const preferences: ModelPreferences = {
-        defaultModel: modelPrefs.defaultModel || 'gemini-2.0-flash',
-        taskSpecificModels: modelPrefs.taskSpecificModels || DEFAULT_TASK_MODELS,
+        defaultModel: modelPrefs.defaultModel || 'default',
+        taskSpecificModels: modelPrefs.taskSpecificModels || this.getDefaultPreferences().taskSpecificModels,
         apiKeySource: modelPrefs.apiKeySource || 'platform',
         personalKeys: modelPrefs.personalKeys || {},
       };
@@ -579,13 +587,22 @@ class GituAIRouter {
 
   /**
    * Get default model preferences.
+   * Uses 'default' as a placeholder - actual model will be selected from database.
    * 
    * @returns Default preferences
    */
   private getDefaultPreferences(): ModelPreferences {
+    // Use 'default' as placeholder - selectModel will pick first available from database
     return {
-      defaultModel: 'gemini-2.0-flash',
-      taskSpecificModels: DEFAULT_TASK_MODELS,
+      defaultModel: 'default', // Will trigger database lookup
+      taskSpecificModels: {
+        chat: 'default',
+        research: 'default',
+        coding: 'default',
+        analysis: 'default',
+        summarization: 'default',
+        creative: 'default',
+      },
       apiKeySource: 'platform',
       personalKeys: {},
     };
