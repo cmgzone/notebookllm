@@ -42,7 +42,8 @@ class WhatsAppConnectionState {
   }
 }
 
-class WhatsAppConnectionNotifier extends StateNotifier<WhatsAppConnectionState> {
+class WhatsAppConnectionNotifier
+    extends StateNotifier<WhatsAppConnectionState> {
   final Ref _ref;
   Timer? _statusTimer;
   bool _isDisposed = false;
@@ -76,8 +77,9 @@ class WhatsAppConnectionNotifier extends StateNotifier<WhatsAppConnectionState> 
       final api = _ref.read(apiServiceProvider);
       // This endpoint needs to be implemented on backend or use existing health endpoint
       // For now we assume a dedicated endpoint or use existing WebSocket
-      final response = await api.get<Map<String, dynamic>>('/gitu/whatsapp/status');
-      
+      final response =
+          await api.get<Map<String, dynamic>>('/gitu/whatsapp/status');
+
       final statusStr = response['status'] as String?;
       final qr = response['qrCode'] as String?;
       final device = response['device'] as String?;
@@ -93,7 +95,9 @@ class WhatsAppConnectionNotifier extends StateNotifier<WhatsAppConnectionState> 
         case 'scanning':
         case 'connecting':
           newStatus = ConnectionStatus.scanning;
-          if (_statusTimer == null) _startPolling(); // Ensure polling while scanning
+          if (_statusTimer == null) {
+            _startPolling(); // Ensure polling while scanning
+          }
           break;
         default:
           newStatus = ConnectionStatus.disconnected;
@@ -104,7 +108,9 @@ class WhatsAppConnectionNotifier extends StateNotifier<WhatsAppConnectionState> 
       // If we have a QR code but not connected, we are scanning
       if (qr != null && newStatus != ConnectionStatus.connected) {
         newStatus = ConnectionStatus.scanning;
-        if (_statusTimer == null) _startPolling();
+        if (_statusTimer == null) {
+          _startPolling();
+        }
       }
 
       state = state.copyWith(
@@ -115,8 +121,10 @@ class WhatsAppConnectionNotifier extends StateNotifier<WhatsAppConnectionState> 
       );
     } catch (e) {
       if (!_isDisposed) {
-        // Silent error for status check
-        // state = state.copyWith(error: e.toString());
+        state = state.copyWith(
+          status: ConnectionStatus.error,
+          error: 'Could not check status: $e',
+        );
       }
     }
   }
@@ -190,8 +198,8 @@ class WhatsAppConnectDialog extends ConsumerWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, WidgetRef ref, WhatsAppConnectionState state,
-      WhatsAppConnectionNotifier notifier) {
+  Widget _buildContent(BuildContext context, WidgetRef ref,
+      WhatsAppConnectionState state, WhatsAppConnectionNotifier notifier) {
     switch (state.status) {
       case ConnectionStatus.connected:
         return Column(
@@ -229,9 +237,11 @@ class WhatsAppConnectDialog extends ConsumerWidget {
                   try {
                     final api = ref.read(apiServiceProvider);
                     await api.post('/gitu/whatsapp/link-current', {});
-                    messenger.showSnackBar(const SnackBar(content: Text('WhatsApp linked to your account')));
+                    messenger.showSnackBar(const SnackBar(
+                        content: Text('WhatsApp linked to your account')));
                   } catch (e) {
-                    messenger.showSnackBar(SnackBar(content: Text('Failed to link: $e')));
+                    messenger.showSnackBar(
+                        SnackBar(content: Text('Failed to link: $e')));
                   }
                 },
                 style: ElevatedButton.styleFrom(

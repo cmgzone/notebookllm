@@ -64,6 +64,40 @@ class AppNotification {
       createdAt: createdAt,
     );
   }
+
+  // ==================== PROACTIVE NOTIFICATION HELPERS ====================
+
+  /// Check if this is a proactive AI-generated notification
+  bool get isProactive =>
+      type == 'suggestion' || type == 'insight' || type == 'ai_reminder';
+
+  /// Check if this is a suggestion notification
+  bool get isSuggestion => type == 'suggestion';
+
+  /// Check if this is an insight notification
+  bool get isInsight => type == 'insight';
+
+  /// Check if this is an AI reminder
+  bool get isAIReminder => type == 'ai_reminder';
+
+  /// Get the priority from notification data (high, medium, low)
+  String get priority => data?['priority'] ?? 'medium';
+
+  /// Check if this is a high-priority notification
+  bool get isHighPriority => priority == 'high';
+
+  /// Get the suggested action type from notification data
+  String? get suggestedActionType => data?['actionType'];
+
+  /// Get notification category for grouping
+  String get category {
+    if (isProactive) return 'ai_assistant';
+    if (type == 'friend_request' || type == 'friend_accepted') return 'social';
+    if (type == 'achievement' || type == 'badge') return 'gamification';
+    if (type == 'message' || type == 'group_message') return 'messages';
+    if (type == 'study_reminder') return 'study';
+    return 'system';
+  }
 }
 
 class NotificationSettings {

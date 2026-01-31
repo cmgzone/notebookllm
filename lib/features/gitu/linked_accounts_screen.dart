@@ -174,8 +174,9 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
     if (ok != true) return;
     try {
       final telegramUserId = controller.text.trim();
-      if (telegramUserId.isEmpty)
+      if (telegramUserId.isEmpty) {
         throw Exception('Telegram User ID is required');
+      }
       await ref.read(identityServiceProvider).link('telegram', telegramUserId);
       ref.invalidate(linkedAccountsProvider);
       messenger.showSnackBar(const SnackBar(content: Text('Telegram linked')));

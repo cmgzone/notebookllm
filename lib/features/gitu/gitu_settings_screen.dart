@@ -5,6 +5,7 @@ import '../../core/ai/ai_models_provider.dart';
 import '../../theme/app_theme.dart';
 import 'gitu_settings_provider.dart';
 import 'gitu_settings_model.dart';
+import 'gitu_proactive_dashboard.dart';
 
 import 'whatsapp_connect_dialog.dart';
 
@@ -43,6 +44,9 @@ class GituSettingsScreen extends ConsumerWidget {
               _buildEnableSection(context, ref, settings),
               const SizedBox(height: 20),
               if (settings.enabled) ...[
+                // Proactive Dashboard - The main proactive insights feature
+                const GituProactiveDashboard(),
+                const SizedBox(height: 20),
                 _buildConnectionStatusCard(context, ref, settings),
                 const SizedBox(height: 20),
                 _buildApiKeySection(context, ref, settings),
@@ -85,7 +89,8 @@ class GituSettingsScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('API Configuration', style: Theme.of(context).textTheme.titleMedium),
+        Text('API Configuration',
+            style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         Card(
           child: Column(
@@ -96,13 +101,15 @@ class GituSettingsScreen extends ConsumerWidget {
                   if (val == null) return;
                   ref
                       .read(gituSettingsProvider.notifier)
-                      .updateModelPreferences(prefs.copyWith(apiKeySource: val));
+                      .updateModelPreferences(
+                          prefs.copyWith(apiKeySource: val));
                 },
                 child: const Column(
                   children: [
                     RadioListTile<String>(
                       title: Text('Use Platform Keys'),
-                      subtitle: Text('Use standard limits included in your plan'),
+                      subtitle:
+                          Text('Use standard limits included in your plan'),
                       value: 'platform',
                     ),
                     RadioListTile<String>(
@@ -133,9 +140,8 @@ class GituSettingsScreen extends ConsumerWidget {
             onChanged: (val) {
               final newKeys = Map<String, String>.from(prefs.personalKeys);
               newKeys['openrouter'] = val;
-              ref
-                  .read(gituSettingsProvider.notifier)
-                  .updateModelPreferences(prefs.copyWith(personalKeys: newKeys));
+              ref.read(gituSettingsProvider.notifier).updateModelPreferences(
+                  prefs.copyWith(personalKeys: newKeys));
             },
           ),
           const SizedBox(height: 12),
@@ -145,9 +151,8 @@ class GituSettingsScreen extends ConsumerWidget {
             onChanged: (val) {
               final newKeys = Map<String, String>.from(prefs.personalKeys);
               newKeys['gemini'] = val;
-              ref
-                  .read(gituSettingsProvider.notifier)
-                  .updateModelPreferences(prefs.copyWith(personalKeys: newKeys));
+              ref.read(gituSettingsProvider.notifier).updateModelPreferences(
+                  prefs.copyWith(personalKeys: newKeys));
             },
           ),
           const SizedBox(height: 12),
@@ -157,9 +162,8 @@ class GituSettingsScreen extends ConsumerWidget {
             onChanged: (val) {
               final newKeys = Map<String, String>.from(prefs.personalKeys);
               newKeys['anthropic'] = val;
-              ref
-                  .read(gituSettingsProvider.notifier)
-                  .updateModelPreferences(prefs.copyWith(personalKeys: newKeys));
+              ref.read(gituSettingsProvider.notifier).updateModelPreferences(
+                  prefs.copyWith(personalKeys: newKeys));
             },
           ),
         ],
@@ -186,7 +190,7 @@ class GituSettingsScreen extends ConsumerWidget {
               data: (modelsMap) {
                 final allModels = modelsMap.values.expand((x) => x).toList()
                   ..sort((a, b) => a.name.compareTo(b.name));
-                
+
                 return Column(
                   children: [
                     _ModelDropdown(
@@ -195,50 +199,64 @@ class GituSettingsScreen extends ConsumerWidget {
                       items: allModels,
                       onChanged: (val) {
                         if (val != null) {
-                          ref.read(gituSettingsProvider.notifier).updateModelPreferences(
-                              prefs.copyWith(defaultModel: val));
+                          ref
+                              .read(gituSettingsProvider.notifier)
+                              .updateModelPreferences(
+                                  prefs.copyWith(defaultModel: val));
                         }
                       },
                     ),
                     const Divider(),
                     _ModelDropdown(
                       label: 'Chat Model',
-                      value: prefs.taskSpecificModels['chat'] ?? prefs.defaultModel,
+                      value: prefs.taskSpecificModels['chat'] ??
+                          prefs.defaultModel,
                       items: allModels,
                       onChanged: (val) {
                         if (val != null) {
-                          final newTasks = Map<String, String>.from(prefs.taskSpecificModels);
+                          final newTasks = Map<String, String>.from(
+                              prefs.taskSpecificModels);
                           newTasks['chat'] = val;
-                          ref.read(gituSettingsProvider.notifier).updateModelPreferences(
-                              prefs.copyWith(taskSpecificModels: newTasks));
+                          ref
+                              .read(gituSettingsProvider.notifier)
+                              .updateModelPreferences(
+                                  prefs.copyWith(taskSpecificModels: newTasks));
                         }
                       },
                     ),
                     const SizedBox(height: 12),
                     _ModelDropdown(
                       label: 'Coding Model',
-                      value: prefs.taskSpecificModels['coding'] ?? prefs.defaultModel,
+                      value: prefs.taskSpecificModels['coding'] ??
+                          prefs.defaultModel,
                       items: allModels,
                       onChanged: (val) {
                         if (val != null) {
-                          final newTasks = Map<String, String>.from(prefs.taskSpecificModels);
+                          final newTasks = Map<String, String>.from(
+                              prefs.taskSpecificModels);
                           newTasks['coding'] = val;
-                          ref.read(gituSettingsProvider.notifier).updateModelPreferences(
-                              prefs.copyWith(taskSpecificModels: newTasks));
+                          ref
+                              .read(gituSettingsProvider.notifier)
+                              .updateModelPreferences(
+                                  prefs.copyWith(taskSpecificModels: newTasks));
                         }
                       },
                     ),
                     const SizedBox(height: 12),
                     _ModelDropdown(
                       label: 'Research Model',
-                      value: prefs.taskSpecificModels['research'] ?? prefs.defaultModel,
+                      value: prefs.taskSpecificModels['research'] ??
+                          prefs.defaultModel,
                       items: allModels,
                       onChanged: (val) {
                         if (val != null) {
-                          final newTasks = Map<String, String>.from(prefs.taskSpecificModels);
+                          final newTasks = Map<String, String>.from(
+                              prefs.taskSpecificModels);
                           newTasks['research'] = val;
-                          ref.read(gituSettingsProvider.notifier).updateModelPreferences(
-                              prefs.copyWith(taskSpecificModels: newTasks));
+                          ref
+                              .read(gituSettingsProvider.notifier)
+                              .updateModelPreferences(
+                                  prefs.copyWith(taskSpecificModels: newTasks));
                         }
                       },
                     ),
@@ -482,7 +500,8 @@ class _ModelDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final exists = items.any((m) => m.id == value);
-    final effectiveValue = exists ? value : (items.isNotEmpty ? items.first.id : null);
+    final effectiveValue =
+        exists ? value : (items.isNotEmpty ? items.first.id : null);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

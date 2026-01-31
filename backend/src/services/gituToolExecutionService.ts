@@ -232,6 +232,29 @@ class GituToolExecutionService {
             }
         }
 
+        // Swarm/Research-related queries → force deploy_swarm
+        if (availableTools.includes('deploy_swarm')) {
+            const swarmPatterns = [
+                /\b(start|deploy|create)\b.*(swarm|team|agent\s+group)/i,
+                /\b(research|investigate|analyze)\b.*(deep|comprehensive|thorough|in-depth)/i,
+                /\b(deep\s+dive)\b/i,
+                /^research\s+(.*)/i, // Matches "Research <topic>" directly
+            ];
+            for (const pattern of swarmPatterns) {
+                if (pattern.test(msg)) {
+                    // Extract the objective from the message if possible, or use full message
+                    // Simple heuristic: if "research <X>", X is objective. Else full msg.
+                    let objective = userMessage;
+                    const researchMatch = msg.match(/^research\s+(.*)/i);
+                    if (researchMatch) {
+                        objective = researchMatch[1];
+                    }
+
+                    return { name: 'deploy_swarm', arguments: { objective } };
+                }
+            }
+        }
+
         return null;
     }
 

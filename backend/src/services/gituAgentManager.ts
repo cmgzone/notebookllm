@@ -18,13 +18,28 @@ export interface GituAgent {
   updatedAt: Date;
 }
 
+
+
+/**
+ * Configuration for spawning a specialized agent
+ */
+export interface AgentConfig {
+  role: 'autonomous_agent';
+  focus: string; // e.g., "coding", "research"
+  missionId?: string;
+  parentAgentId?: string;
+  systemPromptOverride?: string;
+  autoLoadPlugins?: boolean;
+  initialMemory?: Record<string, any>;
+}
+
 export class GituAgentManager {
-  private readonly MAX_AGENTS_PER_USER = 100;
+  private readonly MAX_AGENTS_PER_USER = 100; // Increased limit for swarms
 
   /**
    * Spawn a new autonomous agent.
    */
-  async spawnAgent(userId: string, task: string, parentAgentId?: string, memory: Record<string, any> = {}): Promise<GituAgent> {
+  async spawnAgent(userId: string, task: string, config: AgentConfig): Promise<GituAgent> {
     // Check limit
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM gitu_agents WHERE user_id = $1 AND status NOT IN ('completed', 'failed')`,
@@ -37,11 +52,21 @@ export class GituAgentManager {
     }
 
     const id = uuidv4();
+
+    // Initialize memory with config context
+    const memory = {
+      history: [],
+      focus: config.focus,
+      missionId: config.missionId,
+      autoLoadPlugins: config.autoLoadPlugins ?? true,
+      ...config.initialMemory
+    };
+
     const result = await pool.query(
       `INSERT INTO gitu_agents (id, user_id, parent_agent_id, task, status, memory)
-       VALUES ($1, $2, $3, $4, 'pending', $5)
-       RETURNING *`,
-      [id, userId, parentAgentId, task, JSON.stringify(memory)]
+         VALUES ($1, $2, $3, $4, 'pending', $5)
+         RETURNING *`,
+      [id, userId, config.parentAgentId, task, JSON.stringify(memory)]
     );
 
     return this.mapRowToAgent(result.rows[0]);

@@ -27,6 +27,8 @@ import { gituAIRouter } from '../services/gituAIRouter.js';
 import pool from '../config/database.js';
 
 import { gituAgentManager } from '../services/gituAgentManager.js';
+import { gituAgentOrchestrator } from '../services/gituAgentOrchestrator.js';
+import { gituMissionControl } from '../services/gituMissionControl.js';
 
 // ==================== INTERFACES ====================
 
@@ -325,7 +327,11 @@ class WhatsAppAdapter {
                     }
                     await this.sendMessage(remoteJid, `🤖 Spawning agent for: "${args}"...`);
                     try {
-                        const agent = await gituAgentManager.spawnAgent(userId, args);
+                        const agent = await gituAgentManager.spawnAgent(userId, args, {
+                            role: 'autonomous_agent',
+                            focus: 'general',
+                            autoLoadPlugins: true
+                        });
                         await this.sendMessage(remoteJid, `✅ Agent spawned! ID: ${agent.id.substring(0, 8)}\nI will notify you when it completes.`);
                     } catch (e: any) {
                         await this.sendMessage(remoteJid, `❌ Failed to spawn agent: ${e.message}`);
@@ -347,6 +353,44 @@ class WhatsAppAdapter {
                 }
 
                 await this.sendMessage(remoteJid, 'ℹ️ Available commands:\n/agent spawn <task>\n/agent list');
+                return;
+            }
+
+            // ================== SWARM HANDLING ==================
+            if (text.startsWith('/swarm')) {
+                const parts = text.split(' ');
+                const command = parts[1]; // status or task
+                const args = parts.slice(1).join(' ');
+
+                if (command === 'status') {
+                    try {
+                        const missions = await gituMissionControl.listActiveMissions(userId);
+                        if (missions.length === 0) {
+                            await this.sendMessage(remoteJid, 'No active swarm missions.');
+                            return;
+                        }
+                        const list = missions.map(m =>
+                            `- *${m.name}*\n  Status: ${m.status.toUpperCase()}\n  Agents: ${m.agentCount}`
+                        ).join('\n\n');
+                        await this.sendMessage(remoteJid, `🛸 *Active Swarms:*\n\n${list}`);
+                    } catch (e: any) {
+                        await this.sendMessage(remoteJid, `❌ Error: ${e.message}`);
+                    }
+                    return;
+                }
+
+                if (!args) {
+                    await this.sendMessage(remoteJid, '⚠️ Usage: /swarm <complex objective>');
+                    return;
+                }
+
+                await this.sendMessage(remoteJid, `🛸 Deploying Swarm: "${args}"...`);
+                try {
+                    const mission = await gituAgentOrchestrator.createMission(userId, args);
+                    await this.sendMessage(remoteJid, `✅ **Swarm Deployed!**\nMission ID: ${mission.id.substring(0, 8)}\nI will notify you when finished.`);
+                } catch (e: any) {
+                    await this.sendMessage(remoteJid, `❌ Failed to deploy swarm: ${e.message}`);
+                }
                 return;
             }
             // ======================================================

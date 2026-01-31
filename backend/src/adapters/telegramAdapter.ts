@@ -12,6 +12,8 @@ import { gituSessionService } from '../services/gituSessionService.js';
 import { gituAIRouter } from '../services/gituAIRouter.js';
 import { gituPermissionManager } from '../services/gituPermissionManager.js';
 import { gituAgentManager } from '../services/gituAgentManager.js';
+import { gituAgentOrchestrator } from '../services/gituAgentOrchestrator.js';
+import { gituMissionControl } from '../services/gituMissionControl.js';
 import { gituToolExecutionService } from '../services/gituToolExecutionService.js';
 import { mcpUserSettingsService } from '../services/mcpUserSettingsService.js';
 import pool from '../config/database.js';
@@ -204,7 +206,10 @@ Use /help to see available commands.
 /notebooks - List your notebooks
 /session - View current session info
 /clear - Clear conversation history
+/clear - Clear conversation history
 /settings - View your settings
+/swarm <task> - Deploy an intelligent agent swarm
+/agent spawn <task> - Spawn a single background agent
 
 You can also just chat with me naturally! I'll understand your requests and help you accomplish tasks.
       `.trim();
@@ -409,7 +414,11 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
             return;
           }
           await this.sendMessage(chatId, { text: `🤖 Spawning agent for: "${args}"...` });
-          const agent = await gituAgentManager.spawnAgent(userId, args);
+          const agent = await gituAgentManager.spawnAgent(userId, args, {
+            role: 'autonomous_agent',
+            focus: 'general',
+            autoLoadPlugins: true
+          });
           await this.sendMessage(chatId, { text: `✅ Agent spawned! ID: ${agent.id.substring(0, 8)}\nI will notify you when it completes.` });
           return;
         }

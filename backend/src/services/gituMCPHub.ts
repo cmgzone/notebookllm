@@ -1,5 +1,6 @@
 import { mcpLimitsService } from './mcpLimitsService.js';
 import { mcpUserSettingsService } from './mcpUserSettingsService.js';
+import { gituAgentOrchestrator } from './gituAgentOrchestrator.js';
 
 export interface MCPToolParameter {
   type: string;
@@ -39,7 +40,29 @@ class GituMCPHub {
   private tools: Map<string, MCPTool> = new Map();
 
   constructor() {
-    // We will register built-in tools here or via a separate initialization method
+    // Register built-in tools
+    this.registerTool({
+      name: 'deploy_swarm',
+      description: 'Deploys a multi-agent swarm to execute a complex objective (e.g. comprehensive research, multi-step analysis). Use this when the user asks to "start a swarm", "research deep", or "agent team".',
+      schema: {
+        type: 'object',
+        properties: {
+          objective: {
+            type: 'string',
+            description: 'The complex goal for the swarm to achieve'
+          }
+        },
+        required: ['objective']
+      },
+      handler: async (args, context) => {
+        const mission = await gituAgentOrchestrator.createMission(context.userId, args.objective);
+        return {
+          success: true,
+          missionId: mission.id,
+          message: `Swarm deployed for objective: "${args.objective}". Status: ${mission.status}`
+        };
+      }
+    });
   }
 
   /**
@@ -57,7 +80,7 @@ class GituMCPHub {
    */
   async listTools(userId: string): Promise<MCPToolDefinition[]> {
     const definitions: MCPToolDefinition[] = [];
-    
+
     // In the future, we might filter tools based on user permissions or connected servers
     for (const tool of this.tools.values()) {
       definitions.push({
@@ -85,7 +108,7 @@ class GituMCPHub {
     try {
       // 2. Execution
       const result = await tool.handler(args, context);
-      
+
       // 3. Post-execution tracking (if needed, e.g. logging usage)
       await this.trackUsage(tool, context.userId);
 
@@ -108,7 +131,7 @@ class GituMCPHub {
     }
 
     if (quota.apiCallsRemaining <= 0) {
-       throw new Error('Daily API call limit reached');
+      throw new Error('Daily API call limit reached');
     }
 
     if (tool.requiresPremium && !quota.isPremium) {

@@ -10,15 +10,55 @@ class GmailConnectionScreen extends ConsumerStatefulWidget {
   const GmailConnectionScreen({super.key});
 
   @override
-  ConsumerState<GmailConnectionScreen> createState() => _GmailConnectionScreenState();
+  ConsumerState<GmailConnectionScreen> createState() =>
+      _GmailConnectionScreenState();
 }
 
 class _GmailConnectionScreenState extends ConsumerState<GmailConnectionScreen> {
   bool _busy = false;
+  bool _polling = false;
 
   Future<void> _refresh() async {
     ref.invalidate(gmailStatusProvider);
     await ref.read(gmailStatusProvider.future);
+  }
+
+  void _startPolling() {
+    if (_polling) return;
+    _polling = true;
+    _pollForConnection();
+  }
+
+  void _stopPolling() {
+    _polling = false;
+  }
+
+  Future<void> _pollForConnection() async {
+    while (_polling && mounted) {
+      await Future.delayed(const Duration(seconds: 5));
+      if (!_polling || !mounted) break;
+      try {
+        ref.invalidate(gmailStatusProvider);
+        final status = await ref.read(gmailStatusProvider.future);
+        if (status.connected) {
+          _stopPolling();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Gmail connected successfully!')),
+            );
+          }
+          break;
+        }
+      } catch (_) {
+        // Silently retry
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopPolling();
+    super.dispose();
   }
 
   Future<void> _connect() async {
@@ -35,11 +75,15 @@ class _GmailConnectionScreenState extends ConsumerState<GmailConnectionScreen> {
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Finish signing in, then come back and tap Refresh')),
+        const SnackBar(
+            content: Text(
+                "Complete sign-in in your browser. We'll detect it automatically.")),
       );
+      _startPolling();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gmail connect failed: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Gmail connect failed: $e')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -53,8 +97,12 @@ class _GmailConnectionScreenState extends ConsumerState<GmailConnectionScreen> {
         title: const Text('Disconnect Gmail'),
         content: const Text('Remove Gmail access for this account?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Disconnect')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Disconnect')),
         ],
       ),
     );
@@ -66,10 +114,12 @@ class _GmailConnectionScreenState extends ConsumerState<GmailConnectionScreen> {
       await ref.read(gmailServiceProvider).disconnect();
       await _refresh();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gmail disconnected')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Gmail disconnected')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Disconnect failed: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Disconnect failed: $e')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -82,7 +132,9 @@ class _GmailConnectionScreenState extends ConsumerState<GmailConnectionScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        flexibleSpace: Container(decoration: const BoxDecoration(gradient: AppTheme.premiumGradient)),
+        flexibleSpace: Container(
+            decoration:
+                const BoxDecoration(gradient: AppTheme.premiumGradient)),
         title: const Text(
           'Gmail Connection',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -104,7 +156,8 @@ class _GmailConnectionScreenState extends ConsumerState<GmailConnectionScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(LucideIcons.alertCircle, size: 48, color: Colors.red),
+                const Icon(LucideIcons.alertCircle,
+                    size: 48, color: Colors.red),
                 const SizedBox(height: 12),
                 Text('Error: $err'),
                 const SizedBox(height: 12),
@@ -129,7 +182,8 @@ class _GmailConnectionScreenState extends ConsumerState<GmailConnectionScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(LucideIcons.mail, color: theme.colorScheme.primary),
+                        Icon(LucideIcons.mail,
+                            color: theme.colorScheme.primary),
                         const SizedBox(width: 12),
                         const Expanded(
                           child: Text(
@@ -152,27 +206,42 @@ class _GmailConnectionScreenState extends ConsumerState<GmailConnectionScreen> {
                         Row(
                           children: [
                             Icon(
-                              status.connected ? LucideIcons.checkCircle2 : LucideIcons.xCircle,
-                              color: status.connected ? Colors.green : Colors.red,
+                              status.connected
+                                  ? LucideIcons.checkCircle2
+                                  : LucideIcons.xCircle,
+                              color:
+                                  status.connected ? Colors.green : Colors.red,
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                status.connected ? 'Connected' : 'Not Connected',
-                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                status.connected
+                                    ? 'Connected'
+                                    : 'Not Connected',
+                                style: theme.textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
                               ),
                             ),
-                            if (_busy) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                            if (_busy)
+                              const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2)),
                           ],
                         ),
                         const SizedBox(height: 12),
                         if (status.connected) ...[
-                          if (info?.email != null) Text('Account: ${info!.email}'),
+                          if (info?.email != null)
+                            Text('Account: ${info!.email}'),
                           if (info?.connectedAt != null)
-                            Text('Connected: ${timeago.format(info!.connectedAt!)}'),
+                            Text(
+                                'Connected: ${timeago.format(info!.connectedAt!)}'),
                           if (info?.lastUsedAt != null)
-                            Text('Last used: ${timeago.format(info!.lastUsedAt!)}'),
-                          if (info?.scopes != null && info!.scopes!.isNotEmpty) ...[
+                            Text(
+                                'Last used: ${timeago.format(info!.lastUsedAt!)}'),
+                          if (info?.scopes != null &&
+                              info!.scopes!.isNotEmpty) ...[
                             const SizedBox(height: 12),
                             Text('Scopes', style: theme.textTheme.labelLarge),
                             const SizedBox(height: 6),
@@ -194,7 +263,9 @@ class _GmailConnectionScreenState extends ConsumerState<GmailConnectionScreen> {
                               onPressed: _busy ? null : _connect,
                               icon: const Icon(LucideIcons.link),
                               label: const Text('Connect Gmail'),
-                              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                              style: ElevatedButton.styleFrom(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 14)),
                             ),
                           ),
                         ],

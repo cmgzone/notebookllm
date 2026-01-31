@@ -21,6 +21,7 @@ import { gituGmailManager } from '../services/gituGmailManager.js';
 import { gituShopifyManager } from '../services/gituShopifyManager.js';
 import { gituAgentManager } from '../services/gituAgentManager.js';
 import { gituMemoryService } from '../services/gituMemoryService.js';
+import { gituProactiveService } from '../services/gituProactiveService.js';
 import { whatsappAdapter } from '../adapters/whatsappAdapter.js';
 import {
   listMessages as gmailList,
@@ -1746,3 +1747,168 @@ router.post('/shopify/disconnect', async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: 'Failed to disconnect Shopify', message: error.message });
   }
 });
+
+// ==================== PROACTIVE INSIGHTS ====================
+
+/**
+ * GET /proactive-insights
+ * Get aggregated proactive insights for the user
+ */
+router.get('/proactive-insights', async (req: AuthRequest, res: Response) => {
+  try {
+    const useCache = req.query.refresh !== 'true';
+    const insights = await gituProactiveService.getProactiveInsights(req.userId!, useCache);
+    res.json({ success: true, insights });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to get proactive insights', message: error.message });
+  }
+});
+
+/**
+ * GET /proactive-insights/gmail
+ * Get Gmail summary only
+ */
+router.get('/proactive-insights/gmail', async (req: AuthRequest, res: Response) => {
+  try {
+    const summary = await gituProactiveService.getGmailSummary(req.userId!);
+    res.json({ success: true, summary });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to get Gmail summary', message: error.message });
+  }
+});
+
+/**
+ * GET /proactive-insights/whatsapp
+ * Get WhatsApp summary only
+ */
+router.get('/proactive-insights/whatsapp', async (req: AuthRequest, res: Response) => {
+  try {
+    const summary = await gituProactiveService.getWhatsAppSummary(req.userId!);
+    res.json({ success: true, summary });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to get WhatsApp summary', message: error.message });
+  }
+});
+
+/**
+ * GET /proactive-insights/tasks
+ * Get scheduled tasks summary only
+ */
+router.get('/proactive-insights/tasks', async (req: AuthRequest, res: Response) => {
+  try {
+    const summary = await gituProactiveService.getTasksSummary(req.userId!);
+    res.json({ success: true, summary });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to get tasks summary', message: error.message });
+  }
+});
+
+/**
+ * GET /proactive-insights/suggestions
+ * Get AI-generated suggestions only
+ */
+router.get('/proactive-insights/suggestions', async (req: AuthRequest, res: Response) => {
+  try {
+    const suggestions = await gituProactiveService.generateSuggestions(req.userId!);
+    res.json({ success: true, suggestions });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to get suggestions', message: error.message });
+  }
+});
+
+/**
+ * GET /proactive-insights/patterns
+ * Get AI-analyzed usage patterns
+ */
+router.get('/proactive-insights/patterns', async (req: AuthRequest, res: Response) => {
+  try {
+    const patterns = await gituProactiveService.analyzePatterns(req.userId!);
+    res.json({ success: true, patterns });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to analyze patterns', message: error.message });
+  }
+});
+
+/**
+ * POST /proactive-insights/activity
+ * Record user activity for pattern analysis
+ */
+router.post('/proactive-insights/activity', async (req: AuthRequest, res: Response) => {
+  try {
+    const { activityType, metadata } = req.body;
+    if (!activityType || typeof activityType !== 'string') {
+      return res.status(400).json({ error: 'activityType is required' });
+    }
+    await gituProactiveService.recordActivity(req.userId!, activityType, metadata);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to record activity', message: error.message });
+  }
+});
+
+/**
+ * POST /proactive-insights/refresh
+ * Force refresh of proactive insights cache
+ */
+router.post('/proactive-insights/refresh', async (req: AuthRequest, res: Response) => {
+  try {
+    gituProactiveService.clearCache(req.userId!);
+    const insights = await gituProactiveService.getProactiveInsights(req.userId!, false);
+    res.json({ success: true, insights });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to refresh insights', message: error.message });
+  }
+});
+
+// ==================== SWARM MISSIONS ====================
+
+/**
+ * POST /mission
+ * Start a new Autonomous Swarm Mission
+ */
+router.post('/mission', async (req: AuthRequest, res: Response) => {
+  try {
+    const { objective } = req.body;
+    if (!objective || typeof objective !== 'string') {
+      return res.status(400).json({ error: 'objective is required' });
+    }
+
+    const mission = await gituProactiveService.startMission(req.userId!, objective);
+    res.status(201).json({ success: true, mission });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to start mission', message: error.message });
+  }
+});
+
+/**
+ * GET /mission/active
+ * data-stream of active missions (polled by frontend)
+ */
+router.get('/mission/active', async (req: AuthRequest, res: Response) => {
+  try {
+    const missions = await gituMissionControl.listActiveMissions(req.userId!);
+    res.json({ success: true, missions });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to list active missions', message: error.message });
+  }
+});
+
+/**
+ * GET /mission/:id
+ * Get details of a specific mission
+ */
+router.get('/mission/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const mission = await gituMissionControl.getMission(req.params.id);
+    if (!mission) return res.status(404).json({ error: 'Mission not found' });
+
+    // Authorization check
+    if (mission.userId !== req.userId) return res.status(403).json({ error: 'Access denied' });
+
+    res.json({ success: true, mission });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to get mission details', message: error.message });
+  }
+});
+
+export default router;

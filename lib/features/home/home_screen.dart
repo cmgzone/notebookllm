@@ -687,6 +687,14 @@ class _AppDrawer extends ConsumerWidget {
                           context.push('/language-learning');
                         },
                       ),
+                      _DrawerItem(
+                        icon: LucideIcons.bot,
+                        label: 'Gitu Assistant',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/gitu-chat');
+                        },
+                      ),
                       // Bloat features hidden for UI discipline
                       /*
                       _DrawerItem(
