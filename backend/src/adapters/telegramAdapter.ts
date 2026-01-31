@@ -539,8 +539,9 @@ _Click buttons below to change settings:_
     const chatId = msg.chat.id.toString();
     const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId;
 
-    // Handle /unlink command
-    if (msg.text && msg.text.startsWith('/unlink')) {
+    // Handle /unlink command (robust check)
+    const text = (msg.text || '').trim().toLowerCase();
+    if (text === '/unlink' || text === 'unlink' || text.startsWith('/unlink ')) {
       try {
         await pool.query(
           `UPDATE gitu_linked_accounts SET status = 'inactive' 
