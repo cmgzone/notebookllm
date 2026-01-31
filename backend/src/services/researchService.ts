@@ -43,7 +43,7 @@ const PROFESSIONAL_DOMAINS = ['microsoft.com', 'google.com', 'aws.amazon.com', '
 
 function getSourceCredibility(url: string): { credibility: string; score: number } {
     const lowerUrl = url.toLowerCase();
-    
+
     for (const domain of ACADEMIC_DOMAINS) {
         if (lowerUrl.includes(domain)) return { credibility: 'academic', score: 95 };
     }
@@ -88,7 +88,7 @@ function getTemplatePrompt(template: ResearchTemplate): string {
 }
 
 // Serper API for web search
-async function searchWeb(query: string, num: number = 5): Promise<any[]> {
+export async function searchWeb(query: string, num: number = 5): Promise<any[]> {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey) {
         throw new Error('Serper API key not configured');
@@ -98,7 +98,7 @@ async function searchWeb(query: string, num: number = 5): Promise<any[]> {
         const response = await axios.post(
             'https://google.serper.dev/search',
             { q: query, num },
-            { 
+            {
                 headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
                 timeout: 15000 // 15 second timeout
             }
@@ -110,7 +110,7 @@ async function searchWeb(query: string, num: number = 5): Promise<any[]> {
     }
 }
 
-async function searchImages(query: string, num: number = 5): Promise<string[]> {
+export async function searchImages(query: string, num: number = 5): Promise<string[]> {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey) return [];
 
@@ -118,7 +118,7 @@ async function searchImages(query: string, num: number = 5): Promise<string[]> {
         const response = await axios.post(
             'https://google.serper.dev/images',
             { q: query, num },
-            { 
+            {
                 headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
                 timeout: 15000 // 15 second timeout
             }
@@ -129,7 +129,7 @@ async function searchImages(query: string, num: number = 5): Promise<string[]> {
     }
 }
 
-async function searchVideos(query: string, num: number = 3): Promise<string[]> {
+export async function searchVideos(query: string, num: number = 3): Promise<string[]> {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey) return [];
 
@@ -137,7 +137,7 @@ async function searchVideos(query: string, num: number = 3): Promise<string[]> {
         const response = await axios.post(
             'https://google.serper.dev/videos',
             { q: query, num },
-            { 
+            {
                 headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
                 timeout: 15000 // 15 second timeout
             }
@@ -148,14 +148,14 @@ async function searchVideos(query: string, num: number = 3): Promise<string[]> {
     }
 }
 
-async function fetchPageContent(url: string): Promise<string> {
+export async function fetchPageContent(url: string): Promise<string> {
     try {
         const response = await axios.get(url, {
             timeout: 10000,
             maxContentLength: 100000, // Limit to 100KB
             headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ResearchBot/1.0)' }
         });
-        
+
         // Basic HTML to text extraction with strict limits
         let text = response.data;
         if (typeof text === 'string') {
@@ -224,8 +224,8 @@ async function synthesizeReport(
         ...s,
         content: s.content.substring(0, 1500) // Limit each source to 1.5KB
     }));
-    
-    const sourcesText = limitedSources.map((s, i) => 
+
+    const sourcesText = limitedSources.map((s, i) =>
         `Source ${i + 1} [${s.credibility.toUpperCase()} ${s.credibilityScore}%]: ${s.title}\nURL: ${s.url}\nContent: ${s.content}`
     ).join('\n\n---\n\n');
 
@@ -340,18 +340,18 @@ export async function performCloudResearch(
             if (sources.length >= depthConfig.maxSources) break;
 
             const progress = 0.2 + (0.5 * (completed / subQueries.length));
-            onProgress?.({ 
-                status: `Searching: "${subQuery}"...`, 
-                progress, 
+            onProgress?.({
+                status: `Searching: "${subQuery}"...`,
+                progress,
                 sources: [...sources],
                 images: [...allImages],
                 videos: [...allVideos],
-                isComplete: false 
+                isComplete: false
             });
 
             // Search web
             const results = await searchWeb(subQuery, depthConfig.sourcesPerQuery);
-            
+
             // Search media for sub-query
             const [subImages, subVideos] = await Promise.all([
                 searchImages(subQuery, 3),
@@ -384,24 +384,24 @@ export async function performCloudResearch(
         // Multi-hop for deep research
         if (config.depth === 'deep' && sources.length < depthConfig.maxSources) {
             onProgress?.({ status: 'Multi-hop: Exploring deeper...', progress: 0.65, sources, isComplete: false });
-            
+
             // Generate follow-up queries based on initial findings
             const followUpMessages: ChatMessage[] = [{
                 role: 'user',
                 content: `Based on initial research on "${query}", generate 3 follow-up search queries to explore deeper. Sources found: ${sources.slice(0, 5).map(s => s.title).join(', ')}. Return only queries, one per line.`
             }];
-            
+
             try {
                 const followUpResponse = await generateWithGemini(followUpMessages);
                 const followUpQueries = followUpResponse.split('\n').filter(q => q.trim()).slice(0, 3);
-                
+
                 for (const fq of followUpQueries) {
                     if (sources.length >= depthConfig.maxSources) break;
                     const results = await searchWeb(fq, 3);
                     for (const result of results) {
                         if (sources.length >= depthConfig.maxSources) break;
                         if (sources.some(s => s.url === result.link)) continue;
-                        
+
                         const { credibility, score } = getSourceCredibility(result.link);
                         sources.push({
                             title: result.title,
@@ -427,7 +427,7 @@ export async function performCloudResearch(
 
         // Synthesize report
         onProgress?.({ status: 'Synthesizing report...', progress: 0.8, sources, images: uniqueImages, videos: uniqueVideos, isComplete: false });
-        
+
         const report = await synthesizeReport(
             query,
             sources,
@@ -440,7 +440,7 @@ export async function performCloudResearch(
 
         // Save to database
         await pool.query('BEGIN');
-        
+
         await pool.query(
             `INSERT INTO research_sessions (id, user_id, notebook_id, query, report, depth, template, status)
              VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed')`,
@@ -461,7 +461,7 @@ export async function performCloudResearch(
 
         return { sessionId, report, sources };
     } catch (error: any) {
-        await pool.query('ROLLBACK').catch(() => {});
+        await pool.query('ROLLBACK').catch(() => { });
         console.error('Cloud research error:', error);
         throw error;
     }
@@ -474,7 +474,7 @@ export async function startBackgroundResearch(
     config: ResearchConfig
 ): Promise<string> {
     const jobId = uuidv4();
-    
+
     // Create job record
     await pool.query(
         `INSERT INTO research_jobs (id, user_id, query, config, status, created_at)
@@ -486,7 +486,7 @@ export async function startBackgroundResearch(
     setImmediate(async () => {
         try {
             await pool.query(`UPDATE research_jobs SET status = 'running' WHERE id = $1`, [jobId]);
-            
+
             const result = await performCloudResearch(userId, query, config, async (progress) => {
                 await pool.query(
                     `UPDATE research_jobs SET progress = $1, status_message = $2 WHERE id = $3`,

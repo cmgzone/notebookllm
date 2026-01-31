@@ -81,7 +81,8 @@ class _SwarmDashboardState extends ConsumerState<SwarmDashboard> {
         decoration: BoxDecoration(
           color: AppColors.cardBackground,
           border: Border(
-              bottom: BorderSide(color: AppColors.primary.withOpacity(0.3))),
+              bottom:
+                  BorderSide(color: AppColors.primary.withValues(alpha: 0.3))),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
