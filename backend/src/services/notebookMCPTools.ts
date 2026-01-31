@@ -143,10 +143,19 @@ const listSourcesTool: MCPTool = {
         targetNotebookId = exactMatch.rows[0].id;
       } else {
         // 2. Try partial match
-        const partialMatch = await pool.query(
+        let partialMatch = await pool.query(
           `SELECT id, title FROM notebooks WHERE user_id = $1 AND title ILIKE $2 ORDER BY updated_at DESC LIMIT 1`,
           [context.userId, `%${notebookName}%`]
         );
+
+        // 3. Try super-fuzzy match (handle "WHATS APP" -> "WhatsApp")
+        if (partialMatch.rows.length === 0 && notebookName.includes(' ')) {
+          const fuzzyName = `%${notebookName.split(' ').join('%')}%`;
+          partialMatch = await pool.query(
+            `SELECT id, title FROM notebooks WHERE user_id = $1 AND title ILIKE $2 ORDER BY updated_at DESC LIMIT 1`,
+            [context.userId, fuzzyName]
+          );
+        }
 
         if (partialMatch.rows.length > 0) {
           targetNotebookId = partialMatch.rows[0].id;
