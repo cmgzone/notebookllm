@@ -130,8 +130,9 @@ export class GituAgentManager {
       try {
         const result = await gituShellManager.execute(
           agent.userId,
-          command,
           {
+            command: command,
+            args: [],
             sandboxed: true
           }
         );
