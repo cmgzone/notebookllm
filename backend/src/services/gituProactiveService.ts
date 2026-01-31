@@ -528,11 +528,11 @@ class GituProactiveService {
             // Check for automation opportunities
             const frequentActionsResult = await pool.query(
                 `SELECT 
-           action->>'type' as action_type,
+           action::jsonb ->> 'type' as action_type,
            COUNT(*) as count
          FROM gitu_scheduled_tasks
          WHERE user_id = $1 AND enabled = true
-         GROUP BY action->>'type'
+         GROUP BY action::jsonb ->> 'type'
          ORDER BY count DESC
          LIMIT 3`,
                 [userId]

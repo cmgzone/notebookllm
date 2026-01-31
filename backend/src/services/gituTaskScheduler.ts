@@ -100,7 +100,7 @@ class GituTaskScheduler {
     }
 
     console.log('[Gitu Task Scheduler] Stopping...');
-    
+
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = undefined;
@@ -269,7 +269,7 @@ class GituTaskScheduler {
       // Format: "minute hour day month dayOfWeek"
       // Example: "0 9 * * *" = 9am daily
       // Example: "*/15 * * * *" = every 15 minutes
-      
+
       const parts = cronExpr.trim().split(/\s+/);
       if (parts.length !== 5) {
         console.warn(`[Gitu Task Scheduler] Invalid cron expression: ${cronExpr}`);
@@ -402,7 +402,7 @@ class GituTaskScheduler {
     if (updates.trigger !== undefined) {
       updateFields.push(`trigger = $${paramIndex++}`);
       values.push(JSON.stringify(updates.trigger));
-      
+
       // Recalculate next run time
       const nextRunAt = this.calculateNextRunTime({ ...task, trigger: updates.trigger });
       updateFields.push(`next_run_at = $${paramIndex++}`);
@@ -500,13 +500,26 @@ class GituTaskScheduler {
    * Map database row to ScheduledTask object.
    */
   private mapRowToTask(row: any): ScheduledTask {
+    const safeParse = (val: any) => {
+      if (typeof val !== 'string') return val;
+      // Only parse if it looks like a JSON object or array
+      if (val.trim().startsWith('{') || val.trim().startsWith('[')) {
+        try {
+          return JSON.parse(val);
+        } catch (e) {
+          return val;
+        }
+      }
+      return val;
+    };
+
     return {
       id: row.id,
       userId: row.user_id,
       name: row.name,
       description: row.description,
-      trigger: typeof row.trigger === 'string' ? JSON.parse(row.trigger) : row.trigger,
-      action: typeof row.action === 'string' ? JSON.parse(row.action) : row.action,
+      trigger: safeParse(row.trigger),
+      action: safeParse(row.action),
       enabled: row.enabled,
       lastRunAt: row.last_run_at ? new Date(row.last_run_at) : undefined,
       nextRunAt: row.next_run_at ? new Date(row.next_run_at) : undefined,
