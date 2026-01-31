@@ -65,6 +65,13 @@ class GituAgentOrchestrator {
             // Parse AI plan
             const plan = this.parsePlan(response.content);
 
+            // Ensure all tasks have a status of 'pending' if not provided by AI
+            plan.tasks = plan.tasks.map(t => ({
+                ...t,
+                status: t.status || 'pending',
+                dependencies: t.dependencies || []
+            }));
+
             // Update Mission Control with the plan
             await gituMissionControl.updateMissionState(mission.id, {
                 status: 'active',
@@ -134,6 +141,14 @@ class GituAgentOrchestrator {
         await gituMissionControl.updateMissionState(missionId, {
             contextUpdates: { plan }
         });
+
+        // Trigger immediate processing of the agent queue so the user doesn't wait for scheduler
+        // using the scheduler logic but manually triggered
+        try {
+            await gituAgentManager.processAgentQueue(userId);
+        } catch (e) {
+            console.error('[Orchestrator] Failed to trigger immediate agent processing', e);
+        }
     }
 
     /*
