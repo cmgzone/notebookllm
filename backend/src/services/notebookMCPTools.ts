@@ -95,7 +95,7 @@ const searchSourcesTool: MCPTool = {
              substring(s.content from 1 for 200) as snippet
       FROM sources s
       JOIN notebooks n ON s.notebook_id = n.id
-      WHERE n.user_id = $1 AND (s.title ILIKE $2 OR s.content ILIKE $2)
+      WHERE n.user_id = $1 AND (s.title ILIKE $2 OR s.content ILIKE $2 OR n.title ILIKE $2)
     `;
 
     if (notebookId) {
