@@ -60,6 +60,51 @@ class GituToolExecutionService {
 
         // Get available tools
         const tools = await gituMCPHub.listTools(userId);
+        const toolNames = tools.map(t => t.name);
+
+        // IMPORTANT: Detect common patterns and force tool execution
+        // This prevents AI from hallucinating when it should use tools
+        const forcedTool = this.detectForcedTool(userMessage, toolNames);
+        if (forcedTool) {
+            console.log(`[ToolExecution] Forcing tool call: ${forcedTool.name} for user request`);
+
+            // Execute the tool directly
+            const result = await this.executeTool(forcedTool, { userId, sessionId, notebookId });
+            toolsUsed.push(result);
+
+            // Now ask AI to format the result nicely
+            const formatPrompt = this.buildResultFormattingPrompt(userMessage, forcedTool.name, result);
+
+            const aiRequest: AIRequest = {
+                userId,
+                sessionId,
+                prompt: formatPrompt,
+                context: conversationHistory.map(turn => turn.content),
+                taskType: 'chat',
+                platform,
+                includeSystemPrompt: true,
+                includeTools: false, // Don't include tools for formatting step
+            };
+
+            try {
+                const aiResponse = await gituAIRouter.route(aiRequest);
+                return {
+                    response: aiResponse.content,
+                    toolsUsed,
+                    model: aiResponse.model,
+                    tokensUsed: aiResponse.tokensUsed,
+                };
+            } catch (error) {
+                // If AI fails, format the result ourselves
+                console.warn('[ToolExecution] AI formatting failed, using raw result');
+                return {
+                    response: this.formatToolResultFallback(forcedTool.name, result),
+                    toolsUsed,
+                    model: 'fallback',
+                    tokensUsed: 0,
+                };
+            }
+        }
 
         // Build tool instructions if tools are available
         let toolInstructions = '';
@@ -137,6 +182,105 @@ class GituToolExecutionService {
             model: selectedModel || 'unknown',
             tokensUsed,
         };
+    }
+
+    /**
+     * Detect if we should force a specific tool call based on user message.
+     * This bypasses AI tool selection which can fail or hallucinate.
+     */
+    private detectForcedTool(userMessage: string, availableTools: string[]): ToolCall | null {
+        const msg = userMessage.toLowerCase();
+
+        // Notebook-related queries → force list_notebooks
+        if (availableTools.includes('list_notebooks')) {
+            const notebookPatterns = [
+                /\b(list|show|what|tell me|get|my)\b.*(notebook|notebooks)/i,
+                /\bnotebook(s)?\b.*\b(have|list|show|access)/i,
+                /how many notebooks/i,
+                /^notebooks?$/i,
+            ];
+            for (const pattern of notebookPatterns) {
+                if (pattern.test(msg)) {
+                    return { name: 'list_notebooks', arguments: { limit: 20, offset: 0 } };
+                }
+            }
+        }
+
+        // Reminder-related queries → force list_reminders
+        if (availableTools.includes('list_reminders')) {
+            const reminderPatterns = [
+                /\b(list|show|what|my)\b.*(reminder|reminders)/i,
+                /^reminders?$/i,
+            ];
+            for (const pattern of reminderPatterns) {
+                if (pattern.test(msg)) {
+                    return { name: 'list_reminders', arguments: {} };
+                }
+            }
+        }
+
+        // Memory/fact-related queries → force recall_facts
+        if (availableTools.includes('recall_facts')) {
+            const factPatterns = [
+                /what (do you|did you) (know|remember) about me/i,
+                /\b(recall|remember|what).*(facts?|about me)/i,
+            ];
+            for (const pattern of factPatterns) {
+                if (pattern.test(msg)) {
+                    return { name: 'recall_facts', arguments: { limit: 10 } };
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Build a prompt to have AI format tool results nicely.
+     */
+    private buildResultFormattingPrompt(originalRequest: string, toolName: string, result: ToolResult): string {
+        const resultJson = JSON.stringify(result.result, null, 2);
+        return `The user asked: "${originalRequest}"
+
+I executed the ${toolName} tool and got this result:
+${resultJson}
+${result.error ? `Error: ${result.error}` : ''}
+
+Please provide a friendly, well-formatted response to the user based on this ACTUAL data. Do NOT make up or hallucinate any information - only use what is in the result above.`;
+    }
+
+    /**
+     * Format tool result as fallback when AI is unavailable.
+     */
+    private formatToolResultFallback(toolName: string, result: ToolResult): string {
+        if (result.error) {
+            return `❌ Error executing ${toolName}: ${result.error}`;
+        }
+
+        if (toolName === 'list_notebooks' && result.result?.notebooks) {
+            const notebooks = result.result.notebooks;
+            if (notebooks.length === 0) {
+                return "You don't have any notebooks yet. Create one in the app to get started!";
+            }
+            const lines = notebooks.map((nb: any, i: number) =>
+                `${i + 1}. **${nb.title}**${nb.is_agent_notebook ? ' [agent]' : ''} - ${nb.source_count || 0} sources`
+            );
+            return `📚 **Your Notebooks (${notebooks.length}):**\n\n${lines.join('\n')}`;
+        }
+
+        if (toolName === 'list_reminders' && result.result?.reminders) {
+            const reminders = result.result.reminders;
+            if (reminders.length === 0) {
+                return "You don't have any active reminders.";
+            }
+            const lines = reminders.map((r: any, i: number) =>
+                `${i + 1}. ${r.name} (${r.enabled ? '✅ active' : '❌ disabled'})`
+            );
+            return `⏰ **Your Reminders:**\n\n${lines.join('\n')}`;
+        }
+
+        // Generic fallback
+        return `Here's what I found:\n\`\`\`json\n${JSON.stringify(result.result, null, 2)}\n\`\`\``;
     }
 
     /**
