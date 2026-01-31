@@ -172,40 +172,68 @@ If you don't need a tool, just respond normally without the tool block.`;
 
     /**
      * Parse AI response for tool calls.
+     * Returns the tool call if found, or null if no tool call.
+     * IMPORTANT: If a tool call is found, any text after the tool block should be ignored
+     * because the AI may have "hallucinated" continuation text.
      */
     private parseToolCall(response: string): ToolCall | null {
-        // Look for tool call block
+        // Look for tool call block with backticks
         const toolMatch = response.match(/```tool\s*\n?([\s\S]*?)\n?```/);
 
-        if (!toolMatch) {
-            // Also try JSON-only format
-            const jsonMatch = response.match(/\{\s*"tool"\s*:\s*"([^"]+)"/);
-            if (jsonMatch) {
+        if (toolMatch) {
+            try {
+                const parsed = JSON.parse(toolMatch[1].trim());
+                if (parsed.tool) {
+                    console.log(`[ToolExecution] Detected tool call: ${parsed.tool}`);
+                    return {
+                        name: parsed.tool,
+                        arguments: parsed.args || {},
+                    };
+                }
+            } catch (e) {
+                console.warn('[ToolExecution] Failed to parse tool call from block:', e);
+            }
+        }
+
+        // Also try to find JSON directly (without backticks) - more lenient parsing
+        // Look for patterns like: {"tool": "...", "args": {...}}
+        const jsonPatterns = [
+            /\{\s*"tool"\s*:\s*"([^"]+)"\s*,\s*"args"\s*:\s*(\{[^}]*\})\s*\}/,
+            /\{\s*['"]tool['"]\s*:\s*['"]([^'"]+)['"]/
+        ];
+
+        for (const pattern of jsonPatterns) {
+            const match = response.match(pattern);
+            if (match) {
                 try {
-                    const parsed = JSON.parse(response.trim());
+                    // Try to extract the full JSON object
+                    const startIdx = response.indexOf('{', match.index);
+                    let braceCount = 0;
+                    let endIdx = startIdx;
+
+                    for (let i = startIdx; i < response.length; i++) {
+                        if (response[i] === '{') braceCount++;
+                        if (response[i] === '}') braceCount--;
+                        if (braceCount === 0) {
+                            endIdx = i + 1;
+                            break;
+                        }
+                    }
+
+                    const jsonStr = response.substring(startIdx, endIdx);
+                    const parsed = JSON.parse(jsonStr);
+
                     if (parsed.tool) {
+                        console.log(`[ToolExecution] Detected tool call (JSON format): ${parsed.tool}`);
                         return {
                             name: parsed.tool,
                             arguments: parsed.args || {},
                         };
                     }
                 } catch {
-                    // Not valid JSON
+                    // Continue to next pattern
                 }
             }
-            return null;
-        }
-
-        try {
-            const parsed = JSON.parse(toolMatch[1].trim());
-            if (parsed.tool) {
-                return {
-                    name: parsed.tool,
-                    arguments: parsed.args || {},
-                };
-            }
-        } catch (e) {
-            console.warn('[ToolExecution] Failed to parse tool call:', e);
         }
 
         return null;
