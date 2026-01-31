@@ -89,17 +89,21 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
   Future<void> connect() async {
     if (state.isConnected || state.isConnecting) return;
 
-    state = state.copyWith(isConnecting: true, error: null);
+    if (mounted) {
+      state = state.copyWith(isConnecting: true, error: null);
+    }
 
     try {
       final apiService = _ref.read(apiServiceProvider);
       final token = await apiService.getToken();
 
       if (token == null) {
-        state = state.copyWith(
-          isConnecting: false,
-          error: 'Authentication token not found',
-        );
+        if (mounted) {
+          state = state.copyWith(
+            isConnecting: false,
+            error: 'Authentication token not found',
+          );
+        }
         return;
       }
 
@@ -112,6 +116,9 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
 
       // WebSocket is mounted at /ws/gitu, not under /api
       final wsUrlStr = '$scheme://$host$port/ws/gitu?token=$token';
+      developer.log(
+          '📣 Connecting to Gitu WebSocket: $scheme://$host$port/ws/gitu',
+          name: 'GituChat');
       final wsUrl = Uri.parse(wsUrlStr);
 
       _channel =
@@ -119,7 +126,7 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
 
       // Connection timeout safety
       Future.delayed(const Duration(seconds: 15), () {
-        if (state.isConnecting && mounted) {
+        if (mounted && state.isConnecting) {
           _disconnect(
               error:
                   'Connection timed out. Please check your internet connection.');
@@ -149,7 +156,9 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
 
       switch (type) {
         case 'connected':
-          state = state.copyWith(isConnected: true, isConnecting: false);
+          if (mounted) {
+            state = state.copyWith(isConnected: true, isConnecting: false);
+          }
           break;
         case 'pong':
           // Pong received, connection alive
@@ -170,7 +179,9 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
           break;
         case 'error':
           final payload = data['payload'] as Map<String, dynamic>;
-          state = state.copyWith(error: payload['error'] as String?);
+          if (mounted) {
+            state = state.copyWith(error: payload['error'] as String?);
+          }
           break;
       }
     } catch (e) {
@@ -203,9 +214,11 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
   }
 
   void _addMessage(GituMessage message) {
-    state = state.copyWith(
-      messages: [...state.messages, message],
-    );
+    if (mounted) {
+      state = state.copyWith(
+        messages: [...state.messages, message],
+      );
+    }
   }
 
   void _startPing() {
@@ -220,11 +233,13 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
   void _disconnect({String? error}) {
     _pingTimer?.cancel();
     _channel = null;
-    state = state.copyWith(
-      isConnected: false,
-      isConnecting: false,
-      error: error,
-    );
+    if (mounted) {
+      state = state.copyWith(
+        isConnected: false,
+        isConnecting: false,
+        error: error,
+      );
+    }
   }
 
   void disconnect() {

@@ -41,6 +41,8 @@ class QuickAIModelSelector extends ConsumerWidget {
         final displayName = currentModel?.name ?? 'Select Model';
 
         return Container(
+          width: compact ? 60 : 200, // Give it a base width
+          constraints: const BoxConstraints(maxWidth: 300),
           margin: compact
               ? const EdgeInsets.symmetric(vertical: 4)
               : const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -58,14 +60,13 @@ class QuickAIModelSelector extends ConsumerWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
+              Flexible(
                 child: collapsed
                     ? Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.auto_awesome,
-                              size: compact ? 20 : 16,
-                              color: scheme.primary),
+                              size: compact ? 20 : 16, color: scheme.primary),
                           if (!compact) const SizedBox(width: 6),
                           Flexible(
                             child: Text(
@@ -114,87 +115,91 @@ class QuickAIModelSelector extends ConsumerWidget {
                         dropdownColor: scheme.surfaceContainer,
                         borderRadius: BorderRadius.circular(12),
                         items: [
-              // Gemini models
-              if (models['gemini']?.isNotEmpty == true) ...[
-                DropdownMenuItem<String>(
-                  enabled: false,
-                  value: '__gemini_header__',
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Text(
-                      'GEMINI',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: scheme.primary,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                  ),
-                ),
-                ...models['gemini']!.map((m) {
-                  return DropdownMenuItem<String>(
-                    value: m.id,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.auto_awesome,
-                            size: 14, color: Colors.blue),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            m.name,
-                            style: TextStyle(
-                                fontSize: 12, color: scheme.onSurface),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-              ],
-              // OpenRouter models
-              if (models['openrouter']?.isNotEmpty == true) ...[
-                DropdownMenuItem<String>(
-                  enabled: false,
-                  value: '__openrouter_header__',
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8, top: 8),
-                    child: Text(
-                      'OPENROUTER',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: scheme.primary,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                  ),
-                ),
-                ...models['openrouter']!.map((m) {
-                  return DropdownMenuItem<String>(
-                    value: m.id,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.model_training,
-                          size: 14,
-                          color: m.isPremium ? Colors.amber[700] : Colors.green,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            m.name + (m.isPremium ? ' 💎' : ''),
-                            style: TextStyle(
-                                fontSize: 12, color: scheme.onSurface),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-              ],
+                          // Gemini models
+                          if (models['gemini']?.isNotEmpty == true) ...[
+                            DropdownMenuItem<String>(
+                              enabled: false,
+                              value: '__gemini_header__',
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Text(
+                                  'GEMINI',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: scheme.primary,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            ...models['gemini']!.map((m) {
+                              return DropdownMenuItem<String>(
+                                value: m.id,
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.auto_awesome,
+                                        size: 14, color: Colors.blue),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        m.name,
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: scheme.onSurface),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
+                          // OpenRouter models
+                          if (models['openrouter']?.isNotEmpty == true) ...[
+                            DropdownMenuItem<String>(
+                              enabled: false,
+                              value: '__openrouter_header__',
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8, top: 8),
+                                child: Text(
+                                  'OPENROUTER',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: scheme.primary,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            ...models['openrouter']!.map((m) {
+                              return DropdownMenuItem<String>(
+                                value: m.id,
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.model_training,
+                                      size: 14,
+                                      color: m.isPremium
+                                          ? Colors.amber[700]
+                                          : Colors.green,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        m.name + (m.isPremium ? ' 💎' : ''),
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: scheme.onSurface),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
                         ],
                         onChanged: (val) async {
                           if (val != null && !val.startsWith('__')) {
@@ -206,9 +211,8 @@ class QuickAIModelSelector extends ConsumerWidget {
                               }
                             }
                             if (model != null) {
-                              ref
-                                  .read(selectedAIModelProvider.notifier)
-                                  .state = val;
+                              ref.read(selectedAIModelProvider.notifier).state =
+                                  val;
                               await AISettingsService.setModel(val);
 
                               final provider = model.provider;
@@ -217,12 +221,14 @@ class QuickAIModelSelector extends ConsumerWidget {
                                   provider == 'anthropic') {
                                 mappedProvider = 'openrouter';
                               }
-                              await AISettingsService.setProvider(mappedProvider);
+                              await AISettingsService.setProvider(
+                                  mappedProvider);
 
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('✓ Switched to ${model.name}'),
+                                    content:
+                                        Text('✓ Switched to ${model.name}'),
                                     duration: const Duration(seconds: 2),
                                     behavior: SnackBarBehavior.floating,
                                     backgroundColor: scheme.primary,
@@ -233,7 +239,7 @@ class QuickAIModelSelector extends ConsumerWidget {
                           }
                         },
                       ),
-            ),
+              ),
               const SizedBox(width: 4),
               InkWell(
                 borderRadius: BorderRadius.circular(16),

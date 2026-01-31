@@ -64,7 +64,7 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
       if (user == null) {
         debugPrint('⚠️ NotebookNotifier loadNotebooks: No user logged in');
         debugPrint('⚠️ Auth status: ${authState.status}');
-        state = [];
+        if (mounted) state = [];
         _isLoading = false;
         return;
       }
@@ -82,6 +82,7 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
         debugPrint('   1. User has no notebooks in database');
         debugPrint('   2. Token is invalid/expired');
         debugPrint('   3. User ID mismatch between app and backend');
+        if (!mounted) return; // Guard added
         state = [];
         _isLoading = false;
         return;
@@ -134,8 +135,10 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
         );
       }).toList();
 
-      state = loadedNotebooks;
-      debugPrint('✅ Loaded ${state.length} notebooks into state');
+      if (mounted) {
+        state = loadedNotebooks;
+        debugPrint('✅ Loaded ${state.length} notebooks into state');
+      }
     } catch (e, stackTrace) {
       debugPrint('❌ Error loading notebooks: $e');
       debugPrint('Stack trace: $stackTrace');
@@ -186,9 +189,11 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
       );
 
       // Update state immediately with the new notebook
-      final currentState = [...state];
-      state = [notebook, ...currentState];
-      debugPrint('✅ Notebook added to state, count=${state.length}');
+      if (mounted) {
+        final currentState = [...state];
+        state = [notebook, ...currentState];
+        debugPrint('✅ Notebook added to state, count=${state.length}');
+      }
 
       // Track gamification (don't await to avoid blocking)
       ref.read(gamificationProvider.notifier).trackNotebookCreated();
@@ -208,7 +213,9 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
     try {
       final apiService = ref.read(apiServiceProvider);
       await apiService.deleteNotebook(notebookId);
-      state = state.where((n) => n.id != notebookId).toList();
+      if (mounted) {
+        state = state.where((n) => n.id != notebookId).toList();
+      }
     } catch (e) {
       debugPrint('Error deleting notebook: $e');
     }
@@ -224,15 +231,17 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
         title: newTitle,
       );
 
-      state = state.map((n) {
-        if (n.id == notebookId) {
-          return n.copyWith(
-            title: newTitle,
-            updatedAt: now,
-          );
-        }
-        return n;
-      }).toList();
+      if (mounted) {
+        state = state.map((n) {
+          if (n.id == notebookId) {
+            return n.copyWith(
+              title: newTitle,
+              updatedAt: now,
+            );
+          }
+          return n;
+        }).toList();
+      }
     } catch (e) {
       debugPrint('Error updating notebook: $e');
     }
@@ -249,15 +258,17 @@ class NotebookNotifier extends StateNotifier<List<Notebook>> {
         coverImage: coverImage,
       );
 
-      state = state.map((n) {
-        if (n.id == notebookId) {
-          return n.copyWith(
-            coverImage: coverImage,
-            updatedAt: now,
-          );
-        }
-        return n;
-      }).toList();
+      if (mounted) {
+        state = state.map((n) {
+          if (n.id == notebookId) {
+            return n.copyWith(
+              coverImage: coverImage,
+              updatedAt: now,
+            );
+          }
+          return n;
+        }).toList();
+      }
 
       debugPrint('Notebook cover updated: $notebookId');
     } catch (e) {
