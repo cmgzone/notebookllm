@@ -12,6 +12,8 @@ import { gituSessionService } from '../services/gituSessionService.js';
 import { gituAIRouter } from '../services/gituAIRouter.js';
 import { gituPermissionManager } from '../services/gituPermissionManager.js';
 import { gituAgentManager } from '../services/gituAgentManager.js';
+import { gituToolExecutionService } from '../services/gituToolExecutionService.js';
+import { mcpUserSettingsService } from '../services/mcpUserSettingsService.js';
 import pool from '../config/database.js';
 
 // ==================== INTERFACES ====================
@@ -226,7 +228,7 @@ You can also just chat with me naturally! I'll understand your requests and help
         const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId.toString();
         const userId = await this.getUserIdFromChatId(platformUserId);
         const session = await gituSessionService.getActiveSession(userId, 'universal');
-        
+
         if (session) {
           const stats = await gituSessionService.getSessionStats(userId);
           const statusMessage = `
@@ -253,7 +255,7 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
         const errorMessage = error instanceof Error ? error.message : String(error);
         if (errorMessage.includes('not linked') || errorMessage.includes('Platform account not linked')) {
           await this.sendMessage(chatId.toString(), {
-            text: '❌ You need to link your Telegram account in the NotebookLLM app first.',
+            text: '❌ You need to link your Telegram account in the NotebookLLM app first. If linked, run /verify.',
           });
           return;
         }
@@ -270,7 +272,7 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
         const linked = await this.getLinkedAccountFromChatId(platformUserId);
         if (!linked.verified) {
           await this.sendMessage(chatId, {
-            text: 'Your Telegram account is linked but not verified.\n\nOpen NotebookLLM → Gitu → Linked Accounts and verify Telegram to enable notebook access.',
+            text: 'Your Telegram account is linked but not verified.\n\nPlease run /verify command here in this chat to verify ownership and enable access.',
           });
           return;
         }
@@ -343,12 +345,12 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
         const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId.toString();
         const userId = await this.getUserIdFromChatId(platformUserId);
         const session = await gituSessionService.getActiveSession(userId, 'universal');
-        
+
         if (session) {
           // Clear conversation history
           session.context.conversationHistory = [];
           await gituSessionService.updateSession(session.id, { context: session.context });
-          
+
           await this.sendMessage(chatId.toString(), {
             text: '✅ Conversation history cleared!',
           });
@@ -360,46 +362,172 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
       }
     });
 
+    // /verify command
+    this.bot.onText(/\/verify/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      try {
+        const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId;
+
+        // Check if linked
+        const userId = await this.getUserIdFromChatId(platformUserId);
+
+        // Verify
+        const { gituIdentityManager } = await import('../services/gituIdentityManager.js');
+        await gituIdentityManager.verifyAccount(userId, 'telegram', platformUserId);
+
+        await this.sendMessage(chatId, {
+          text: '✅ *Account Verified!*\n\nYou can now use Gitu features like /notebooks and chat with your AI assistant.',
+          markdown: '✅ *Account Verified!*\n\nYou can now use Gitu features like /notebooks and chat with your AI assistant.'
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('not linked')) {
+          await this.sendMessage(chatId, {
+            text: '❌ Your Telegram account is not linked to NotebookLLM yet.\n\nIn the Gitu app, go to Linked Accounts and add this Telegram ID.',
+          });
+        } else {
+          await this.sendMessage(chatId, { text: `❌ Verification failed: ${errorMessage}` });
+        }
+      }
+    });
+
     // /agent command
     this.bot.onText(/\/agent (.+)/, async (msg, match) => {
       const chatId = msg.chat.id.toString();
       try {
         const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId;
         const userId = await this.getUserIdFromChatId(platformUserId);
-        
+
         const fullCommand = match ? match[1] : '';
         const parts = fullCommand.split(' ');
         const subCommand = parts[0];
         const args = parts.slice(1).join(' ');
 
         if (subCommand === 'spawn' || subCommand === 'create') {
-            if (!args) {
-                await this.sendMessage(chatId, { text: '⚠️ Usage: /agent spawn <task description>' });
-                return;
-            }
-            await this.sendMessage(chatId, { text: `🤖 Spawning agent for: "${args}"...` });
-            const agent = await gituAgentManager.spawnAgent(userId, args);
-            await this.sendMessage(chatId, { text: `✅ Agent spawned! ID: ${agent.id.substring(0, 8)}\nI will notify you when it completes.` });
+          if (!args) {
+            await this.sendMessage(chatId, { text: '⚠️ Usage: /agent spawn <task description>' });
             return;
+          }
+          await this.sendMessage(chatId, { text: `🤖 Spawning agent for: "${args}"...` });
+          const agent = await gituAgentManager.spawnAgent(userId, args);
+          await this.sendMessage(chatId, { text: `✅ Agent spawned! ID: ${agent.id.substring(0, 8)}\nI will notify you when it completes.` });
+          return;
         }
 
         if (subCommand === 'list') {
-            const agents = await gituAgentManager.listAgents(userId);
-            if (agents.length === 0) {
-                await this.sendMessage(chatId, { text: 'No active agents found.' });
-                return;
-            }
-            const list = agents.map(a => 
-                `- *${a.task.substring(0, 30)}...*\n  Status: ${a.status}\n  ID: \`${a.id.substring(0, 8)}\``
-            ).join('\n\n');
-            await this.sendMessage(chatId, { markdown: `📋 *Your Agents:*\n\n${list}` });
+          const agents = await gituAgentManager.listAgents(userId);
+          if (agents.length === 0) {
+            await this.sendMessage(chatId, { text: 'No active agents found.' });
             return;
+          }
+          const list = agents.map(a =>
+            `- *${a.task.substring(0, 30)}...*\n  Status: ${a.status}\n  ID: \`${a.id.substring(0, 8)}\``
+          ).join('\n\n');
+          await this.sendMessage(chatId, { markdown: `📋 *Your Agents:*\n\n${list}` });
+          return;
         }
 
         await this.sendMessage(chatId, { text: 'ℹ️ Available commands:\n/agent spawn <task>\n/agent list' });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         await this.sendMessage(chatId, { text: `❌ Error: ${errorMessage}` });
+      }
+    });
+
+    // /sources command
+    this.bot.onText(/\/sources(.*)/, async (msg, match) => {
+      const chatId = msg.chat.id.toString();
+      try {
+        const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId;
+        const linked = await this.getLinkedAccountFromChatId(platformUserId);
+
+        if (!linked.verified) {
+          await this.sendMessage(chatId, { text: '❌ Please run /verify to enable access to sources.' });
+          return;
+        }
+
+        const query = match ? match[1].trim() : '';
+
+        // If query provided, search
+        if (query) {
+          await this.sendMessage(chatId, { text: `🔍 Searching sources for: "${query}"...` });
+          const result = await pool.query(
+            `SELECT s.id, s.title, s.type, n.title as notebook_title
+              FROM sources s
+              JOIN notebooks n ON s.notebook_id = n.id
+              WHERE n.user_id = $1 AND (s.title ILIKE $2 OR s.content ILIKE $2)
+              ORDER BY s.updated_at DESC LIMIT 5`,
+            [linked.userId, `%${query}%`]
+          );
+
+          if (result.rows.length === 0) {
+            await this.sendMessage(chatId, { text: 'No sources found matching your query.' });
+            return;
+          }
+
+          const list = result.rows.map((r: any) => `- *${r.title}* (${r.type || 'text'}) in _${r.notebook_title}_`).join('\n');
+          await this.sendMessage(chatId, { markdown: `found:\n${list}` });
+        } else {
+          // List recent
+          const result = await pool.query(
+            `SELECT s.id, s.title, s.type, n.title as notebook_title
+              FROM sources s
+              JOIN notebooks n ON s.notebook_id = n.id
+              WHERE n.user_id = $1
+              ORDER BY s.updated_at DESC LIMIT 10`,
+            [linked.userId]
+          );
+
+          if (result.rows.length === 0) {
+            await this.sendMessage(chatId, { text: 'No sources found. Add some in the app!' });
+            return;
+          }
+
+          const list = result.rows.map((r: any) => `- *${r.title}* (${r.type || 'text'})`).join('\n');
+          await this.sendMessage(chatId, { markdown: `📚 *Recent Sources:*\n\n${list}\n\nTip: Use \`/sources <query>\` to search.` });
+        }
+      } catch (error) {
+        await this.sendMessage(chatId, { text: '❌ Error listing sources.' });
+      }
+    });
+
+    // /settings command
+    this.bot.onText(/\/settings/, async (msg) => {
+      const chatId = msg.chat.id;
+      try {
+        const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId.toString();
+        const linked = await this.getLinkedAccountFromChatId(platformUserId);
+
+        if (!linked.verified) {
+          await this.sendMessage(chatId.toString(), { text: '❌ Please /verify your account to access settings.' });
+          return;
+        }
+
+        const settings = await mcpUserSettingsService.getSettings(linked.userId);
+        const analysisStatus = settings.codeAnalysisEnabled ? '✅ Enabled' : '❌ Disabled';
+
+        const text = `
+⚙️ *Gitu Settings*
+
+👤 *Account*: Verified
+🆔 *User ID*: \`${linked.userId.substring(0, 8)}...\`
+🧠 *Code Analysis*: ${analysisStatus}
+
+_Click buttons below to change settings:_
+          `.trim();
+
+        await this.sendMessage(chatId.toString(), {
+          markdown: text,
+          replyMarkup: {
+            inline_keyboard: [
+              [{ text: `${settings.codeAnalysisEnabled ? '🔴 Disable' : '🟢 Enable'} Code Analysis`, callback_data: 'settings:toggle_analysis' }],
+              [{ text: '🔄 Refresh', callback_data: 'settings:refresh' }]
+            ]
+          }
+        });
+
+      } catch (error) {
+        await this.sendMessage(chatId.toString(), { text: '❌ Error loading settings.' });
       }
     });
   }
@@ -410,7 +538,7 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
   private async handleIncomingMessage(msg: TelegramBot.Message): Promise<void> {
     const chatId = msg.chat.id.toString();
     const platformUserId = msg.from?.id ? msg.from.id.toString() : chatId;
-    
+
     // Skip if it's a command (already handled by command handlers)
     if (msg.text && msg.text.startsWith('/')) {
       return;
@@ -446,28 +574,33 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
     });
 
     const context = session.context.conversationHistory
-      .slice(-101, -1)
-      .map(m => `${m.role}: ${m.content}`);
+      .slice(-20)
+      .map(m => ({
+        role: m.role as 'user' | 'assistant' | 'system' | 'tool',
+        content: m.content
+      }));
 
-    const aiResponse = await gituAIRouter.route({
-      userId: normalizedMessage.userId,
-      sessionId: session.id,
-      prompt: userText,
+    // Use Tool Execution Service for smart responses
+    const result = await gituToolExecutionService.processWithTools(
+      normalizedMessage.userId,
+      userText,
       context,
-      taskType: 'chat',
-      useRetrieval: true, // Enable RAG so AI knows about notebooks/sources
-    });
+      {
+        platform: 'telegram',
+        sessionId: session.id,
+      }
+    );
 
     session.context.conversationHistory.push({
       role: 'assistant',
-      content: aiResponse.content,
+      content: result.response,
       timestamp: new Date(),
       platform: 'telegram',
     });
 
     await gituSessionService.updateSession(session.id, { context: session.context });
 
-    const parts = this.splitMessageText(aiResponse.content);
+    const parts = this.splitMessageText(result.response);
     for (const part of parts) {
       await this.sendMessage(chatId, { text: part });
     }
@@ -485,12 +618,55 @@ Last Activity: ${session.lastActivityAt.toLocaleString()}
     // Answer the callback query to remove loading state
     await this.bot.answerCallbackQuery(query.id);
 
-    // Handle different callback actions
     if (data && chatId) {
-      // TODO: Implement callback handling based on data
-      await this.sendMessage(chatId, {
-        text: `Button pressed: ${data}`,
-      });
+      if (data.startsWith('settings:')) {
+        try {
+          const parts = data.split(':');
+          const action = parts[1];
+
+          const platformUserId = query.from.id.toString();
+          const linked = await this.getLinkedAccountFromChatId(platformUserId);
+
+          if (action === 'toggle_analysis') {
+            const current = await mcpUserSettingsService.getSettings(linked.userId);
+            await mcpUserSettingsService.updateSettings(linked.userId, {
+              codeAnalysisEnabled: !current.codeAnalysisEnabled
+            });
+          }
+
+          // Refresh view for both 'refresh' and 'toggle_analysis'
+          const settings = await mcpUserSettingsService.getSettings(linked.userId);
+          const analysisStatus = settings.codeAnalysisEnabled ? '✅ Enabled' : '❌ Disabled';
+
+          const text = `
+⚙️ *Gitu Settings*
+
+👤 *Account*: Verified
+🆔 *User ID*: \`${linked.userId.substring(0, 8)}...\`
+🧠 *Code Analysis*: ${analysisStatus}
+
+_Click buttons below to change settings:_
+                `.trim();
+
+          await this.bot.editMessageText(text, {
+            chat_id: chatId,
+            message_id: query.message?.message_id,
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: `${settings.codeAnalysisEnabled ? '🔴 Disable' : '🟢 Enable'} Code Analysis`, callback_data: 'settings:toggle_analysis' }],
+                [{ text: '🔄 Refresh', callback_data: 'settings:refresh' }]
+              ]
+            }
+          });
+        } catch (error) {
+          console.error('Error handling settings callback:', error);
+        }
+      } else {
+        await this.sendMessage(chatId, {
+          text: `Button pressed: ${data}`,
+        });
+      }
     }
   }
 

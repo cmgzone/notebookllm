@@ -8,6 +8,7 @@
 
 import pool from '../config/database.js';
 import { generateWithGemini, generateWithOpenRouter, generateEmbedding } from './aiService.js';
+import { gituSystemPromptBuilder } from './gituSystemPromptBuilder.js';
 
 // ==================== INTERFACES ====================
 
@@ -58,6 +59,8 @@ export interface AIRequest {
   platformUserId?: string; // User ID on source platform
   metadata?: Record<string, any>; // Extra metadata
   useRetrieval?: boolean; // Enable RAG context injection
+  includeSystemPrompt?: boolean; // Include Gitu identity/context (default: true)
+  includeTools?: boolean; // Include tool definitions (default: true for chat)
 }
 
 /**
@@ -146,15 +149,15 @@ class GituAIRouter {
       );
 
       const models: Record<string, AIModel> = {};
-      
+
       for (const row of result.rows) {
         const dbModel = row as DBModel;
-        
+
         const inputCostPer1k = Number(dbModel.cost_input ?? 0) || 0;
         const outputCostPer1k = Number(dbModel.cost_output ?? 0) || 0;
         const avgCostPer1kTokens = (inputCostPer1k + outputCostPer1k) / 2;
         const contextWindow = typeof dbModel.context_window === 'number' && dbModel.context_window > 0 ? dbModel.context_window : 128000;
-        
+
         models[dbModel.model_id] = {
           provider: mapProviderName(dbModel.provider),
           modelId: dbModel.model_id,
@@ -162,7 +165,7 @@ class GituAIRouter {
           costPer1kTokens: avgCostPer1kTokens,
         };
       }
-      
+
       console.log(`[Gitu AI Router] Loaded ${Object.keys(models).length} models from database`);
       return models;
     } catch (error) {
@@ -177,16 +180,16 @@ class GituAIRouter {
    */
   private async getModels(): Promise<Record<string, AIModel>> {
     const now = Date.now();
-    
+
     // Check if cache is valid
     if (Object.keys(modelsCache).length > 0 && (now - modelsCacheTimestamp) < MODELS_CACHE_TTL) {
       return modelsCache;
     }
-    
+
     // Refresh cache
     modelsCache = await this.loadModelsFromDatabase();
     modelsCacheTimestamp = now;
-    
+
     return modelsCache;
   }
 
@@ -197,7 +200,7 @@ class GituAIRouter {
     try {
       const embedding = await generateEmbedding(query);
       const vectorStr = `[${embedding.join(',')}]`;
-      
+
       const result = await pool.query(
         `SELECT content_text 
          FROM chunks 
@@ -208,7 +211,7 @@ class GituAIRouter {
          LIMIT $3`,
         [userId, vectorStr, limit]
       );
-      
+
       return result.rows.map(row => row.content_text);
     } catch (error) {
       console.error('[Gitu AI Router] Retrieval error:', error);
@@ -226,67 +229,91 @@ class GituAIRouter {
     // Normalize request
     const prompt = request.prompt || request.content || '';
     if (!prompt) {
-        throw new Error('Prompt or content is required');
+      throw new Error('Prompt or content is required');
     }
-    
+
     const taskType = request.taskType || 'chat';
     const context = request.context || [];
+    const includeSystemPrompt = request.includeSystemPrompt !== false; // Default true
+    const includeTools = request.includeTools !== false && taskType === 'chat'; // Default true for chat
 
     // Retrieval (RAG)
     if (request.useRetrieval) {
-        const retrieved = await this.retrieveContext(prompt, request.userId);
-        if (retrieved.length > 0) {
-            console.log(`[Gitu AI Router] Injected ${retrieved.length} chunks of context.`);
-            context.push(...retrieved);
-        }
+      const retrieved = await this.retrieveContext(prompt, request.userId);
+      if (retrieved.length > 0) {
+        console.log(`[Gitu AI Router] Injected ${retrieved.length} chunks of context.`);
+        context.push(...retrieved);
+      }
+    }
+
+    // Build system prompt with Gitu identity, user context, and tools
+    let systemPrompt = '';
+    if (includeSystemPrompt) {
+      try {
+        const promptResult = await gituSystemPromptBuilder.buildSystemPrompt({
+          userId: request.userId,
+          platform: request.platform || 'web',
+          sessionId: request.sessionId,
+          includeTools,
+          includeMemories: true,
+        });
+        systemPrompt = promptResult.systemPrompt;
+        console.log(`[Gitu AI Router] Built system prompt with ${promptResult.toolDefinitions?.length || 0} tools`);
+      } catch (error) {
+        console.warn('[Gitu AI Router] Failed to build system prompt, using minimal:', error);
+        systemPrompt = await gituSystemPromptBuilder.buildMinimalPrompt(request.userId);
+      }
     }
 
     // Get user's model preferences
     const preferences = await this.getUserPreferences(request.userId);
-    
+
     // Select the best model for this request, considering explicit preference override
     const model = await this.selectModel(
-        taskType, 
-        preferences, 
-        context, 
-        request.preferredModel
+      taskType,
+      preferences,
+      context,
+      request.preferredModel
     );
-    
+
     // Estimate cost before execution
     const estimate = await this.estimateCost(prompt, context, model);
-    
+
     // Generate response using the selected model
     const startTime = Date.now();
     let content: string;
     let tokensUsed: number;
-    
+
+    // Build messages array with system prompt
+    const messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [];
+
+    // Add system prompt if available
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+
+    // Add context as user messages
+    for (const ctx of context) {
+      messages.push({ role: 'user', content: ctx });
+    }
+
+    // Add the user's prompt
+    messages.push({ role: 'user', content: prompt });
+
     try {
       if (model.provider === 'gemini') {
-        content = await generateWithGemini(
-          [
-            ...context.map(ctx => ({ role: 'user' as const, content: ctx })),
-            { role: 'user' as const, content: prompt }
-          ],
-          model.modelId
-        );
+        content = await generateWithGemini(messages, model.modelId);
       } else if (model.provider === 'openrouter') {
-        content = await generateWithOpenRouter(
-          [
-            ...context.map(ctx => ({ role: 'user' as const, content: ctx })),
-            { role: 'user' as const, content: prompt }
-          ],
-          model.modelId,
-          request.maxTokens
-        );
+        content = await generateWithOpenRouter(messages, model.modelId, request.maxTokens);
       } else {
         throw new Error(`Unsupported provider: ${model.provider}`);
       }
-      
+
       // Estimate tokens used (rough approximation: 1 token ≈ 4 characters)
       tokensUsed = Math.ceil((prompt.length + content.length) / 4);
-      
+
       const cost = (tokensUsed / 1000) * model.costPer1kTokens;
-      
+
       return {
         content,
         model: model.modelId,
@@ -299,12 +326,12 @@ class GituAIRouter {
 
       // Improved Error Handling
       if (error.message.includes('429') || error.message.includes('Quota exceeded')) {
-           throw new Error('AI Provider Rate Limit Exceeded. Please try again later.');
+        throw new Error('AI Provider Rate Limit Exceeded. Please try again later.');
       }
       if (error.message.includes('401') || error.message.includes('API key')) {
-           throw new Error('AI Provider Authentication Failed. Check API Keys.');
+        throw new Error('AI Provider Authentication Failed. Check API Keys.');
       }
-      
+
       // Try fallback model
       const fallbackModel = await this.fallback(model, error);
       if (fallbackModel) {
@@ -315,7 +342,7 @@ class GituAIRouter {
           taskType: 'chat',  // Use generic task type for fallback
         });
       }
-      
+
       throw error;
     }
   }
@@ -336,24 +363,24 @@ class GituAIRouter {
   ): Promise<AIModel> {
     // Get available models from database
     const models = await this.getModels();
-    
+
     let model: AIModel | undefined;
 
     // Check for override model
     if (overrideModelId && overrideModelId !== 'default' && models[overrideModelId]) {
-        model = models[overrideModelId];
+      model = models[overrideModelId];
     } else {
-        // Check if user has a task-specific model preference
-        const preferredModelId = preferences.taskSpecificModels[taskType] || preferences.defaultModel;
-        model = models[preferredModelId];
-        
-        // If preferred model not found, use default for task type
-        if (!model) {
-            const defaultModelId = DEFAULT_TASK_MODELS[taskType];
-            model = models[defaultModelId];
-        }
+      // Check if user has a task-specific model preference
+      const preferredModelId = preferences.taskSpecificModels[taskType] || preferences.defaultModel;
+      model = models[preferredModelId];
+
+      // If preferred model not found, use default for task type
+      if (!model) {
+        const defaultModelId = DEFAULT_TASK_MODELS[taskType];
+        model = models[defaultModelId];
+      }
     }
-    
+
     // If still no model found, use first available model
     if (!model) {
       const availableModels = Object.values(models);
@@ -362,17 +389,17 @@ class GituAIRouter {
       }
       model = availableModels[0];
     }
-    
+
     // Check if context fits within model's context window
     const totalContextLength = context.reduce((sum, ctx) => sum + ctx.length, 0);
     const estimatedTokens = Math.ceil(totalContextLength / 4);
-    
+
     if (estimatedTokens > model.contextWindow) {
       // Context too large, find a model with larger context window
       console.warn(`Context (${estimatedTokens} tokens) exceeds model limit (${model.contextWindow}). Finding alternative...`);
       model = await this.findModelWithLargerContext(estimatedTokens);
     }
-    
+
     return model;
   }
 
@@ -384,16 +411,16 @@ class GituAIRouter {
    */
   private async findModelWithLargerContext(requiredTokens: number): Promise<AIModel> {
     const models = await this.getModels();
-    
+
     // Sort models by context window size
     const sortedModels = Object.values(models)
       .filter(m => m.contextWindow >= requiredTokens)
       .sort((a, b) => a.contextWindow - b.contextWindow);
-    
+
     if (sortedModels.length === 0) {
       throw new Error(`No model found with context window >= ${requiredTokens} tokens`);
     }
-    
+
     // Return the smallest model that fits (most cost-effective)
     return sortedModels[0];
   }
@@ -408,16 +435,16 @@ class GituAIRouter {
    */
   async estimateCost(prompt: string, context: string[], model: AIModel): Promise<CostEstimate> {
     const models = await this.getModels();
-    
+
     // Estimate tokens (rough: 1 token ≈ 4 characters)
     const totalLength = prompt.length + context.reduce((sum, ctx) => sum + ctx.length, 0);
     const estimatedTokens = Math.ceil(totalLength / 4);
-    
+
     // Estimate response tokens (assume 2x input for safety)
     const totalEstimatedTokens = estimatedTokens * 3;
-    
+
     const estimatedCostUSD = (totalEstimatedTokens / 1000) * model.costPer1kTokens;
-    
+
     // Find cheaper alternatives
     const alternatives = Object.entries(models)
       .filter(([id, m]) => m.contextWindow >= estimatedTokens && id !== model.modelId)
@@ -427,7 +454,7 @@ class GituAIRouter {
       }))
       .sort((a, b) => a.estimatedCost - b.estimatedCost)
       .slice(0, 3);
-    
+
     return {
       estimatedTokens: totalEstimatedTokens,
       estimatedCostUSD,
@@ -456,12 +483,12 @@ class GituAIRouter {
    */
   async fallback(primaryModel: AIModel, error: Error): Promise<AIModel | null> {
     console.log(`Finding fallback for ${primaryModel.modelId} due to: ${error.message}`);
-    
+
     const models = await this.getModels();
-    
+
     // Determine fallback strategy based on error
     const isContextLimit = error.message.includes('context') || error.message.includes('too long');
-    
+
     if (isContextLimit) {
       // Need a model with larger context window
       const requiredTokens = primaryModel.contextWindow * 1.5;
@@ -471,11 +498,11 @@ class GituAIRouter {
         return null;
       }
     }
-    
+
     // For rate limits or unavailability, try a different provider
     const alternativeProviders = ['gemini', 'openrouter'] as const;
     const currentProvider = primaryModel.provider;
-    
+
     for (const provider of alternativeProviders) {
       if (provider !== currentProvider) {
         // Find a model from this provider
@@ -485,7 +512,7 @@ class GituAIRouter {
         }
       }
     }
-    
+
     return null;
   }
 
@@ -500,15 +527,15 @@ class GituAIRouter {
     const models = await this.getModels();
     const current = models[currentModel];
     if (!current) return null;
-    
+
     // Find cheaper models with similar capabilities
     const cheaperModels = Object.values(models)
-      .filter(m => 
+      .filter(m =>
         m.costPer1kTokens < current.costPer1kTokens &&
         m.contextWindow >= current.contextWindow * 0.5  // At least 50% of context window
       )
       .sort((a, b) => a.costPer1kTokens - b.costPer1kTokens);
-    
+
     return cheaperModels.length > 0 ? cheaperModels[0] : null;
   }
 
@@ -525,14 +552,14 @@ class GituAIRouter {
         `SELECT gitu_settings FROM users WHERE id = $1`,
         [userId]
       );
-      
+
       if (result.rows.length === 0) {
         // User not found, return defaults
         return this.getDefaultPreferences();
       }
-      
+
       const gituSettings = result.rows[0].gitu_settings || {};
-      
+
       // Extract model preferences from settings (support both nested and flat for migration)
       const modelPrefs = gituSettings.modelPreferences || gituSettings;
 
@@ -542,7 +569,7 @@ class GituAIRouter {
         apiKeySource: modelPrefs.apiKeySource || 'platform',
         personalKeys: modelPrefs.personalKeys || {},
       };
-      
+
       return preferences;
     } catch (error) {
       console.error('Error fetching user preferences:', error);
@@ -574,7 +601,7 @@ class GituAIRouter {
     try {
       // Get current settings
       const current = await this.getUserPreferences(userId);
-      
+
       // Merge with new preferences
       const updated = {
         ...current,
@@ -588,7 +615,7 @@ class GituAIRouter {
           ...(preferences.personalKeys || {}),
         },
       };
-      
+
       // Update in database
       await pool.query(
         `UPDATE users 
@@ -615,31 +642,31 @@ class GituAIRouter {
   async getAvailableModels(userId: string): Promise<AIModel[]> {
     const preferences = await this.getUserPreferences(userId);
     const models = await this.getModels();
-    
+
     // If using platform keys, all models are available
     if (preferences.apiKeySource === 'platform') {
       return Object.values(models);
     }
-    
+
     // If using personal keys, filter by available keys
     const availableModels: AIModel[] = [];
-    
+
     if (preferences.personalKeys?.gemini) {
       availableModels.push(...Object.values(models).filter(m => m.provider === 'gemini'));
     }
-    
+
     if (preferences.personalKeys?.openrouter) {
       availableModels.push(...Object.values(models).filter(m => m.provider === 'openrouter'));
     }
-    
+
     if (preferences.personalKeys?.openai) {
       availableModels.push(...Object.values(models).filter(m => m.provider === 'openai'));
     }
-    
+
     if (preferences.personalKeys?.anthropic) {
       availableModels.push(...Object.values(models).filter(m => m.provider === 'anthropic'));
     }
-    
+
     return availableModels;
   }
 }

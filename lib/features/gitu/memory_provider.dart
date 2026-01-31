@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_service.dart';
+import 'models/gitu_exceptions.dart';
 
 class GituMemory {
   final String id;
@@ -93,8 +94,9 @@ class GituMemoryNotifier extends StateNotifier<GituMemoryState> {
         queryParameters: query,
       );
       final items = response['memories'] as List<dynamic>? ?? const [];
-      final memories =
-          items.map((e) => GituMemory.fromJson(e as Map<String, dynamic>)).toList();
+      final memories = items
+          .map((e) => GituMemory.fromJson(e as Map<String, dynamic>))
+          .toList();
       state = state.copyWith(
         memories: _applySearch(memories, state.searchQuery),
         isLoading: false,
@@ -103,7 +105,7 @@ class GituMemoryNotifier extends StateNotifier<GituMemoryState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: e.toString(),
+        error: GituException.from(e).message,
       );
     }
   }
@@ -123,13 +125,11 @@ class GituMemoryNotifier extends StateNotifier<GituMemoryState> {
   Future<void> confirmMemory(String id) async {
     try {
       final api = _ref.read(apiServiceProvider);
-      final response =
-          await api.post<Map<String, dynamic>>('/gitu/memories/$id/confirm', {});
+      final response = await api
+          .post<Map<String, dynamic>>('/gitu/memories/$id/confirm', {});
       final updated = GituMemory.fromJson(
           response['memory'] as Map<String, dynamic>? ?? const {});
-      final list = state.memories
-          .map((m) => m.id == id ? updated : m)
-          .toList();
+      final list = state.memories.map((m) => m.id == id ? updated : m).toList();
       state = state.copyWith(
         memories: _applySearch(list, state.searchQuery),
       );
@@ -145,9 +145,7 @@ class GituMemoryNotifier extends StateNotifier<GituMemoryState> {
           '/gitu/memories/$id/request-verification', {});
       final updated = GituMemory.fromJson(
           response['memory'] as Map<String, dynamic>? ?? const {});
-      final list = state.memories
-          .map((m) => m.id == id ? updated : m)
-          .toList();
+      final list = state.memories.map((m) => m.id == id ? updated : m).toList();
       state = state.copyWith(
         memories: _applySearch(list, state.searchQuery),
       );
@@ -172,9 +170,7 @@ class GituMemoryNotifier extends StateNotifier<GituMemoryState> {
           '/gitu/memories/$id/correct', payload);
       final updated = GituMemory.fromJson(
           response['memory'] as Map<String, dynamic>? ?? const {});
-      final list = state.memories
-          .map((m) => m.id == id ? updated : m)
-          .toList();
+      final list = state.memories.map((m) => m.id == id ? updated : m).toList();
       state = state.copyWith(
         memories: _applySearch(list, state.searchQuery),
       );
@@ -212,4 +208,3 @@ final gituMemoryProvider =
     StateNotifierProvider<GituMemoryNotifier, GituMemoryState>((ref) {
   return GituMemoryNotifier(ref);
 });
-

@@ -1,14 +1,29 @@
 import pool from '../config/database.js';
 import { gituMemoryService } from './gituMemoryService.js';
 import gituSessionService from './gituSessionService.js';
-
 import { gituAgentManager } from './gituAgentManager.js';
+import { gituMCPHub } from './gituMCPHub.js';
+import { gituAIRouter } from './gituAIRouter.js';
+import { gituMessageGateway } from './gituMessageGateway.js';
 
+/**
+ * Extended action types for scheduled tasks
+ * System actions: Internal maintenance tasks
+ * User actions: User-defined automated tasks
+ */
 type AllowedAction =
+  // System maintenance actions
   | 'memories.detectContradictions'
   | 'memories.expireUnverified'
   | 'sessions.cleanupOldSessions'
-  | 'agents.processQueue';
+  | 'agents.processQueue'
+  // User-defined actions
+  | 'mcp.executeTool'        // Execute any MCP tool
+  | 'ai.generateSummary'     // Generate AI summary of notebooks
+  | 'ai.sendMessage'         // Send an AI-generated message
+  | 'plugin.execute'         // Execute a user plugin
+  | 'notification.send';     // Send a notification to user
+
 
 interface ScheduledTask {
   id: string;
@@ -178,6 +193,7 @@ class GituScheduler {
 
   private async runAction(task: ScheduledTask, payload?: any) {
     switch (task.action) {
+      // System maintenance actions
       case 'memories.detectContradictions':
         await gituMemoryService.detectContradictions(task.userId, payload?.category);
         break;
@@ -190,6 +206,65 @@ class GituScheduler {
       case 'agents.processQueue':
         await gituAgentManager.processAgentQueue(task.userId);
         break;
+
+      // User-defined actions
+      case 'mcp.executeTool': {
+        // Execute an MCP tool
+        const { toolName, args } = payload || {};
+        if (!toolName) throw new Error('toolName is required for mcp.executeTool');
+        await gituMCPHub.executeTool(toolName, args || {}, {
+          userId: task.userId,
+        });
+        break;
+      }
+
+      case 'ai.generateSummary': {
+        // Generate AI summary and optionally send to user
+        const { prompt, notebookId, sendToUser } = payload || {};
+        const summaryPrompt = prompt || 'Generate a brief summary of my recent activity and notebooks.';
+        const response = await gituAIRouter.route({
+          userId: task.userId,
+          prompt: summaryPrompt,
+          taskType: 'summarization',
+          platform: 'scheduler',
+          includeSystemPrompt: false, // Don't need full context for scheduled tasks
+        });
+        // Optionally send to user via their connected platforms
+        if (sendToUser) {
+          await gituMessageGateway.notifyUser(task.userId, response.content);
+        }
+        break;
+      }
+
+      case 'ai.sendMessage': {
+        // Generate and send an AI message to the user
+        const { prompt, message } = payload || {};
+        const content = message || (prompt ? (await gituAIRouter.route({
+          userId: task.userId,
+          prompt,
+          taskType: 'chat',
+          platform: 'scheduler',
+          includeSystemPrompt: false,
+        })).content : 'This is a scheduled reminder from Gitu.');
+        await gituMessageGateway.notifyUser(task.userId, content);
+        break;
+      }
+
+      case 'plugin.execute': {
+        // Plugin execution would go here
+        // For now, just log that it would execute
+        console.log(`[Scheduler] Would execute plugin for user ${task.userId}:`, payload);
+        break;
+      }
+
+      case 'notification.send': {
+        // Send a notification to the user
+        const { message } = payload || {};
+        if (!message) throw new Error('message is required for notification.send');
+        await gituMessageGateway.notifyUser(task.userId, message);
+        break;
+      }
+
       default:
         throw new Error(`Unknown action: ${task.action}`);
     }

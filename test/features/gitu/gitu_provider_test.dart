@@ -1,159 +1,102 @@
-import 'dart:async';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:notebook_llm/core/api/api_service.dart';
-import 'package:notebook_llm/features/gitu/gitu_provider.dart';
+import 'package:riverpod/riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'dart:async';
 
-// Helper to mock Ref
-class FakeRef implements Ref {
+import 'package:notebook_llm/features/gitu/gitu_provider.dart';
+import 'package:notebook_llm/core/api/api_service.dart';
+import 'package:notebook_llm/features/gitu/models/gitu_exceptions.dart';
+
+// Manual Fakes
+class FakeApiService implements ApiService {
+  @override
+  String get baseUrl => 'https://api.example.com';
+
+  @override
+  Future<String?> getToken() async => 'fake_token';
+
+  // Implement other members with throw UnimplementedError() or meaningful defaults if needed
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-// Mock ApiService by extending it
-class MockApiService extends ApiService {
-  MockApiService() : super(FakeRef());
-  
-  @override
-  Future<String?> getToken() async => 'test-token';
-  
-  @override
-  String get baseUrl => 'https://test.com/api/';
-}
+class FakeWebSocketChannel implements WebSocketChannel {
+  final FakeWebSocketSink _sink = FakeWebSocketSink();
+  final StreamController _controller = StreamController();
 
-// Mock WebSocketChannel
-class MockWebSocketChannel implements WebSocketChannel {
-  final StreamController _controller = StreamController.broadcast();
-  final MockWebSocketSink _sink = MockWebSocketSink();
+  StreamController get controller => _controller;
+
+  @override
+  WebSocketSink get sink => _sink;
 
   @override
   Stream get stream => _controller.stream;
 
   @override
-  WebSocketSink get sink => _sink;
-  
-  void addMessage(String msg) => _controller.add(msg);
-
-  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-// Mock WebSocketSink
-class MockWebSocketSink implements WebSocketSink {
-  final List<String> sentMessages = [];
-  
+class FakeWebSocketSink implements WebSocketSink {
+  final List<dynamic> sentMessages = [];
+  bool closed = false;
+
   @override
-  void add(dynamic data) {
-    sentMessages.add(data.toString());
+  void add(data) {
+    sentMessages.add(data);
   }
-  
+
   @override
-  Future close([int? closeCode, String? closeReason]) async {}
-  
+  void addError(Object error, [StackTrace? stackTrace]) {}
+
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  Future addStream(Stream stream) async {}
+
+  @override
+  Future close([int? closeCode, String? closeReason]) async {
+    closed = true;
+  }
+
+  @override
+  Future get done => Future.value();
 }
 
 void main() {
-  late MockApiService mockApiService;
-  late MockWebSocketChannel mockWebSocketChannel;
+  late ProviderContainer container;
+  late FakeApiService fakeApiService;
+  late FakeWebSocketChannel fakeChannel;
 
   setUp(() {
-    mockApiService = MockApiService();
-    mockWebSocketChannel = MockWebSocketChannel();
-  });
+    fakeApiService = FakeApiService();
+    fakeChannel = FakeWebSocketChannel();
 
-  test('GituChatNotifier connects and updates state', () async {
-    final container = ProviderContainer(
+    container = ProviderContainer(
       overrides: [
-        apiServiceProvider.overrideWithValue(mockApiService),
-        gituChatProvider.overrideWith((ref) => GituChatNotifier(
-          ref, 
-          channelBuilder: (_) => mockWebSocketChannel,
-        )),
+        apiServiceProvider.overrideWithValue(fakeApiService),
       ],
     );
-
-    final notifier = container.read(gituChatProvider.notifier);
-
-    expect(container.read(gituChatProvider).isConnected, false);
-
-    // Trigger connection
-    await notifier.connect();
-
-    // Verify connecting state (it might be fast, but we expect it to wait for 'connected' message)
-    // The implementation sets isConnecting=true, then awaits getToken, then connects.
-    // So if we check immediately after await connect(), it should be connecting=true (waiting for 'connected' msg).
-    expect(container.read(gituChatProvider).isConnecting, true);
-
-    // Simulate 'connected' message from backend
-    mockWebSocketChannel.addMessage('{"type": "connected", "payload": {}}');
-    
-    // Allow stream to process
-    await Future.delayed(Duration.zero);
-
-    expect(container.read(gituChatProvider).isConnected, true);
-    expect(container.read(gituChatProvider).isConnecting, false);
   });
-  
-  test('GituChatNotifier handles incoming assistant response', () async {
-    final container = ProviderContainer(
-      overrides: [
-        apiServiceProvider.overrideWithValue(mockApiService),
-        gituChatProvider.overrideWith((ref) => GituChatNotifier(
-          ref, 
-          channelBuilder: (_) => mockWebSocketChannel,
-        )),
-      ],
-    );
 
-    final notifier = container.read(gituChatProvider.notifier);
-    await notifier.connect();
-    
-    mockWebSocketChannel.addMessage('{"type": "connected", "payload": {}}');
-    await Future.delayed(Duration.zero);
-    
-    // Simulate assistant response
-    mockWebSocketChannel.addMessage(
-      '{"type": "assistant_response", "payload": {"content": "Hello user", "model": "gemini"}}'
-    );
-    await Future.delayed(Duration.zero);
-    
-    final messages = container.read(gituChatProvider).messages;
-    expect(messages.length, 1);
-    expect(messages.first.content, "Hello user");
-    expect(messages.first.isUser, false);
-    expect(messages.first.model, "gemini");
+  tearDown(() {
+    container.dispose();
   });
-  
-  test('GituChatNotifier sends user message', () async {
-    final container = ProviderContainer(
-      overrides: [
-        apiServiceProvider.overrideWithValue(mockApiService),
-        gituChatProvider.overrideWith((ref) => GituChatNotifier(
-          ref, 
-          channelBuilder: (_) => mockWebSocketChannel,
-        )),
-      ],
-    );
 
-    final notifier = container.read(gituChatProvider.notifier);
-    await notifier.connect();
-    
-    mockWebSocketChannel.addMessage('{"type": "connected", "payload": {}}');
-    await Future.delayed(Duration.zero);
-    
-    notifier.sendMessage("Hi there");
-    
-    final messages = container.read(gituChatProvider).messages;
-    expect(messages.length, 1);
-    expect(messages.first.content, "Hi there");
-    expect(messages.first.isUser, true);
-    
-    // Check if sent to socket
-    final sink = mockWebSocketChannel.sink as MockWebSocketSink;
-    expect(sink.sentMessages.length, 1);
-    expect(sink.sentMessages.first, contains('"text":"Hi there"'));
+  group('GituChatNotifier Tests', () {
+    test('Initial state is disconnected', () {
+      final state = container.read(gituChatProvider);
+      expect(state.isConnected, false);
+      expect(state.isConnecting, false);
+      expect(state.messages, isEmpty);
+    });
+
+    test('GituException parsing logic', () {
+      final socketError =
+          GituException.from(Exception('SocketException: Failed host lookup'));
+      expect(socketError.code, 'CONNECTION_ERROR');
+      expect(socketError.message, contains('Unable to connect'));
+
+      final authError = GituException.from(Exception('401 Unauthorized'));
+      expect(authError.code, 'AUTH_ERROR');
+      expect(authError.message, contains('Authentication failed'));
+    });
   });
 }

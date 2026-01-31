@@ -1,6 +1,6 @@
 import pool from '../config/database.js';
 
-export type MemoryCategory = 'personal' | 'work' | 'preference' | 'fact' | 'context';
+export type MemoryCategory = 'personal' | 'work' | 'preference' | 'fact' | 'context' | 'goal' | 'relationship';
 
 export interface Memory {
   id: string;
@@ -110,6 +110,18 @@ class GituMemoryService {
     const result = await pool.query(
       `SELECT * FROM gitu_memories WHERE ${clauses.join(' AND ')} ORDER BY last_accessed_at DESC${limitOffset}`,
       params
+    );
+    return result.rows.map(r => this.mapRowToMemory(r));
+  }
+
+  async searchMemories(userId: string, query: string, limit: number = 20): Promise<Memory[]> {
+    const result = await pool.query(
+      `SELECT * FROM gitu_memories 
+       WHERE user_id = $1 
+         AND (content ILIKE $2 OR tags::text ILIKE $2)
+       ORDER BY last_accessed_at DESC 
+       LIMIT $3`,
+      [userId, `%${query}%`, limit]
     );
     return result.rows.map(r => this.mapRowToMemory(r));
   }

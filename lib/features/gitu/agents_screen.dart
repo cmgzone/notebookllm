@@ -62,11 +62,14 @@ class AgentsScreen extends ConsumerWidget {
               return Card(
                 child: ListTile(
                   leading: _buildStatusIcon(agent.status),
-                  title: Text(agent.task, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text('Status: ${agent.status} • ID: ${agent.id.substring(0, 8)}'),
+                  title: Text(agent.task,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(
+                      'Status: ${agent.status} • ID: ${agent.id.substring(0, 8)}'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    context.pushNamed('gitu-agent-detail', pathParameters: {'id': agent.id});
+                    context.pushNamed('gitu-agent-detail',
+                        pathParameters: {'id': agent.id});
                   },
                 ),
               );
@@ -115,8 +118,10 @@ class AgentsScreen extends ConsumerWidget {
               if (controller.text.isEmpty) return;
               try {
                 Navigator.pop(context);
-                await ref.read(gituAgentsServiceProvider).spawnAgent(controller.text);
-                ref.refresh(gituAgentsProvider);
+                await ref
+                    .read(gituAgentsServiceProvider)
+                    .spawnAgent(controller.text);
+                ref.invalidate(gituAgentsProvider);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Agent spawned successfully')),

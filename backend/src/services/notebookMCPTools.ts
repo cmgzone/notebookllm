@@ -147,8 +147,8 @@ const reviewCodeTool: MCPTool = {
     properties: {
       code: { type: 'string', description: 'The code to review' },
       language: { type: 'string', description: 'Programming language' },
-      reviewType: { 
-        type: 'string', 
+      reviewType: {
+        type: 'string',
         enum: ['comprehensive', 'security', 'performance', 'readability'],
         default: 'comprehensive'
       },
@@ -164,13 +164,353 @@ const reviewCodeTool: MCPTool = {
       args.reviewType,
       args.context,
       false // Don't save review to DB for ephemeral tool calls by default, or maybe true?
-             // Let's set to false to avoid cluttering history unless explicitly asked, 
-             // but `codeReviewService` returns a saved review object usually.
-             // The service saves if `saveReview` is true. 
-             // Let's keep it false for now as this is likely an interactive session.
+      // Let's set to false to avoid cluttering history unless explicitly asked, 
+      // but `codeReviewService` returns a saved review object usually.
+      // The service saves if `saveReview` is true. 
+      // Let's keep it false for now as this is likely an interactive session.
     );
   }
 };
+
+/**
+ * Tool: Schedule Reminder
+ */
+const scheduleReminderTool: MCPTool = {
+  name: 'schedule_reminder',
+  description: 'Schedule a reminder to be sent to the user at a specific time',
+  schema: {
+    type: 'object',
+    properties: {
+      message: { type: 'string', description: 'The reminder message to send' },
+      datetime: { type: 'string', description: 'When to send the reminder (ISO format or natural language like "tomorrow at 9am")' },
+      recurring: { type: 'boolean', description: 'Should this reminder repeat?', default: false },
+      interval: { type: 'string', description: 'Recurrence interval: daily, weekly, monthly', enum: ['daily', 'weekly', 'monthly'] }
+    },
+    required: ['message', 'datetime']
+  },
+  handler: async (args: any, context: MCPContext) => {
+    const { message, datetime, recurring, interval } = args;
+
+    // Parse the datetime
+    const scheduledTime = parseDatetime(datetime);
+    if (!scheduledTime) {
+      throw new Error('Could not parse datetime. Please use ISO format or phrases like "tomorrow at 9am".');
+    }
+
+    // Create a cron expression if recurring
+    let cron: string | null = null;
+    if (recurring && interval) {
+      const hour = scheduledTime.getHours();
+      const minute = scheduledTime.getMinutes();
+      switch (interval) {
+        case 'daily':
+          cron = `${minute} ${hour} * * *`;
+          break;
+        case 'weekly':
+          cron = `${minute} ${hour} * * ${scheduledTime.getDay()}`;
+          break;
+        case 'monthly':
+          cron = `${minute} ${hour} ${scheduledTime.getDate()} * *`;
+          break;
+      }
+    }
+
+    // Insert into scheduled tasks
+    const result = await pool.query(
+      `INSERT INTO gitu_scheduled_tasks 
+       (user_id, name, action, cron, enabled, max_retries, retry_count, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, true, 1, 0, NOW(), NOW())
+       RETURNING id`,
+      [
+        context.userId,
+        `Reminder: ${message.substring(0, 50)}`,
+        'notification.send',
+        cron || `${scheduledTime.getMinutes()} ${scheduledTime.getHours()} ${scheduledTime.getDate()} ${scheduledTime.getMonth() + 1} *`
+      ]
+    );
+
+    return {
+      success: true,
+      reminderId: result.rows[0].id,
+      scheduledFor: scheduledTime.toISOString(),
+      message: `I'll remind you: "${message}"`,
+      recurring: recurring && interval ? `Repeats ${interval}` : 'One-time reminder'
+    };
+  }
+};
+
+/**
+ * Tool: List Reminders
+ */
+const listRemindersTool: MCPTool = {
+  name: 'list_reminders',
+  description: 'List all scheduled reminders for the user',
+  schema: {
+    type: 'object',
+    properties: {
+      includeCompleted: { type: 'boolean', description: 'Include completed/disabled reminders', default: false }
+    }
+  },
+  handler: async (args: any, context: MCPContext) => {
+    const { includeCompleted } = args;
+
+    const query = includeCompleted
+      ? `SELECT * FROM gitu_scheduled_tasks WHERE user_id = $1 AND action = 'notification.send' ORDER BY created_at DESC`
+      : `SELECT * FROM gitu_scheduled_tasks WHERE user_id = $1 AND action = 'notification.send' AND enabled = true ORDER BY created_at DESC`;
+
+    const result = await pool.query(query, [context.userId]);
+
+    return {
+      reminders: result.rows.map(r => ({
+        id: r.id,
+        name: r.name,
+        schedule: r.cron,
+        enabled: r.enabled,
+        lastRun: r.last_run_at,
+        createdAt: r.created_at
+      }))
+    };
+  }
+};
+
+/**
+ * Tool: Cancel Reminder
+ */
+const cancelReminderTool: MCPTool = {
+  name: 'cancel_reminder',
+  description: 'Cancel a scheduled reminder',
+  schema: {
+    type: 'object',
+    properties: {
+      reminderId: { type: 'string', description: 'The ID of the reminder to cancel' }
+    },
+    required: ['reminderId']
+  },
+  handler: async (args: any, context: MCPContext) => {
+    const result = await pool.query(
+      `UPDATE gitu_scheduled_tasks SET enabled = false, updated_at = NOW()
+       WHERE id = $1 AND user_id = $2 AND action = 'notification.send'
+       RETURNING id`,
+      [args.reminderId, context.userId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Reminder not found or already cancelled');
+    }
+
+    return {
+      success: true,
+      message: 'Reminder cancelled successfully'
+    };
+  }
+};
+
+/**
+ * Tool: Remember Fact
+ */
+const rememberFactTool: MCPTool = {
+  name: 'remember_fact',
+  description: 'Store a fact about the user for future reference',
+  schema: {
+    type: 'object',
+    properties: {
+      fact: { type: 'string', description: 'The fact to remember about the user' },
+      category: {
+        type: 'string',
+        description: 'Category of the fact',
+        enum: ['fact', 'preference', 'goal', 'work', 'relationship'],
+        default: 'fact'
+      }
+    },
+    required: ['fact']
+  },
+  handler: async (args: any, context: MCPContext) => {
+    const { gituMemoryService } = await import('./gituMemoryService.js');
+
+    const memory = await gituMemoryService.createMemory(context.userId, {
+      content: args.fact,
+      category: args.category || 'fact',
+      source: 'user-request',
+      tags: ['explicit', 'user-provided'],
+      confidence: 1.0
+    });
+
+    return {
+      success: true,
+      memoryId: memory.id,
+      message: `I'll remember that: "${args.fact}"`
+    };
+  }
+};
+
+/**
+ * Tool: Recall Facts
+ */
+const recallFactsTool: MCPTool = {
+  name: 'recall_facts',
+  description: 'Recall stored facts about the user',
+  schema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Optional search query to filter facts' },
+      category: { type: 'string', description: 'Filter by category' },
+      limit: { type: 'number', description: 'Max facts to return', default: 10 }
+    }
+  },
+  handler: async (args: any, context: MCPContext) => {
+    const { gituMemoryService } = await import('./gituMemoryService.js');
+
+    if (args.query) {
+      const results = await gituMemoryService.searchMemories(context.userId, args.query, args.limit || 10);
+      return { facts: results };
+    } else {
+      const results = await gituMemoryService.listMemories(context.userId, {
+        limit: args.limit || 10,
+        category: args.category
+      });
+      return { facts: results };
+    }
+  }
+};
+
+/**
+ * Parse natural language datetime
+ */
+function parseDatetime(input: string): Date | null {
+  // Try ISO format first
+  const isoDate = new Date(input);
+  if (!isNaN(isoDate.getTime())) {
+    return isoDate;
+  }
+
+  const now = new Date();
+  const lower = input.toLowerCase();
+
+  // Handle "tomorrow"
+  if (lower.includes('tomorrow')) {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Parse time if present
+    const timeMatch = lower.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+    if (timeMatch) {
+      let hour = parseInt(timeMatch[1]);
+      const minute = parseInt(timeMatch[2] || '0');
+      const isPM = timeMatch[3]?.toLowerCase() === 'pm';
+
+      if (isPM && hour < 12) hour += 12;
+      if (!isPM && hour === 12) hour = 0;
+
+      tomorrow.setHours(hour, minute, 0, 0);
+    } else {
+      tomorrow.setHours(9, 0, 0, 0); // Default to 9am
+    }
+
+    return tomorrow;
+  }
+
+  // Handle "in X minutes/hours/days"
+  const inMatch = lower.match(/in\s+(\d+)\s+(minute|hour|day|week)s?/);
+  if (inMatch) {
+    const amount = parseInt(inMatch[1]);
+    const unit = inMatch[2];
+    const result = new Date(now);
+
+    switch (unit) {
+      case 'minute':
+        result.setMinutes(result.getMinutes() + amount);
+        break;
+      case 'hour':
+        result.setHours(result.getHours() + amount);
+        break;
+      case 'day':
+        result.setDate(result.getDate() + amount);
+        break;
+      case 'week':
+        result.setDate(result.getDate() + (amount * 7));
+        break;
+    }
+
+    return result;
+  }
+
+  // Handle day names
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  for (let i = 0; i < days.length; i++) {
+    if (lower.includes(days[i])) {
+      const result = new Date(now);
+      const currentDay = now.getDay();
+      let daysUntil = i - currentDay;
+      if (daysUntil <= 0) daysUntil += 7;
+      result.setDate(result.getDate() + daysUntil);
+
+      // Parse time
+      const timeMatch = lower.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+      if (timeMatch) {
+        let hour = parseInt(timeMatch[1]);
+        const minute = parseInt(timeMatch[2] || '0');
+        const isPM = timeMatch[3]?.toLowerCase() === 'pm';
+
+        if (isPM && hour < 12) hour += 12;
+        if (!isPM && hour === 12) hour = 0;
+
+        result.setHours(hour, minute, 0, 0);
+      } else {
+        result.setHours(9, 0, 0, 0);
+      }
+
+      return result;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Tool: Spawn Agent
+ */
+const spawnAgentTool: MCPTool = {
+  name: 'spawn_agent',
+  description: 'Spawn an autonomous background agent to complete a complex task',
+  schema: {
+    type: 'object',
+    properties: {
+      task: { type: 'string', description: 'Description of the task for the agent to complete' },
+      background: { type: 'boolean', description: 'Run in background (returns immediately) or wait for result', default: true }
+    },
+    required: ['task']
+  },
+  handler: async (args: any, context: MCPContext) => {
+    const { gituAgentManager } = await import('./gituAgentManager.js');
+
+    // Create the agent
+    const agent = await gituAgentManager.spawnAgent(
+      context.userId,
+      args.task,
+      undefined,
+      {
+        source: 'mcp_tool',
+        original_context: context
+      }
+    );
+
+    if (args.background) {
+      return {
+        success: true,
+        agentId: agent.id,
+        message: `Agent spawned to handle: "${args.task}". I'll notify you when it's done.`
+      };
+    } else {
+      // For now, we only support background spawning via this tool to avoid timeouts
+      return {
+        success: true,
+        agentId: agent.id,
+        message: `Agent started for: "${args.task}". Check back later for results.`
+      };
+    }
+  }
+};
+
 
 // Register all tools
 export function registerNotebookTools() {
@@ -179,5 +519,11 @@ export function registerNotebookTools() {
   gituMCPHub.registerTool(searchSourcesTool);
   gituMCPHub.registerTool(verifyCodeTool);
   gituMCPHub.registerTool(reviewCodeTool);
-  console.log('[NotebookMCPTools] Registered notebook tools');
+  gituMCPHub.registerTool(scheduleReminderTool);
+  gituMCPHub.registerTool(listRemindersTool);
+  gituMCPHub.registerTool(cancelReminderTool);
+  gituMCPHub.registerTool(rememberFactTool);
+  gituMCPHub.registerTool(recallFactsTool);
+  gituMCPHub.registerTool(spawnAgentTool);
+  console.log('[NotebookMCPTools] Registered notebook, scheduling, and agent tools');
 }

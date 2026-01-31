@@ -6,6 +6,8 @@ import pool from '../config/database.js';
 import { gituMessageGateway, type IncomingMessage as GituIncomingMessage, type RawMessage } from './gituMessageGateway.js';
 import { gituSessionService } from './gituSessionService.js';
 import { gituAIRouter } from './gituAIRouter.js';
+import { gituToolExecutionService } from './gituToolExecutionService.js';
+import { gituMemoryExtractor } from './gituMemoryExtractor.js';
 import { getJwtSecret } from '../config/secrets.js';
 
 type WSMessage =
@@ -79,7 +81,7 @@ class GituWebSocketService {
     for (const [, connection] of this.connections) {
       try {
         connection.ws.close(1000, 'Server shutting down');
-      } catch {}
+      } catch { }
     }
     this.connections.clear();
     this.userConnections.clear();
@@ -122,9 +124,9 @@ class GituWebSocketService {
 
     // Ensure account is linked (for web, it's implicit, but good to have consistency)
     try {
-        await this.ensureLinkedAccount(userId);
+      await this.ensureLinkedAccount(userId);
     } catch (error: any) {
-         console.warn(`[Gitu Web WS] Failed to link account for ${userId}:`, error);
+      console.warn(`[Gitu Web WS] Failed to link account for ${userId}:`, error);
     }
 
     this.sendToConnection(connectionId, { type: 'connected', payload: { connectionId, userId } });
@@ -200,8 +202,8 @@ class GituWebSocketService {
           if (existingSessionId) {
             session = await gituSessionService.getSession(existingSessionId);
             if (!session || session.userId !== connection.userId) {
-                 // Fallback to creating new if not found
-                 session = await gituSessionService.getOrCreateSession(connection.userId, 'web');
+              // Fallback to creating new if not found
+              session = await gituSessionService.getOrCreateSession(connection.userId, 'web');
             }
           } else {
             session = await gituSessionService.getOrCreateSession(connection.userId, 'web');
@@ -214,26 +216,29 @@ class GituWebSocketService {
             platform: 'web',
           });
 
-          // Prepare context for AI
-          const sessionContext = session.context.conversationHistory
+          // Prepare conversation history for tool execution
+          const conversationHistory = session.context.conversationHistory
             .slice(-20) // Last 20 messages
-            .map(m => `${m.role}: ${m.content}`);
-          
-          const fullContext = [...context, ...sessionContext];
+            .map(m => ({
+              role: m.role as 'user' | 'assistant' | 'system' | 'tool',
+              content: m.content
+            }));
 
-          // Call AI Router
-          const aiResponse = await gituAIRouter.route({
-            userId: connection.userId,
-            sessionId: session.id,
-            prompt: normalized.content.text || text,
-            context: fullContext,
-            taskType: 'chat',
-          });
+          // Use Tool Execution Service instead of direct Router call
+          const result = await gituToolExecutionService.processWithTools(
+            connection.userId,
+            normalized.content.text || text,
+            conversationHistory,
+            {
+              platform: 'web',
+              sessionId: session.id,
+            }
+          );
 
           // Add assistant response to session
           await gituSessionService.addMessage(session.id, {
             role: 'assistant',
-            content: aiResponse.content,
+            content: result.response,
             platform: 'web',
           });
 
@@ -242,12 +247,21 @@ class GituWebSocketService {
             type: 'assistant_response',
             payload: {
               sessionId: session.id,
-              content: aiResponse.content,
-              model: aiResponse.model,
-              tokensUsed: aiResponse.tokensUsed,
-              cost: aiResponse.cost,
+              content: result.response,
+              model: result.model,
+              tokensUsed: result.tokensUsed,
+              // Calculate cost approx if not returned
+              cost: (result.tokensUsed / 1000) * 0.0001,
             },
           });
+
+          // Background: Extract and store memories
+          gituMemoryExtractor.extractFromConversation(
+            connection.userId,
+            normalized.content.text || text,
+            result.response,
+            { platform: 'web', sessionId: session.id }
+          ).catch(err => console.error('[Gitu WS] Memory extraction error:', err));
         } catch (error: any) {
           console.error('[Gitu Web WS] Error processing message:', error);
           this.sendToConnection(connectionId, { type: 'error', payload: { error: error.message || 'Failed to process message' } });
@@ -270,15 +284,15 @@ class GituWebSocketService {
 
   private async ensureLinkedAccount(userId: string): Promise<void> {
     const userResult = await pool.query(
-        `SELECT email, display_name FROM users WHERE id = $1`,
-        [userId]
+      `SELECT email, display_name FROM users WHERE id = $1`,
+      [userId]
     );
     if (userResult.rows.length === 0) return;
 
     const displayName = userResult.rows[0].display_name || userResult.rows[0].email || userId;
 
     await pool.query(
-        `INSERT INTO gitu_linked_accounts (user_id, platform, platform_user_id, display_name, verified, status)
+      `INSERT INTO gitu_linked_accounts (user_id, platform, platform_user_id, display_name, verified, status)
          VALUES ($1, 'web', $2, $3, true, 'active')
          ON CONFLICT (platform, platform_user_id) DO UPDATE
          SET user_id = EXCLUDED.user_id,
@@ -286,7 +300,7 @@ class GituWebSocketService {
              verified = true,
              status = 'active',
              last_used_at = NOW()`,
-        [userId, userId, displayName]
+      [userId, userId, displayName]
     );
   }
 
@@ -295,7 +309,7 @@ class GituWebSocketService {
     if (!connection || connection.ws.readyState !== WebSocket.OPEN) return;
     try {
       connection.ws.send(JSON.stringify(event));
-    } catch {}
+    } catch { }
   }
 
   private broadcastToUser(userId: string, event: WSEvent): void {
@@ -313,7 +327,7 @@ class GituWebSocketService {
       if (msSincePing > 2 * 60 * 1000) {
         try {
           conn.ws.close(1000, 'Ping timeout');
-        } catch {}
+        } catch { }
         this.handleDisconnect(id);
         continue;
       }
@@ -321,7 +335,7 @@ class GituWebSocketService {
       if (conn.ws.readyState === WebSocket.OPEN) {
         try {
           conn.ws.send(JSON.stringify({ type: 'ping' }));
-        } catch {}
+        } catch { }
       }
     }
   }

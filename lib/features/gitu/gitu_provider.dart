@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
 import '../../core/api/api_service.dart';
+import 'models/gitu_exceptions.dart';
 
 // ============================================================================
 // GITU CHAT PROVIDER
@@ -34,7 +35,8 @@ class GituMessage {
 
   factory GituMessage.fromJson(Map<String, dynamic> json) {
     return GituMessage(
-      id: json['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      id: json['id'] as String? ??
+          DateTime.now().millisecondsSinceEpoch.toString(),
       content: json['content'] as String? ?? '',
       isUser: json['isUser'] as bool? ?? false,
       timestamp: json['timestamp'] != null
@@ -107,17 +109,20 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
       final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
       final host = uri.host;
       final port = uri.hasPort ? ':${uri.port}' : '';
-      
+
       // WebSocket is mounted at /ws/gitu, not under /api
       final wsUrlStr = '$scheme://$host$port/ws/gitu?token=$token';
       final wsUrl = Uri.parse(wsUrlStr);
 
-      _channel = _channelBuilder?.call(wsUrl) ?? WebSocketChannel.connect(wsUrl);
+      _channel =
+          _channelBuilder?.call(wsUrl) ?? WebSocketChannel.connect(wsUrl);
 
       // Connection timeout safety
       Future.delayed(const Duration(seconds: 15), () {
         if (state.isConnecting && mounted) {
-          _disconnect(error: 'Connection timed out. Please check your internet connection.');
+          _disconnect(
+              error:
+                  'Connection timed out. Please check your internet connection.');
         }
       });
 
@@ -133,7 +138,7 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
 
       _startPing();
     } catch (e) {
-      _disconnect(error: 'Failed to connect: $e');
+      _disconnect(error: GituException.from(e).message);
     }
   }
 
@@ -160,16 +165,17 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
           ));
           break;
         case 'incoming_message':
-           // Handle messages from other platforms if needed
-           // For now, we might not display them or handle them differently
-           break;
+          // Handle messages from other platforms if needed
+          // For now, we might not display them or handle them differently
+          break;
         case 'error':
           final payload = data['payload'] as Map<String, dynamic>;
           state = state.copyWith(error: payload['error'] as String?);
           break;
       }
     } catch (e) {
-      developer.log('Error parsing Gitu WS message: $e', name: 'GituChatNotifier');
+      developer.log('Error parsing Gitu WS message: $e',
+          name: 'GituChatNotifier');
     }
   }
 
