@@ -44,6 +44,7 @@ import { flutterAdapter } from './adapters/flutterAdapter.js';
 import { gituWebSocketService } from './services/gituWebSocketService.js';
 import { gituShellWebSocketService } from './services/gituShellWebSocketService.js';
 import { registerNotebookTools } from './services/notebookMCPTools.js';
+import { registerResearchTools } from './services/researchMCPTools.js';
 import { whatsappAdapter } from './adapters/whatsappAdapter.js';
 import { whatsappHealthMonitor } from './services/whatsappHealthMonitor.js';
 import { telegramAdapter } from './adapters/telegramAdapter.js';
@@ -77,6 +78,7 @@ bunnyService.initialize();
 codeVerificationService.initialize();
 codeAnalysisService.initialize();
 registerNotebookTools();
+registerResearchTools();
 gituScheduler.start();
 
 // Initialize WhatsApp
