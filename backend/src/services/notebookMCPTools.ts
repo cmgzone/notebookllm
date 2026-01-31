@@ -20,6 +20,8 @@ const listNotebooksTool: MCPTool = {
     const limit = Math.min(args.limit || 20, 50);
     const offset = args.offset || 0;
 
+    console.log(`[NotebookMCP] list_notebooks called for user: ${context.userId}`);
+
     const result = await pool.query(
       `SELECT id, title, description, is_agent_notebook, created_at, updated_at,
               (SELECT COUNT(*) FROM sources WHERE notebook_id = notebooks.id) as source_count
@@ -29,6 +31,8 @@ const listNotebooksTool: MCPTool = {
        LIMIT $2 OFFSET $3`,
       [context.userId, limit, offset]
     );
+
+    console.log(`[NotebookMCP] Found ${result.rows.length} notebooks for user ${context.userId}`);
 
     return {
       notebooks: result.rows
