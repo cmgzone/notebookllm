@@ -38,6 +38,7 @@ import {
 } from '../services/gituGmailAI.js';
 import { gituAIRouter } from '../services/gituAIRouter.js';
 import { generateEmbedding } from '../services/aiService.js';
+import { gituMissionControl } from '../services/gituMissionControl.js';
 
 const router = express.Router();
 const normalizeScopePath = (p: string) =>
@@ -972,7 +973,7 @@ router.get('/tasks/:id/executions', async (req: AuthRequest, res: Response) => {
   }
 });
 
-export default router;
+// export default removed
 
 // ==================== IDENTITY MANAGER ====================
 router.get('/identity/linked', async (req: AuthRequest, res: Response) => {
@@ -1677,7 +1678,11 @@ router.post('/agents', async (req: AuthRequest, res: Response) => {
     const { task, parentAgentId, memory } = req.body;
     if (!task) return res.status(400).json({ error: 'task is required' });
 
-    const agent = await gituAgentManager.spawnAgent(req.userId!, task, parentAgentId, memory);
+    const agent = await gituAgentManager.spawnAgent(req.userId!, task, {
+      role: 'autonomous_agent',
+      focus: 'general',
+      parentAgentId
+    });
     res.status(201).json({ success: true, agent });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to spawn agent', message: error.message });

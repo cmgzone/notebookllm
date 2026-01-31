@@ -563,13 +563,17 @@ const spawnAgentTool: MCPTool = {
     const { gituAgentManager } = await import('./gituAgentManager.js');
 
     // Create the agent
+    // Create the agent
     const agent = await gituAgentManager.spawnAgent(
       context.userId,
       args.task,
-      undefined,
       {
-        source: 'mcp_tool',
-        original_context: context
+        role: 'autonomous_agent',
+        focus: 'general',
+        initialMemory: {
+          source: 'mcp_tool',
+          original_context: context
+        }
       }
     );
 
