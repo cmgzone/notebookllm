@@ -187,7 +187,7 @@ async function exportGoogleSheet(fileId: string): Promise<string> {
 /**
  * Export Google Slides as plain text
  */
-async function exportGoogleSlides(fileId: string): Promise<string> {
+export async function exportGoogleSlides(fileId: string): Promise<string> {
     // Slides can be exported as plain text (limited)
     const exportUrl = `https://docs.google.com/presentation/d/${fileId}/export?format=txt`;
 

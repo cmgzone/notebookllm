@@ -2,14 +2,17 @@ import axios, { AxiosInstance } from 'axios';
 import { ConfigManager } from './config.js';
 
 export class ApiClient {
-  private client: AxiosInstance;
+  private client!: AxiosInstance;
   private config: ConfigManager;
 
   constructor(config: ConfigManager) {
     this.config = config;
-    
-    const apiUrl = config.get('apiUrl') || 'https://api.notebookllm.com';
-    const apiToken = config.get('apiToken');
+    this.reinitialize();
+  }
+
+  reinitialize() {
+    const apiUrl = this.config.get('apiUrl') || 'https://notebookllm-ufj7.onrender.com/api';
+    const apiToken = this.config.get('apiToken');
 
     this.client = axios.create({
       baseURL: apiUrl,
@@ -43,70 +46,70 @@ export class ApiClient {
 
   // Gitu-specific endpoints
   async generateQR() {
-    return this.post('/api/gitu/qr/generate');
+    return this.post('/gitu/qr/generate');
   }
 
   async listSessions() {
-    return this.get('/api/gitu/sessions');
+    return this.get('/gitu/sessions');
   }
 
   async getSession(sessionId: string) {
-    return this.get(`/api/gitu/sessions/${sessionId}`);
+    return this.get(`/gitu/sessions/${sessionId}`);
   }
 
   async revokeSession(sessionId: string) {
-    return this.delete(`/api/gitu/sessions/${sessionId}`);
+    return this.delete(`/gitu/sessions/${sessionId}`);
   }
 
   async listDevices() {
-    return this.get('/api/gitu/devices');
+    return this.get('/gitu/devices');
   }
 
   async getDevice(deviceId: string) {
-    return this.get(`/api/gitu/devices/${deviceId}`);
+    return this.get(`/gitu/devices/${deviceId}`);
   }
 
   async removeDevice(deviceId: string) {
-    return this.delete(`/api/gitu/devices/${deviceId}`);
+    return this.delete(`/gitu/devices/${deviceId}`);
   }
 
   async health() {
-    return this.get('/api/health');
+    return this.get('/health');
   }
 
   async whoami() {
-    return this.get('/api/auth/me');
+    return this.get('/auth/me');
   }
 
   // Agent endpoints
   async listAgents() {
-    return this.get('/api/gitu/agents');
+    return this.get('/gitu/agents');
   }
 
   async spawnAgent(task: string) {
-    return this.post('/api/gitu/agents', { task });
+    return this.post('/gitu/agents', { task });
   }
 
   async getAgent(agentId: string) {
-    return this.get(`/api/gitu/agents/${agentId}`);
+    return this.get(`/gitu/agents/${agentId}`);
   }
 
   // Chat endpoints
   async sendMessage(message: string, context?: string[]) {
-    return this.post('/api/gitu/message', { message, context });
+    return this.post('/gitu/message', { message, context });
   }
 
   // Shell endpoints
   async executeShell(command: string) {
-    return this.post('/api/gitu/shell/execute', { command });
+    return this.post('/gitu/shell/execute', { command });
   }
 
   // Notebook endpoints
   async listNotebooks() {
-    return this.get('/api/notebooks');
+    return this.get('/notebooks');
   }
 
   async queryNotebook(notebookId: string, query: string) {
-    return this.post(`/api/notebooks/${notebookId}/query`, { query });
+    return this.post(`/notebooks/${notebookId}/query`, { query });
   }
 }

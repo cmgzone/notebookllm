@@ -462,21 +462,40 @@ class WhatsAppAdapter {
     /**
      * Send a message to a JID.
      */
-    async sendMessage(jid: string, text: string): Promise<void> {
+    async sendMessage(jid: string, content: string | { text?: string; image?: string; caption?: string }): Promise<void> {
         if (!this.sock) throw new Error('Socket not initialized');
 
-        // Format text (Markdown -> WhatsApp)
-        // **bold** -> *bold*
-        // *italic* -> _italic_
-        // ~~strike~~ -> ~strike~
-        // `code` -> ```code```
+        if (typeof content === 'string') {
+            // Format text (Markdown -> WhatsApp)
+            let formattedText = content
+                .replace(/\*\*(.*?)\*\*/g, '*$1*') // Bold
+                .replace(/\*(.*?)\*/g, '_$1_')     // Italic
+                .replace(/~~(.*?)~~/g, '~$1~');    // Strikethrough
 
-        let formattedText = text
-            .replace(/\*\*(.*?)\*\*/g, '*$1*') // Bold
-            .replace(/\*(.*?)\*/g, '_$1_')     // Italic (single asterisk to underscore)
-            .replace(/~~(.*?)~~/g, '~$1~');    // Strikethrough
+            await this.sock.sendMessage(jid, { text: formattedText });
+        } else if (content.image) {
+            // Handle Image
+            let image: any = content.image;
 
-        await this.sock.sendMessage(jid, { text: formattedText });
+            // If base64 data URI, strip prefix and convert to buffer
+            if (typeof image === 'string' && image.startsWith('data:image')) {
+                const base64Data = image.split(',')[1];
+                image = Buffer.from(base64Data, 'base64');
+            } else if (typeof image === 'string' && !image.startsWith('http')) {
+                // Assume raw base64
+                image = Buffer.from(image, 'base64');
+            } else if (typeof image === 'string' && image.startsWith('http')) {
+                // URL - pass as object for Baileys to download
+                image = { url: image };
+            }
+
+            await this.sock.sendMessage(jid, {
+                image: image,
+                caption: content.caption || content.text
+            });
+        } else if (content.text) {
+            await this.sendMessage(jid, content.text);
+        }
     }
 
     /**

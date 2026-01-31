@@ -134,6 +134,9 @@ class GituWebSocketService {
       console.warn(`[Gitu Web WS] Failed to link account for ${userId}:`, error);
     }
 
+    // Register WebSocket for real-time broadcasting
+    gituMessageGateway.registerWebSocketClient(userId, ws);
+
     this.sendToConnection(connectionId, { type: 'connected', payload: { connectionId, userId } });
 
     ws.on('message', (data) => this.handleMessage(connectionId, data));
@@ -146,6 +149,9 @@ class GituWebSocketService {
   private handleDisconnect(connectionId: string): void {
     const connection = this.connections.get(connectionId);
     if (!connection) return;
+
+    // Unregister WebSocket from broadcasting
+    gituMessageGateway.unregisterWebSocketClient(connection.userId);
 
     this.connections.delete(connectionId);
     const set = this.userConnections.get(connection.userId);

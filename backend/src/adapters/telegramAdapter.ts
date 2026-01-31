@@ -26,8 +26,11 @@ import pool from '../config/database.js';
 export interface TelegramMessage {
   text?: string;
   markdown?: string;
+  caption?: string; // Caption for photo/document
   photo?: Buffer;
   document?: { data: Buffer; filename: string };
+  data?: Buffer;
+  filename?: string;
   replyMarkup?: TelegramBot.InlineKeyboardMarkup;
 }
 
@@ -749,6 +752,7 @@ _Click buttons below to change settings:_
       // Send photo
       if (message.photo) {
         await this.bot.sendPhoto(chatId, message.photo, {
+          caption: message.caption || message.text || message.markdown, // Use provided caption or fallback
           reply_markup: message.replyMarkup,
         });
       }

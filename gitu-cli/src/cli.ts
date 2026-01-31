@@ -28,7 +28,7 @@ program
 program
   .command('init')
   .description('Initialize Gitu CLI configuration')
-  .action(() => InitCommand.start(api));
+  .action(() => InitCommand.start(api, config));
 
 program
   .command('alias [shell]')
@@ -192,9 +192,9 @@ try {
   if (error.code === 'commander.help') {
     process.exit(0);
   }
-  
+
   console.error(chalk.red('Error:'), error.message);
-  
+
   if (error.response?.status === 401) {
     console.error(chalk.yellow('\nAuthentication failed. Please check your API token:'));
     console.error(chalk.cyan('  gitu config set-token YOUR_TOKEN'));
@@ -202,6 +202,6 @@ try {
     console.error(chalk.yellow('\nCannot connect to backend. Please check your API URL:'));
     console.error(chalk.cyan('  gitu config set-url https://your-backend.com'));
   }
-  
+
   process.exit(1);
 }

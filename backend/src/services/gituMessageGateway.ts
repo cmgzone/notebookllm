@@ -113,7 +113,7 @@ class GituMessageGateway {
           // We pass the platformUserId (JID/ChatID) to the handler
           // The handler signature in registerOutboundHandler expects (targetId, text)
           notifications.push(
-            handler(platformUserId, message).catch(err => 
+            handler(platformUserId, message).catch(err =>
               console.error(`Failed to notify user ${userId} on ${platform}:`, err)
             )
           );
@@ -121,7 +121,7 @@ class GituMessageGateway {
       }
 
       await Promise.all(notifications);
-      
+
     } catch (error) {
       console.error(`[Gitu Gateway] Failed to notify user ${userId}:`, error);
     }
@@ -186,7 +186,7 @@ class GituMessageGateway {
         if (rawContent.message) {
           const msg = rawContent.message;
           const mediaBuffer = rawContent.media || Buffer.from([]);
-          
+
           // Text message
           if (msg.conversation) {
             content.text = msg.conversation;
@@ -194,7 +194,7 @@ class GituMessageGateway {
             content.text = msg.extendedTextMessage.text;
             content.replyTo = msg.extendedTextMessage.contextInfo?.stanzaId;
           }
-          
+
           // Image
           if (msg.imageMessage) {
             content.attachments = content.attachments || [];
@@ -208,7 +208,7 @@ class GituMessageGateway {
               content.text = msg.imageMessage.caption;
             }
           }
-          
+
           // Document
           if (msg.documentMessage) {
             content.attachments = content.attachments || [];
@@ -219,10 +219,10 @@ class GituMessageGateway {
               mimetype: msg.documentMessage.mimetype || 'application/octet-stream',
             });
             if (msg.documentMessage.caption) {
-                content.text = msg.documentMessage.caption;
+              content.text = msg.documentMessage.caption;
             }
           }
-          
+
           // Audio
           if (msg.audioMessage) {
             content.attachments = content.attachments || [];
@@ -244,7 +244,7 @@ class GituMessageGateway {
               mimetype: msg.videoMessage.mimetype || 'video/mp4',
             });
             if (msg.videoMessage.caption) {
-                content.text = msg.videoMessage.caption;
+              content.text = msg.videoMessage.caption;
             }
           }
         }
@@ -254,7 +254,7 @@ class GituMessageGateway {
         // Telegram Bot API
         content.text = rawContent.text || rawContent.caption;
         content.replyTo = rawContent.reply_to_message?.message_id?.toString();
-        
+
         // Handle attachments
         if (rawContent.photo) {
           content.attachments = content.attachments || [];
@@ -266,7 +266,7 @@ class GituMessageGateway {
             mimetype: 'image/jpeg',
           });
         }
-        
+
         if (rawContent.document) {
           content.attachments = content.attachments || [];
           content.attachments.push({
@@ -276,7 +276,7 @@ class GituMessageGateway {
             mimetype: rawContent.document.mime_type || 'application/octet-stream',
           });
         }
-        
+
         if (rawContent.voice || rawContent.audio) {
           content.attachments = content.attachments || [];
           const audioData = rawContent.voice || rawContent.audio;
@@ -287,7 +287,7 @@ class GituMessageGateway {
             mimetype: audioData.mime_type || 'audio/ogg',
           });
         }
-        
+
         if (rawContent.video) {
           content.attachments = content.attachments || [];
           content.attachments.push({
@@ -303,7 +303,7 @@ class GituMessageGateway {
         // Email (IMAP)
         content.text = rawContent.text || rawContent.html || rawContent.body;
         content.replyTo = rawContent.inReplyTo;
-        
+
         if (rawContent.attachments && Array.isArray(rawContent.attachments)) {
           content.attachments = rawContent.attachments.map((att: any) => ({
             type: this.detectAttachmentType(att.contentType || att.mimetype),
@@ -657,8 +657,98 @@ class GituMessageGateway {
       metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
     };
   }
+
+  // ==================== WEBSOCKET BROADCASTING ====================
+
+  private wsClients: Map<string, any> = new Map(); // userId -> WebSocket
+
+  /**
+   * Register a WebSocket client for a user.
+   * This allows broadcasting real-time updates to connected clients.
+   */
+  registerWebSocketClient(userId: string, ws: any): void {
+    this.wsClients.set(userId, ws);
+    console.log(`[Gitu Gateway] WebSocket registered for user ${userId}`);
+  }
+
+  /**
+   * Unregister a WebSocket client.
+   */
+  unregisterWebSocketClient(userId: string): void {
+    this.wsClients.delete(userId);
+    console.log(`[Gitu Gateway] WebSocket unregistered for user ${userId}`);
+  }
+
+  /**
+   * Broadcast insights update to user's WebSocket.
+   */
+  broadcastInsightsUpdate(userId: string): void {
+    const ws = this.wsClients.get(userId);
+    if (ws && ws.readyState === 1) { // 1 = OPEN
+      try {
+        ws.send(JSON.stringify({
+          type: 'insights_updated',
+          payload: { timestamp: new Date().toISOString() }
+        }));
+      } catch (error) {
+        console.error(`[Gitu Gateway] Failed to broadcast insights update to ${userId}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Broadcast mission status update to user's WebSocket.
+   */
+  broadcastMissionUpdate(userId: string, missionId: string, status: string): void {
+    const ws = this.wsClients.get(userId);
+    if (ws && ws.readyState === 1) {
+      try {
+        ws.send(JSON.stringify({
+          type: 'mission_updated',
+          payload: { missionId, status, timestamp: new Date().toISOString() }
+        }));
+      } catch (error) {
+        console.error(`[Gitu Gateway] Failed to broadcast mission update to ${userId}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Broadcast incoming platform message to user's WebSocket.
+   */
+  broadcastIncomingMessage(userId: string, platform: Platform, message: string): void {
+    const ws = this.wsClients.get(userId);
+    if (ws && ws.readyState === 1) {
+      try {
+        ws.send(JSON.stringify({
+          type: 'incoming_message',
+          payload: { platform, message, timestamp: new Date().toISOString() }
+        }));
+      } catch (error) {
+        console.error(`[Gitu Gateway] Failed to broadcast incoming message to ${userId}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Broadcast generic notification to user's WebSocket.
+   */
+  broadcastNotification(userId: string, title: string, body: string, type: 'info' | 'success' | 'warning' | 'error' = 'info'): void {
+    const ws = this.wsClients.get(userId);
+    if (ws && ws.readyState === 1) {
+      try {
+        ws.send(JSON.stringify({
+          type: 'notification',
+          payload: { title, body, notificationType: type, timestamp: new Date().toISOString() }
+        }));
+      } catch (error) {
+        console.error(`[Gitu Gateway] Failed to broadcast notification to ${userId}:`, error);
+      }
+    }
+  }
 }
 
 // Export singleton instance
 export const gituMessageGateway = new GituMessageGateway();
 export default gituMessageGateway;
+

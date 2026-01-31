@@ -45,6 +45,13 @@ import { gituWebSocketService } from './services/gituWebSocketService.js';
 import { gituShellWebSocketService } from './services/gituShellWebSocketService.js';
 import { registerNotebookTools } from './services/notebookMCPTools.js';
 import { registerResearchTools } from './services/researchMCPTools.js';
+import { registerGmailTools } from './services/gmailMCPTools.js';
+import { registerShellTools } from './services/shellMCPTools.js';
+import { registerMessagingTools } from './services/messagingMCPTools.js';
+import { registerGoogleDriveTools } from './services/googleDriveMCPTools.js';
+import { registerShopifyTools } from './services/shopifyMCPTools.js';
+import { registerLanguageTools } from './services/languageMCPTools.js';
+import { registerBrowserTools } from './services/browserMCPTools.js';
 import { whatsappAdapter } from './adapters/whatsappAdapter.js';
 import { whatsappHealthMonitor } from './services/whatsappHealthMonitor.js';
 import { telegramAdapter } from './adapters/telegramAdapter.js';
@@ -79,6 +86,13 @@ codeVerificationService.initialize();
 codeAnalysisService.initialize();
 registerNotebookTools();
 registerResearchTools();
+registerGmailTools();
+registerShellTools();
+registerMessagingTools();
+registerGoogleDriveTools();
+registerShopifyTools();
+registerLanguageTools();
+registerBrowserTools();
 gituScheduler.start();
 
 // Initialize WhatsApp

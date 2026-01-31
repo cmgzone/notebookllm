@@ -183,6 +183,27 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
             state = state.copyWith(error: payload['error'] as String?);
           }
           break;
+        case 'insights_updated':
+          // Proactive insights have been updated, trigger refresh
+          // Access via ref to trigger proactive insights provider refresh
+          developer.log('Insights updated, triggering refresh',
+              name: 'GituChatNotifier');
+          // Note: The provider will be refreshed by the proactiveInsightsProvider
+          break;
+        case 'mission_updated':
+          // Mission status updated
+          final payload = data['payload'] as Map<String, dynamic>;
+          developer.log(
+              'Mission ${payload['missionId']} updated: ${payload['status']}',
+              name: 'GituChatNotifier');
+          break;
+        case 'notification':
+          // General notification from backend
+          final payload = data['payload'] as Map<String, dynamic>;
+          developer.log(
+              'Notification: ${payload['title']} - ${payload['body']}',
+              name: 'GituChatNotifier');
+          break;
       }
     } catch (e) {
       developer.log('Error parsing Gitu WS message: $e',

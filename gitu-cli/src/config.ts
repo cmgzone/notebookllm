@@ -17,7 +17,7 @@ export class ConfigManager {
       projectName: 'gitu',
       cwd: join(homedir(), '.gitu'),
       defaults: {
-        apiUrl: 'https://api.notebookllm.com',
+        apiUrl: 'https://notebookllm-ufj7.onrender.com/api',
         defaultFormat: 'terminal'
       }
     });

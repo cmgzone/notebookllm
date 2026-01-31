@@ -11,6 +11,8 @@ import {
     Loader2,
     ArrowUpRight,
     Bot,
+    Sparkles,
+    MessageCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -178,6 +180,7 @@ export default function DashboardPage() {
                             </div>
                             <div className="space-y-6">
                                 <SubscriptionCard subscription={subscription} />
+                                <GituCard />
                                 <McpCard />
                             </div>
                         </div>
@@ -326,6 +329,41 @@ function SubscriptionCard({ subscription }: { subscription: Subscription | null 
                     className="w-full flex items-center justify-center gap-2 rounded-lg bg-white/10 py-2 text-sm font-medium hover:bg-white/20 transition-colors border border-white/10"
                 >
                     {isFree ? "Upgrade Plan" : "Manage Subscription"}
+                    <ArrowUpRight size={14} />
+                </Link>
+            </div>
+        </div>
+    );
+}
+
+function GituCard() {
+    return (
+        <div className="rounded-xl border border-white/5 bg-gradient-to-br from-blue-900/20 to-green-900/20 p-6 relative overflow-hidden">
+            <div className="relative z-10">
+                <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-lg font-semibold">Gitu Assistant</h3>
+                    <Sparkles size={20} className="text-blue-400" />
+                </div>
+                <p className="text-sm text-neutral-400 mb-6">
+                    Universal AI assistant with skills for WhatsApp, Shopify, and terminal automation.
+                </p>
+
+                <div className="space-y-3 mb-6">
+                    <div className="flex items-center gap-2 text-sm text-neutral-300">
+                        <MessageCircle size={16} className="text-green-400" />
+                        <span>Platform connections</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-neutral-300">
+                        <Zap size={16} className="text-amber-400" />
+                        <span>Autonomous task handling</span>
+                    </div>
+                </div>
+
+                <Link
+                    href="/dashboard/gitu"
+                    className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-600/20 py-2 text-sm font-medium hover:bg-blue-600/30 transition-colors border border-blue-500/20"
+                >
+                    Manage Assistant
                     <ArrowUpRight size={14} />
                 </Link>
             </div>

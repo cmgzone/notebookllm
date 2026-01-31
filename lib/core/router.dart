@@ -73,6 +73,7 @@ import '../features/gitu/permissions_screen.dart';
 import '../features/gitu/agents_screen.dart';
 import '../features/gitu/agent_detail_screen.dart';
 import '../features/gitu/swarm/ui/swarm_dashboard.dart';
+import '../features/gitu/gitu_dashboard_screen.dart';
 import '../features/planning/ui/planning_ai_screen.dart';
 import '../features/planning/ui/ui_design_generator_screen.dart';
 import '../features/planning/ui/project_prototype_screen.dart';
@@ -210,6 +211,12 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             name: 'gitu-settings',
             pageBuilder: (context, state) =>
                 buildTransitionPage(child: const GituSettingsScreen()),
+          ),
+          GoRoute(
+            path: '/gitu/dashboard',
+            name: 'gitu-dashboard',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GituDashboardScreen()),
           ),
           GoRoute(
             path: '/gitu-chat',

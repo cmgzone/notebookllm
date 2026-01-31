@@ -1929,4 +1929,69 @@ router.post('/mission/:id/stop', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ==================== PROACTIVE INSIGHTS ====================
+
+/**
+ * GET /insights
+ * Get proactive insights for the authenticated user
+ */
+router.get('/insights', async (req: AuthRequest, res: Response) => {
+  try {
+    const useCache = req.query.useCache !== 'false';
+    const insights = await gituProactiveService.getProactiveInsights(
+      req.userId!,
+      useCache
+    );
+    res.json({ success: true, insights });
+  } catch (error: any) {
+    console.error('[Insights] Error:', error);
+    res.status(500).json({
+      error: 'Failed to load insights',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /insights/refresh
+ * Force refresh proactive insights (clears cache)
+ */
+router.post('/insights/refresh', async (req: AuthRequest, res: Response) => {
+  try {
+    gituProactiveService.clearCache(req.userId!);
+    const insights = await gituProactiveService.getProactiveInsights(
+      req.userId!,
+      false
+    );
+    res.json({ success: true, insights });
+  } catch (error: any) {
+    console.error('[Insights Refresh] Error:', error);
+    res.status(500).json({
+      error: 'Failed to refresh insights',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /missions/start
+ * Start a new Swarm mission via proactive service
+ */
+router.post('/missions/start', async (req: AuthRequest, res: Response) => {
+  try {
+    const { objective } = req.body;
+    if (!objective || typeof objective !== 'string') {
+      return res.status(400).json({ error: 'objective is required' });
+    }
+    const mission = await gituProactiveService.startMission(req.userId!, objective);
+    res.json({ success: true, mission });
+  } catch (error: any) {
+    console.error('[Mission Start] Error:', error);
+    res.status(500).json({
+      error: 'Failed to start mission',
+      message: error.message
+    });
+  }
+});
+
 export default router;

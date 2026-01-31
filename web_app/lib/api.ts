@@ -186,6 +186,45 @@ export interface AIModelOption {
     isPremium: boolean;
 }
 
+export interface GituSettings {
+    enabled: boolean;
+    proactiveEnabled: boolean;
+    modelPreferences: {
+        apiKeySource: 'platform' | 'personal';
+        defaultModel: string;
+        taskSpecificModels: Record<string, string>;
+        personalKeys: Record<string, string>;
+    };
+    updatedAt: string;
+}
+
+export interface LinkedAccount {
+    id: string;
+    platform: 'whatsapp' | 'telegram' | 'email' | 'terminal' | 'flutter';
+    platformUserId: string;
+    displayName: string | null;
+    verified: boolean;
+    isPrimary: boolean;
+    status: string;
+    createdAt: string;
+}
+
+export interface WhatsAppStatus {
+    connected: boolean;
+    state: 'connected' | 'disconnected' | 'connecting';
+    qrCode: string | null;
+    account?: {
+        jid: string;
+        name?: string;
+    };
+}
+
+export interface ShopifyStatus {
+    connected: boolean;
+    shopUrl?: string;
+    scopes?: string[];
+}
+
 export interface Notebook {
     id: string;
     userId: string;
@@ -644,6 +683,81 @@ class ApiService {
     async getAIModels(): Promise<AIModelOption[]> {
         const data = await this.fetch<{ models: AIModelOption[] }>('/coding-agent/models');
         return data.models;
+    }
+
+    // Gitu Section
+    async getGituSettings(): Promise<GituSettings> {
+        const data = await this.fetch<{ settings: GituSettings }>('/gitu/settings');
+        return data.settings;
+    }
+
+    async updateGituSettings(settings: Partial<GituSettings>): Promise<GituSettings> {
+        const data = await this.fetch<{ settings: GituSettings }>('/gitu/settings', {
+            method: 'PUT',
+            body: JSON.stringify(settings),
+        });
+        return data.settings;
+    }
+
+    async toggleGituEnabled(enabled: boolean): Promise<{ success: boolean }> {
+        return this.fetch('/gitu/toggle', {
+            method: 'POST',
+            body: JSON.stringify({ enabled }),
+        });
+    }
+
+    async getLinkedAccounts(): Promise<LinkedAccount[]> {
+        const data = await this.fetch<{ accounts: LinkedAccount[] }>('/gitu/identities');
+        return data.accounts;
+    }
+
+    async linkIdentity(platform: string, platformUserId: string): Promise<LinkedAccount> {
+        return this.fetch('/gitu/identities/link', {
+            method: 'POST',
+            body: JSON.stringify({ platform, platformUserId }),
+        });
+    }
+
+    async unlinkIdentity(platform: string, platformUserId: string): Promise<{ success: boolean }> {
+        return this.fetch(`/gitu/identities/${platform}/${encodeURIComponent(platformUserId)}`, {
+            method: 'DELETE',
+        });
+    }
+
+    async setPrimaryIdentity(platform: string, platformUserId: string): Promise<{ success: boolean }> {
+        return this.fetch('/gitu/identities/primary', {
+            method: 'POST',
+            body: JSON.stringify({ platform, platformUserId }),
+        });
+    }
+
+    // WhatsApp
+    async getWhatsAppStatus(): Promise<WhatsAppStatus> {
+        return this.fetch('/gitu/whatsapp/status');
+    }
+
+    async linkWhatsAppCurrentSession(): Promise<{ success: boolean }> {
+        return this.fetch('/gitu/whatsapp/link-current', {
+            method: 'POST',
+        });
+    }
+
+    // Shopify
+    async getShopifyStatus(): Promise<ShopifyStatus> {
+        return this.fetch('/gitu/shopify/status');
+    }
+
+    async connectShopify(shopUrl: string): Promise<{ authUrl: string }> {
+        return this.fetch('/gitu/shopify/connect', {
+            method: 'POST',
+            body: JSON.stringify({ shopUrl }),
+        });
+    }
+
+    async disconnectShopify(): Promise<{ success: boolean }> {
+        return this.fetch('/gitu/shopify/disconnect', {
+            method: 'POST',
+        });
     }
 }
 

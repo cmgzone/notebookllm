@@ -73,7 +73,7 @@ class ProactiveInsightsNotifier extends StateNotifier<ProactiveInsightsState> {
 
     try {
       final response = await _api.get<Map<String, dynamic>>(
-        '/gitu/proactive-insights${refresh ? '?refresh=true' : ''}',
+        '/gitu/insights${refresh ? '?useCache=false' : ''}',
       );
 
       if (_isDisposed) return;

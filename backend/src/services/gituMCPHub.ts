@@ -7,6 +7,7 @@ export interface MCPToolParameter {
   description?: string;
   enum?: string[];
   default?: any;
+  items?: any; // For array types
 }
 
 export interface MCPToolSchema {
