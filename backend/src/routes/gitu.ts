@@ -175,65 +175,65 @@ router.post('/terminal/source', authenticateToken, async (req: AuthRequest, res:
       return res.status(400).json({ error: 'code is required' });
     }
     const name = filename || 'CLI Upload';
-    
+
     // Find or use provided notebook
     let targetNotebookId = notebookId;
     if (!targetNotebookId) {
-        // Try to find a recent notebook or default
-        const result = await pool.query(
-            `SELECT id FROM notebooks WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1`,
-            [req.userId]
+      // Try to find a recent notebook or default
+      const result = await pool.query(
+        `SELECT id FROM notebooks WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1`,
+        [req.userId]
+      );
+      if (result.rows.length > 0) {
+        targetNotebookId = result.rows[0].id;
+      } else {
+        // Create default notebook
+        const newNb = await pool.query(
+          `INSERT INTO notebooks (user_id, title, description) VALUES ($1, 'CLI Uploads', 'Auto-generated for CLI') RETURNING id`,
+          [req.userId]
         );
-        if (result.rows.length > 0) {
-            targetNotebookId = result.rows[0].id;
-        } else {
-            // Create default notebook
-            const newNb = await pool.query(
-                `INSERT INTO notebooks (user_id, title, description) VALUES ($1, 'CLI Uploads', 'Auto-generated for CLI') RETURNING id`,
-                [req.userId]
-            );
-            targetNotebookId = newNb.rows[0].id;
-        }
+        targetNotebookId = newNb.rows[0].id;
+      }
     }
 
     // Insert Source
     const sourceId = uuidv4();
     await pool.query(
-        `INSERT INTO sources (id, notebook_id, title, type, content, created_at)
+      `INSERT INTO sources (id, notebook_id, title, type, content, created_at)
          VALUES ($1, $2, $3, 'text', $4, NOW())`,
-        [sourceId, targetNotebookId, name, code]
+      [sourceId, targetNotebookId, name, code]
     );
 
     // Chunking & Embedding
     const chunkSize = 1000;
     const overlap = 100;
     const chunks: string[] = [];
-    
+
     for (let i = 0; i < code.length; i += (chunkSize - overlap)) {
-        chunks.push(code.substring(i, i + chunkSize));
+      chunks.push(code.substring(i, i + chunkSize));
     }
 
     // Process chunks
     for (let i = 0; i < chunks.length; i++) {
-        const chunkText = chunks[i];
-        try {
-            const embedding = await generateEmbedding(chunkText);
-            const vectorStr = `[${embedding.join(',')}]`;
-            
-            await pool.query(
-                `INSERT INTO chunks (id, source_id, content_text, chunk_index, embedding)
+      const chunkText = chunks[i];
+      try {
+        const embedding = await generateEmbedding(chunkText);
+        const vectorStr = `[${embedding.join(',')}]`;
+
+        await pool.query(
+          `INSERT INTO chunks (id, source_id, content_text, chunk_index, embedding)
                  VALUES ($1, $2, $3, $4, $5)`,
-                [uuidv4(), sourceId, chunkText, i, vectorStr]
-            );
-        } catch (e) {
-            console.error(`Failed to embed chunk ${i}:`, e);
-            // Insert without embedding as fallback
-             await pool.query(
-                `INSERT INTO chunks (id, source_id, content_text, chunk_index)
+          [uuidv4(), sourceId, chunkText, i, vectorStr]
+        );
+      } catch (e) {
+        console.error(`Failed to embed chunk ${i}:`, e);
+        // Insert without embedding as fallback
+        await pool.query(
+          `INSERT INTO chunks (id, source_id, content_text, chunk_index)
                  VALUES ($1, $2, $3, $4)`,
-                [uuidv4(), sourceId, chunkText, i]
-            );
-        }
+          [uuidv4(), sourceId, chunkText, i]
+        );
+      }
     }
 
     res.json({ success: true, sourceId, notebookId: targetNotebookId, chunks: chunks.length });
@@ -303,8 +303,8 @@ router.get('/whatsapp/status', async (req: AuthRequest, res: Response) => {
       state === 'connected'
         ? 'connected'
         : qr
-            ? 'scanning'
-            : 'disconnected';
+          ? 'scanning'
+          : 'disconnected';
     res.json({
       success: true,
       status,
@@ -649,9 +649,9 @@ router.post('/plugins', async (req: AuthRequest, res: Response) => {
     const msg = String(error?.message || '');
     const status =
       msg.includes('NAME_REQUIRED') ||
-      msg.includes('CODE_REQUIRED') ||
-      msg.includes('CODE_DISALLOWED') ||
-      msg.includes('CONFIG_INVALID')
+        msg.includes('CODE_REQUIRED') ||
+        msg.includes('CODE_DISALLOWED') ||
+        msg.includes('CONFIG_INVALID')
         ? 400
         : 500;
     res.status(status).json({ error: 'Failed to create plugin', message: msg });
@@ -668,9 +668,9 @@ router.put('/plugins/:id', async (req: AuthRequest, res: Response) => {
       msg === 'PLUGIN_NOT_FOUND'
         ? 404
         : msg.includes('NAME_REQUIRED') ||
-            msg.includes('CODE_REQUIRED') ||
-            msg.includes('CODE_DISALLOWED') ||
-            msg.includes('CONFIG_INVALID')
+          msg.includes('CODE_REQUIRED') ||
+          msg.includes('CODE_DISALLOWED') ||
+          msg.includes('CONFIG_INVALID')
           ? 400
           : 500;
     res.status(status).json({ error: 'Failed to update plugin', message: msg });
@@ -732,16 +732,16 @@ router.get('/plugins/:id/executions', async (req: AuthRequest, res: Response) =>
  * List all scheduled tasks for the user
  */
 router.get('/tasks', async (req: AuthRequest, res: Response) => {
-    try {
-        const result = await pool.query(
-            `SELECT * FROM gitu_scheduled_tasks WHERE user_id = $1 ORDER BY created_at DESC`,
-            [req.userId]
-        );
-        res.json({ success: true, tasks: result.rows });
-    } catch (error: any) {
-        console.error('List tasks error:', error);
-        res.status(500).json({ error: 'Failed to list tasks', message: error.message });
-    }
+  try {
+    const result = await pool.query(
+      `SELECT * FROM gitu_scheduled_tasks WHERE user_id = $1 ORDER BY created_at DESC`,
+      [req.userId]
+    );
+    res.json({ success: true, tasks: result.rows });
+  } catch (error: any) {
+    console.error('List tasks error:', error);
+    res.status(500).json({ error: 'Failed to list tasks', message: error.message });
+  }
 });
 
 /**
@@ -749,26 +749,26 @@ router.get('/tasks', async (req: AuthRequest, res: Response) => {
  * Create a new scheduled task
  */
 router.post('/tasks', async (req: AuthRequest, res: Response) => {
-    try {
-        const { name, action, cron, enabled = true, trigger = 'cron' } = req.body;
+  try {
+    const { name, action, cron, enabled = true, trigger = 'cron' } = req.body;
 
-        if (!name || !action || !cron) {
-            return res.status(400).json({ error: 'Name, action, and cron are required' });
-        }
+    if (!name || !action || !cron) {
+      return res.status(400).json({ error: 'Name, action, and cron are required' });
+    }
 
-        const id = uuidv4();
-        const result = await pool.query(
-            `INSERT INTO gitu_scheduled_tasks (id, user_id, name, action, cron, enabled, trigger)
+    const id = uuidv4();
+    const result = await pool.query(
+      `INSERT INTO gitu_scheduled_tasks (id, user_id, name, action, cron, enabled, trigger)
              VALUES ($1, $2, $3, $4, $5, $6, $7)
              RETURNING *`,
-            [id, req.userId, name, action, cron, enabled, trigger]
-        );
+      [id, req.userId, name, action, cron, enabled, trigger]
+    );
 
-        res.json({ success: true, task: result.rows[0] });
-    } catch (error: any) {
-        console.error('Create task error:', error);
-        res.status(500).json({ error: 'Failed to create task', message: error.message });
-    }
+    res.json({ success: true, task: result.rows[0] });
+  } catch (error: any) {
+    console.error('Create task error:', error);
+    res.status(500).json({ error: 'Failed to create task', message: error.message });
+  }
 });
 
 /**
@@ -776,21 +776,21 @@ router.post('/tasks', async (req: AuthRequest, res: Response) => {
  * Update a scheduled task
  */
 router.put('/tasks/:id', async (req: AuthRequest, res: Response) => {
-    try {
-        const { id } = req.params;
-        const { name, action, cron, enabled, trigger } = req.body;
+  try {
+    const { id } = req.params;
+    const { name, action, cron, enabled, trigger } = req.body;
 
-        // Verify ownership
-        const check = await pool.query(
-            'SELECT id FROM gitu_scheduled_tasks WHERE id = $1 AND user_id = $2',
-            [id, req.userId]
-        );
-        if (check.rows.length === 0) {
-            return res.status(404).json({ error: 'Task not found' });
-        }
+    // Verify ownership
+    const check = await pool.query(
+      'SELECT id FROM gitu_scheduled_tasks WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
 
-        const result = await pool.query(
-            `UPDATE gitu_scheduled_tasks 
+    const result = await pool.query(
+      `UPDATE gitu_scheduled_tasks 
              SET name = COALESCE($1, name),
                  action = COALESCE($2, action),
                  cron = COALESCE($3, cron),
@@ -799,14 +799,14 @@ router.put('/tasks/:id', async (req: AuthRequest, res: Response) => {
                  updated_at = NOW()
              WHERE id = $6
              RETURNING *`,
-            [name, action, cron, enabled, trigger, id]
-        );
+      [name, action, cron, enabled, trigger, id]
+    );
 
-        res.json({ success: true, task: result.rows[0] });
-    } catch (error: any) {
-        console.error('Update task error:', error);
-        res.status(500).json({ error: 'Failed to update task', message: error.message });
-    }
+    res.json({ success: true, task: result.rows[0] });
+  } catch (error: any) {
+    console.error('Update task error:', error);
+    res.status(500).json({ error: 'Failed to update task', message: error.message });
+  }
 });
 
 /**
@@ -814,22 +814,22 @@ router.put('/tasks/:id', async (req: AuthRequest, res: Response) => {
  * Delete a scheduled task
  */
 router.delete('/tasks/:id', async (req: AuthRequest, res: Response) => {
-    try {
-        const { id } = req.params;
-        const result = await pool.query(
-            'DELETE FROM gitu_scheduled_tasks WHERE id = $1 AND user_id = $2 RETURNING id',
-            [id, req.userId]
-        );
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      'DELETE FROM gitu_scheduled_tasks WHERE id = $1 AND user_id = $2 RETURNING id',
+      [id, req.userId]
+    );
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Task not found' });
-        }
-
-        res.json({ success: true, id });
-    } catch (error: any) {
-        console.error('Delete task error:', error);
-        res.status(500).json({ error: 'Failed to delete task', message: error.message });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
     }
+
+    res.json({ success: true, id });
+  } catch (error: any) {
+    console.error('Delete task error:', error);
+    res.status(500).json({ error: 'Failed to delete task', message: error.message });
+  }
 });
 
 /**
@@ -837,37 +837,37 @@ router.delete('/tasks/:id', async (req: AuthRequest, res: Response) => {
  * Manually trigger a task immediately
  */
 router.post('/tasks/:id/trigger', async (req: AuthRequest, res: Response) => {
-    try {
-        const { id } = req.params;
-        
-        // Verify ownership and get task details
-        const result = await pool.query(
-            'SELECT * FROM gitu_scheduled_tasks WHERE id = $1 AND user_id = $2',
-            [id, req.userId]
-        );
-        
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Task not found' });
-        }
+  try {
+    const { id } = req.params;
 
-        const task = result.rows[0];
-        
-        // Use trigger logic from scheduler
-        // Since executeTask is private, we'll use trigger() which creates a manual task, 
-        // OR we can expose executeTask publicly. 
-        // For now, let's just use trigger() with the task's action.
-        // Ideally we'd want to record this execution against the specific task ID, 
-        // but gituScheduler.trigger() creates a new ID 'manual-...'.
-        // Let's rely on gituScheduler.trigger() for now as it's safe.
-        
-        // Cast action to AllowedAction (assuming DB has valid actions)
-        await gituScheduler.trigger(task.action as any, req.userId!);
+    // Verify ownership and get task details
+    const result = await pool.query(
+      'SELECT * FROM gitu_scheduled_tasks WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
 
-        res.json({ success: true, message: 'Task triggered successfully' });
-    } catch (error: any) {
-        console.error('Trigger task error:', error);
-        res.status(500).json({ error: 'Failed to trigger task', message: error.message });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
     }
+
+    const task = result.rows[0];
+
+    // Use trigger logic from scheduler
+    // Since executeTask is private, we'll use trigger() which creates a manual task, 
+    // OR we can expose executeTask publicly. 
+    // For now, let's just use trigger() with the task's action.
+    // Ideally we'd want to record this execution against the specific task ID, 
+    // but gituScheduler.trigger() creates a new ID 'manual-...'.
+    // Let's rely on gituScheduler.trigger() for now as it's safe.
+
+    // Cast action to AllowedAction (assuming DB has valid actions)
+    await gituScheduler.trigger(task.action as any, req.userId!);
+
+    res.json({ success: true, message: 'Task triggered successfully' });
+  } catch (error: any) {
+    console.error('Trigger task error:', error);
+    res.status(500).json({ error: 'Failed to trigger task', message: error.message });
+  }
 });
 
 /**
@@ -875,32 +875,32 @@ router.post('/tasks/:id/trigger', async (req: AuthRequest, res: Response) => {
  * Get execution history for a task
  */
 router.get('/tasks/:id/executions', async (req: AuthRequest, res: Response) => {
-    try {
-        const { id } = req.params;
-        const { limit = 20 } = req.query;
+  try {
+    const { id } = req.params;
+    const { limit = 20 } = req.query;
 
-        // Verify ownership
-        const check = await pool.query(
-            'SELECT id FROM gitu_scheduled_tasks WHERE id = $1 AND user_id = $2',
-            [id, req.userId]
-        );
-        if (check.rows.length === 0) {
-            return res.status(404).json({ error: 'Task not found' });
-        }
+    // Verify ownership
+    const check = await pool.query(
+      'SELECT id FROM gitu_scheduled_tasks WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
 
-        const result = await pool.query(
-            `SELECT * FROM gitu_task_executions 
+    const result = await pool.query(
+      `SELECT * FROM gitu_task_executions 
              WHERE task_id = $1 
              ORDER BY executed_at DESC 
              LIMIT $2`,
-            [id, limit]
-        );
+      [id, limit]
+    );
 
-        res.json({ success: true, executions: result.rows });
-    } catch (error: any) {
-        console.error('List executions error:', error);
-        res.status(500).json({ error: 'Failed to list executions', message: error.message });
-    }
+    res.json({ success: true, executions: result.rows });
+  } catch (error: any) {
+    console.error('List executions error:', error);
+    res.status(500).json({ error: 'Failed to list executions', message: error.message });
+  }
 });
 
 export default router;
@@ -918,17 +918,21 @@ router.get('/identity/linked', async (req: AuthRequest, res: Response) => {
 router.post('/identity/link', async (req: AuthRequest, res: Response) => {
   try {
     const { platform, platformUserId, displayName } = req.body;
+    console.log(`[Identity Link] Attempting to link: userId=${req.userId}, platform=${platform}, platformUserId=${platformUserId}`);
+
     if (!platform || !platformUserId) {
       return res.status(400).json({ error: 'platform and platformUserId are required' });
     }
     const account = await gituIdentityManager.linkAccount({
       userId: req.userId!,
       platform,
-      platformUserId,
+      platformUserId: String(platformUserId).trim(), // Ensure string and trim whitespace
       displayName,
     });
+    console.log(`[Identity Link] SUCCESS: Linked ${platform}:${platformUserId} to user ${req.userId}`);
     res.json({ success: true, account });
   } catch (error: any) {
+    console.error(`[Identity Link] FAILED:`, error);
     res.status(500).json({ error: 'Failed to link account', message: error.message });
   }
 });
@@ -1221,13 +1225,13 @@ router.put('/shell/permissions', async (req: AuthRequest, res: Response) => {
 
     const allowedPaths = Array.isArray(body.allowedPaths)
       ? Array.from(
-          new Set(
-            body.allowedPaths
-              .filter((p): p is string => typeof p === 'string')
-              .map(p => normalizeScopePath(p))
-              .filter(p => p.length > 0)
-          )
+        new Set(
+          body.allowedPaths
+            .filter((p): p is string => typeof p === 'string')
+            .map(p => normalizeScopePath(p))
+            .filter(p => p.length > 0)
         )
+      )
       : [];
 
     const allowUnsandboxed = body.allowUnsandboxed === true;
@@ -1603,7 +1607,7 @@ router.post('/agents', async (req: AuthRequest, res: Response) => {
   try {
     const { task, parentAgentId, memory } = req.body;
     if (!task) return res.status(400).json({ error: 'task is required' });
-    
+
     const agent = await gituAgentManager.spawnAgent(req.userId!, task, parentAgentId, memory);
     res.status(201).json({ success: true, agent });
   } catch (error: any) {
@@ -1616,7 +1620,7 @@ router.get('/agents/:id', async (req: AuthRequest, res: Response) => {
     const agent = await gituAgentManager.getAgent(req.params.id);
     if (!agent) return res.status(404).json({ error: 'Agent not found' });
     if (agent.userId !== req.userId) return res.status(403).json({ error: 'Access denied' });
-    
+
     res.json({ success: true, agent });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to get agent', message: error.message });
@@ -1653,13 +1657,13 @@ router.post('/shopify/connect', async (req: AuthRequest, res: Response) => {
     }
 
     const credentials = { storeDomain, accessToken, apiVersion };
-    
+
     // Test connection first
     const testResult = await gituShopifyManager.testConnection(credentials);
-    
+
     // Save connection
     await gituShopifyManager.connect(req.userId!, credentials, testResult.shop);
-    
+
     res.json({ success: true, shop: testResult.shop });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to connect Shopify', message: error.message });

@@ -847,6 +847,8 @@ _Click buttons below to change settings:_
       [chatId]
     );
 
+    console.log(`[Telegram Lookup] chatId=${chatId} -> found=${result.rows.length > 0 ? result.rows[0].user_id : 'NONE'}`);
+
     if (result.rows.length === 0) {
       throw new Error('Telegram account not linked. Please link your account in the NotebookLLM app.');
     }
@@ -862,6 +864,8 @@ _Click buttons below to change settings:_
        LIMIT 1`,
       [chatId]
     );
+
+    console.log(`[Telegram Linked Lookup] chatId=${chatId} -> found=${result.rows.length > 0}`);
 
     if (result.rows.length === 0) {
       throw new Error('Telegram account not linked. Please link your account in the NotebookLLM app.');
