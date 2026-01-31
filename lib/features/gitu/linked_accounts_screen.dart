@@ -17,7 +17,8 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
         flexibleSpace: Container(
           decoration: const BoxDecoration(gradient: AppTheme.premiumGradient),
         ),
-        title: const Text('Linked Accounts', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text('Linked Accounts',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
@@ -66,7 +67,8 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () => _linkWhatsAppCurrentSession(context, ref),
+                        onPressed: () =>
+                            _linkWhatsAppCurrentSession(context, ref),
                         child: const Text('Link WhatsApp (Current Session)'),
                       ),
                     ),
@@ -99,7 +101,8 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
     );
   }
 
-  static Future<void> _showLinkOptions(BuildContext context, WidgetRef ref) async {
+  static Future<void> _showLinkOptions(
+      BuildContext context, WidgetRef ref) async {
     showModalBottomSheet(
       context: context,
       builder: (_) => SafeArea(
@@ -111,7 +114,8 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
               ListTile(
                 leading: const Icon(LucideIcons.send),
                 title: const Text('Link Telegram'),
-                subtitle: const Text('Use your Telegram User ID from /id command'),
+                subtitle:
+                    const Text('Use your Telegram User ID from /id command'),
                 onTap: () {
                   Navigator.pop(context);
                   _linkTelegram(context, ref);
@@ -120,7 +124,8 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
               ListTile(
                 leading: const Icon(LucideIcons.messageCircle),
                 title: const Text('Link WhatsApp'),
-                subtitle: const Text('Link the currently connected WhatsApp session'),
+                subtitle:
+                    const Text('Link the currently connected WhatsApp session'),
                 onTap: () {
                   Navigator.pop(context);
                   _linkWhatsAppCurrentSession(context, ref);
@@ -138,12 +143,13 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
     final messenger = ScaffoldMessenger.of(context);
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Link Telegram'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('In Telegram, message the bot and send /id to get your Telegram User ID.'),
+            const Text(
+                'In Telegram, message the bot and send /id to get your Telegram User ID.'),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
@@ -156,24 +162,31 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Link')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Link')),
         ],
       ),
     );
     if (ok != true) return;
     try {
       final telegramUserId = controller.text.trim();
-      if (telegramUserId.isEmpty) throw Exception('Telegram User ID is required');
+      if (telegramUserId.isEmpty)
+        throw Exception('Telegram User ID is required');
       await ref.read(identityServiceProvider).link('telegram', telegramUserId);
       ref.invalidate(linkedAccountsProvider);
       messenger.showSnackBar(const SnackBar(content: Text('Telegram linked')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Failed to link Telegram: $e')));
+      messenger
+          .showSnackBar(SnackBar(content: Text('Failed to link Telegram: $e')));
     }
   }
 
-  static Future<void> _linkWhatsAppCurrentSession(BuildContext context, WidgetRef ref) async {
+  static Future<void> _linkWhatsAppCurrentSession(
+      BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
       final api = ref.read(apiServiceProvider);
@@ -181,7 +194,8 @@ class GituLinkedAccountsScreen extends ConsumerWidget {
       ref.invalidate(linkedAccountsProvider);
       messenger.showSnackBar(const SnackBar(content: Text('WhatsApp linked')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Failed to link WhatsApp: $e')));
+      messenger
+          .showSnackBar(SnackBar(content: Text('Failed to link WhatsApp: $e')));
     }
   }
 }
@@ -219,7 +233,8 @@ class _AccountTile extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Text(account.displayName ?? account.platformUserId, style: const TextStyle(color: Colors.black54)),
+            Text(account.displayName ?? account.platformUserId,
+                style: const TextStyle(color: Colors.black54)),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -228,10 +243,13 @@ class _AccountTile extends ConsumerWidget {
                   onPressed: () async {
                     final messenger = ScaffoldMessenger.of(context);
                     try {
-                      await ref.read(identityServiceProvider).setPrimary(account.platform, account.platformUserId);
+                      await ref
+                          .read(identityServiceProvider)
+                          .setPrimary(account.platform, account.platformUserId);
                       ref.invalidate(linkedAccountsProvider);
                     } catch (e) {
-                      messenger.showSnackBar(SnackBar(content: Text('Failed: $e')));
+                      messenger
+                          .showSnackBar(SnackBar(content: Text('Failed: $e')));
                     }
                   },
                   icon: const Icon(LucideIcons.star),
@@ -242,10 +260,13 @@ class _AccountTile extends ConsumerWidget {
                   onPressed: () async {
                     final messenger = ScaffoldMessenger.of(context);
                     try {
-                      await ref.read(identityServiceProvider).verify(account.platform, account.platformUserId);
+                      await ref
+                          .read(identityServiceProvider)
+                          .verify(account.platform, account.platformUserId);
                       ref.invalidate(linkedAccountsProvider);
                     } catch (e) {
-                      messenger.showSnackBar(SnackBar(content: Text('Failed: $e')));
+                      messenger
+                          .showSnackBar(SnackBar(content: Text('Failed: $e')));
                     }
                   },
                   icon: const Icon(LucideIcons.badgeCheck),
@@ -268,17 +289,21 @@ class _AccountTile extends ConsumerWidget {
   void _confirmUnlink(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Unlink Account'),
         content: Text('Unlink ${account.platform.toUpperCase()} account?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel')),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               final messenger = ScaffoldMessenger.of(context);
               try {
-                await ref.read(identityServiceProvider).unlink(account.platform, account.platformUserId);
+                await ref
+                    .read(identityServiceProvider)
+                    .unlink(account.platform, account.platformUserId);
                 ref.invalidate(linkedAccountsProvider);
               } catch (e) {
                 messenger.showSnackBar(SnackBar(content: Text('Failed: $e')));

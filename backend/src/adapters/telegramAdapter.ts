@@ -574,52 +574,75 @@ _Click buttons below to change settings:_
       },
     };
 
-    // Process through message gateway
-    const normalizedMessage = await gituMessageGateway.processMessage(rawMessage);
+    try {
+      // Process through message gateway
+      const normalizedMessage = await gituMessageGateway.processMessage(rawMessage);
 
-    // Send typing indicator
-    await this.sendChatAction(chatId, 'typing');
+      // Send typing indicator
+      await this.sendChatAction(chatId, 'typing');
 
-    const session = await gituSessionService.getOrCreateSession(normalizedMessage.userId, 'universal');
-    const userText = normalizedMessage.content.text || '[attachment]';
+      const session = await gituSessionService.getOrCreateSession(normalizedMessage.userId, 'universal');
+      const userText = normalizedMessage.content.text || '[attachment]';
 
-    session.context.conversationHistory.push({
-      role: 'user',
-      content: userText,
-      timestamp: new Date(),
-      platform: 'telegram',
-    });
-
-    const context = session.context.conversationHistory
-      .slice(-20)
-      .map(m => ({
-        role: m.role as 'user' | 'assistant' | 'system' | 'tool',
-        content: m.content
-      }));
-
-    // Use Tool Execution Service for smart responses
-    const result = await gituToolExecutionService.processWithTools(
-      normalizedMessage.userId,
-      userText,
-      context,
-      {
+      session.context.conversationHistory.push({
+        role: 'user',
+        content: userText,
+        timestamp: new Date(),
         platform: 'telegram',
-        sessionId: session.id,
+      });
+
+      const context = session.context.conversationHistory
+        .slice(-20)
+        .map(m => ({
+          role: m.role as 'user' | 'assistant' | 'system' | 'tool',
+          content: m.content
+        }));
+
+      // Use Tool Execution Service for smart responses
+      const result = await gituToolExecutionService.processWithTools(
+        normalizedMessage.userId,
+        userText,
+        context,
+        {
+          platform: 'telegram',
+          sessionId: session.id,
+        }
+      );
+
+      session.context.conversationHistory.push({
+        role: 'assistant',
+        content: result.response,
+        timestamp: new Date(),
+        platform: 'telegram',
+      });
+
+      await gituSessionService.updateSession(session.id, { context: session.context });
+
+      const parts = this.splitMessageText(result.response);
+      for (const part of parts) {
+        await this.sendMessage(chatId, { text: part });
       }
-    );
+    } catch (error: any) {
+      const errorMessage = error?.message || String(error);
+      console.error('[Telegram] Message processing error:', errorMessage);
 
-    session.context.conversationHistory.push({
-      role: 'assistant',
-      content: result.response,
-      timestamp: new Date(),
-      platform: 'telegram',
-    });
-
-    await gituSessionService.updateSession(session.id, { context: session.context });
-
-    const parts = this.splitMessageText(result.response);
-    for (const part of parts) {
-      await this.sendMessage(chatId, { text: part });
+      if (errorMessage.includes('not linked') || errorMessage.includes('Platform account')) {
+        await this.sendMessage(chatId, {
+          text: `❌ Your Telegram account is not linked to NotebookLLM.\n\n` +
+            `Your Telegram User ID: ${platformUserId}\n\n` +
+            `To fix this:\n` +
+            `1. Open the NotebookLLM app\n` +
+            `2. Go to Settings → Gitu → Linked Accounts\n` +
+            `3. Tap "Link Telegram"\n` +
+            `4. Enter your Telegram User ID: ${platformUserId}\n` +
+            `5. Confirm\n\n` +
+            `Then send me a message again!`
+        });
+      } else {
+        await this.sendMessage(chatId, {
+          text: `❌ Error: ${errorMessage.substring(0, 200)}`
+        });
+      }
     }
   }
 
