@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'models/proactive_insights_model.dart';
 import 'proactive_insights_provider.dart';
+import 'whatsapp_connect_dialog.dart';
 
 /// Proactive Dashboard Widget
 /// Displays aggregated insights, suggestions, and quick actions
@@ -211,7 +212,7 @@ class GituProactiveDashboard extends ConsumerWidget {
               ),
             )
           : null,
-      onTap: () => context.push('/gitu/scheduled-tasks'),
+      onTap: () => context.push('/gitu-tasks'),
       child: summary.nextDueTask != null
           ? Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -364,7 +365,7 @@ class _GmailCard extends StatelessWidget {
     final theme = Theme.of(context);
 
     return GestureDetector(
-      onTap: () => context.push('/gitu/gmail'),
+      onTap: () => context.push('/gitu-gmail'),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -455,7 +456,12 @@ class _WhatsAppCard extends StatelessWidget {
     final theme = Theme.of(context);
 
     return GestureDetector(
-      onTap: () => context.push('/gitu/whatsapp'),
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (context) => const WhatsAppConnectDialog(),
+        );
+      },
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(

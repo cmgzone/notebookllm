@@ -72,6 +72,7 @@ import '../features/gitu/file_permissions_screen.dart';
 import '../features/gitu/permissions_screen.dart';
 import '../features/gitu/agents_screen.dart';
 import '../features/gitu/agent_detail_screen.dart';
+import '../features/gitu/swarm/ui/swarm_dashboard.dart';
 import '../features/planning/ui/planning_ai_screen.dart';
 import '../features/planning/ui/ui_design_generator_screen.dart';
 import '../features/planning/ui/project_prototype_screen.dart';
@@ -283,6 +284,24 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
               final id = state.pathParameters['id']!;
               return buildTransitionPage(child: AgentDetailScreen(agentId: id));
             },
+          ),
+          GoRoute(
+            path: '/gitu/swarm',
+            name: 'gitu-swarm',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const SwarmDashboard()),
+          ),
+          GoRoute(
+            path: '/gitu/scheduled-tasks',
+            name: 'gitu-scheduled-tasks-alias',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GituScheduledTasksScreen()),
+          ),
+          GoRoute(
+            path: '/gitu/gmail',
+            name: 'gitu-gmail-alias',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GmailConnectionScreen()),
           ),
           // API key management has been moved to the web admin panel
           // Users can no longer manage API keys from the mobile app

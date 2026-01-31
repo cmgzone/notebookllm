@@ -695,6 +695,14 @@ class _AppDrawer extends ConsumerWidget {
                           context.push('/gitu-chat');
                         },
                       ),
+                      _DrawerItem(
+                        icon: LucideIcons.network,
+                        label: 'Swarm Intelligence',
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/gitu/swarm');
+                        },
+                      ),
                       // Bloat features hidden for UI discipline
                       /*
                       _DrawerItem(

@@ -53,20 +53,25 @@ class GituGmailManager {
   }
 
   async connect(userId: string, tokenData: any, email?: string) {
+    // Generate an expiry date
+    const expiresAt = new Date(Date.now() + (tokenData.expires_in || 3600) * 1000);
+
     await pool.query(
-      `INSERT INTO gmail_connections (user_id, email, access_token, refresh_token, scopes)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO gitu_gmail_connections (user_id, email, encrypted_access_token, encrypted_refresh_token, expires_at, scopes, connected_at, last_sync_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
        ON CONFLICT (user_id) DO UPDATE SET
-         email = COALESCE($2, gmail_connections.email),
-         access_token = $3,
-         refresh_token = COALESCE($4, gmail_connections.refresh_token),
-         scopes = $5,
-         last_used_at = NOW()`,
+         email = COALESCE($2, gitu_gmail_connections.email),
+         encrypted_access_token = $3,
+         encrypted_refresh_token = COALESCE($4, gitu_gmail_connections.encrypted_refresh_token),
+         expires_at = $5,
+         scopes = $6,
+         last_sync_at = NOW()`,
       [
         userId,
         email || null,
         tokenData.access_token,
         tokenData.refresh_token || null,
+        expiresAt,
         tokenData.scope || '',
       ]
     );
@@ -74,7 +79,12 @@ class GituGmailManager {
 
   async getConnection(userId: string) {
     const res = await pool.query(
-      `SELECT * FROM gmail_connections WHERE user_id = $1`,
+      `SELECT 
+         user_id, email, 
+         encrypted_access_token as access_token, 
+         encrypted_refresh_token as refresh_token, 
+         expires_at, scopes, last_sync_at as last_used_at
+       FROM gitu_gmail_connections WHERE user_id = $1`,
       [userId]
     );
     return res.rows.length ? res.rows[0] : null;
@@ -86,7 +96,7 @@ class GituGmailManager {
   }
 
   async disconnect(userId: string): Promise<void> {
-    await pool.query(`DELETE FROM gmail_connections WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM gitu_gmail_connections WHERE user_id = $1`, [userId]);
   }
 }
 
