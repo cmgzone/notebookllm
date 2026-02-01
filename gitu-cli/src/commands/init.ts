@@ -19,12 +19,14 @@ export class InitCommand {
         type: 'input',
         name: 'apiUrl',
         message: 'Enter API URL:',
-        default: 'https://notebookllm-ufj7.onrender.com/api'
+        default: config.get('apiUrl') || 'https://backend.taskiumnetwork.com/api/'
       }
     ]);
 
     try {
-      config.set('apiUrl', answers.apiUrl);
+      let apiUrl = answers.apiUrl;
+      if (!apiUrl.endsWith('/')) apiUrl += '/';
+      config.set('apiUrl', apiUrl);
 
       if (answers.token) {
         config.set('apiToken', answers.token);
