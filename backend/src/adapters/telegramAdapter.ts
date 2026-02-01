@@ -57,6 +57,14 @@ class TelegramAdapter {
   private bot: TelegramBot | null = null;
   private initialized: boolean = false;
   private config: TelegramAdapterConfig | null = null;
+  private botUserId: string | null = null;
+  private botUsername: string | null = null;
+
+  private getGroupMode(): 'mentions' | 'all' {
+    const raw = (process.env.GITU_TELEGRAM_GROUP_MODE || '').trim().toLowerCase();
+    if (raw === 'all' || raw === 'everyone') return 'all';
+    return 'mentions';
+  }
 
   /**
    * Initialize the Telegram Bot API.
@@ -103,6 +111,15 @@ class TelegramAdapter {
 
     this.initialized = true;
     console.log('Telegram adapter initialized successfully');
+
+    try {
+      const me = await this.bot.getMe();
+      this.botUserId = String(me.id);
+      this.botUsername = typeof me.username === 'string' ? me.username : null;
+      console.log(`[Telegram] Bot info: id=${this.botUserId}, username=${this.botUsername ?? 'N/A'}`);
+    } catch (error) {
+      console.error('[Telegram] Failed to load bot info:', error);
+    }
   }
 
   /**
@@ -117,6 +134,9 @@ class TelegramAdapter {
     this.bot.on('message', async (msg) => {
       const rawText = typeof msg.text === 'string' ? msg.text.trim() : '';
       if (rawText.startsWith('/')) {
+        return;
+      }
+      if (!this.shouldProcessMessageInChat(msg, rawText)) {
         return;
       }
       const platformUserId = msg.from?.id ? msg.from.id.toString() : msg.chat.id.toString();
@@ -213,6 +233,7 @@ Use /help to see available commands.
 /settings - View your settings
 /swarm <task> - Deploy an intelligent agent swarm
 /agent spawn <task> - Spawn a single background agent
+/gitu <message> - Ask Gitu in groups (recommended)
 
 You can also just chat with me naturally! I'll understand your requests and help you accomplish tasks.
       `.trim();
@@ -542,6 +563,44 @@ _Click buttons below to change settings:_
         await this.sendMessage(chatId.toString(), { text: '❌ Error loading settings.' });
       }
     });
+
+    this.bot.onText(/\/gitu(?:@\w+)?(?:\s+([\s\S]+))?/, async (msg, match) => {
+      const chatId = msg.chat.id.toString();
+      const rawArg = (match && typeof match[1] === 'string') ? match[1].trim() : '';
+
+      if (!rawArg) {
+        await this.sendMessage(chatId, {
+          text: `Usage: /gitu <message>\n\nExample: /gitu summarize the last 10 messages and suggest a reply`,
+        });
+        return;
+      }
+
+      const syntheticMsg: TelegramBot.Message = { ...(msg as any), text: rawArg };
+      await this.handleIncomingMessage(syntheticMsg);
+    });
+  }
+
+  private shouldProcessMessageInChat(msg: TelegramBot.Message, rawText: string): boolean {
+    if (msg.chat.type === 'private') return true;
+
+    if (this.getGroupMode() === 'all') return true;
+
+    const lowered = rawText.toLowerCase();
+    if (this.botUsername && lowered.includes(`@${this.botUsername.toLowerCase()}`)) {
+      return true;
+    }
+
+    const replyFromId = (msg as any)?.reply_to_message?.from?.id;
+    if (replyFromId && this.botUserId && String(replyFromId) === this.botUserId) {
+      return true;
+    }
+
+    const entities = (msg as any)?.entities;
+    if (Array.isArray(entities) && entities.some((e: any) => e?.type === 'mention' || e?.type === 'text_mention')) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -558,7 +617,7 @@ _Click buttons below to change settings:_
         await pool.query(
           `UPDATE gitu_linked_accounts SET status = 'inactive' 
            WHERE platform = 'telegram' AND platform_user_id = $1`,
-          [chatId]
+          [platformUserId]
         );
         await this.sendMessage(chatId, { text: '✅ Account unlinked successfully. You can now link this Telegram account to a different NotebookLLM user.' });
       } catch (error) {

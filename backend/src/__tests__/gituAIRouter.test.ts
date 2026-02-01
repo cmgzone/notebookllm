@@ -14,6 +14,7 @@ const mockDbPool = {
 
 const mockGenerateWithGemini = jest.fn<() => Promise<string>>();
 const mockGenerateWithOpenRouter = jest.fn<() => Promise<string>>();
+const mockGenerateEmbedding = jest.fn<() => Promise<number[]>>();
 
 // Mock dependencies using unstable_mockModule (must be before imports)
 jest.unstable_mockModule('../config/database.js', () => {
@@ -28,6 +29,7 @@ jest.unstable_mockModule('../services/aiService.js', () => {
     __esModule: true,
     generateWithGemini: mockGenerateWithGemini,
     generateWithOpenRouter: mockGenerateWithOpenRouter,
+    generateEmbedding: mockGenerateEmbedding,
   };
 });
 
@@ -117,8 +119,10 @@ describe('GituAIRouter', () => {
     jest.clearAllMocks();
     mockGenerateWithGemini.mockReset();
     mockGenerateWithOpenRouter.mockReset();
+    mockGenerateEmbedding.mockReset();
     mockGenerateWithGemini.mockResolvedValue('Mocked Gemini response');
     mockGenerateWithOpenRouter.mockResolvedValue('Mocked OpenRouter response');
+    mockGenerateEmbedding.mockResolvedValue([0, 0, 0]);
     
     mockPool = mockDbPool as unknown as MockedPool;
     
@@ -491,6 +495,19 @@ describe('GituAIRouter', () => {
       // Should only return Gemini models (provider mapped from 'google' to 'gemini')
       expect(models.every(m => m.provider === 'gemini')).toBe(true);
       expect(models.length).toBe(3); // 3 Gemini models in mock data
+    });
+  });
+
+  describe('saveMessage', () => {
+    it('should wrap plain text content as JSON for jsonb column', async () => {
+      (mockPool.query as any).mockResolvedValue({ rows: [], rowCount: 1 });
+
+      await gituAIRouter.saveMessage('test-user', 'user', 'Hello', 'web', 'test-session', 'platform-user');
+
+      expect(mockPool.query).toHaveBeenCalledTimes(1);
+      const [query, params] = mockPool.query.mock.calls[0] as [unknown, any[]];
+      expect(String(query)).toContain('INSERT INTO gitu_messages');
+      expect(params[2]).toEqual({ text: 'Hello' });
     });
   });
 

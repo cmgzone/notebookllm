@@ -16,6 +16,9 @@ import { NotebookCommand } from './commands/notebook.js';
 import { InitCommand } from './commands/init.js';
 import { AliasCommand } from './commands/alias.js';
 import { AuthCommand } from './commands/auth.js';
+import { CommandsCommand } from './commands/commands.js';
+import { MissionCommand } from './commands/mission.js';
+import { CodeCommand } from './commands/code.js';
 
 const program = new Command();
 const config = new ConfigManager();
@@ -30,6 +33,52 @@ program
   .command('init')
   .description('Initialize Gitu CLI configuration')
   .action(() => InitCommand.start(api, config));
+
+program
+  .command('commands')
+  .description('Show quick reference for commands and chat slash-commands')
+  .action(() => CommandsCommand.show());
+
+program
+  .command('code <objective...>')
+  .description('Start an autonomous coding mission (swarm)')
+  .option('--json', 'Output as JSON')
+  .action((objectiveParts, options) => CodeCommand.start(api, config, objectiveParts.join(' '), options));
+
+const missionCmd = program
+  .command('mission')
+  .description('Manage autonomous swarm missions');
+
+missionCmd
+  .command('start <objective...>')
+  .description('Start a new mission')
+  .option('--json', 'Output as JSON')
+  .action((objectiveParts, options) => MissionCommand.start(api, objectiveParts.join(' '), options));
+
+missionCmd
+  .command('active')
+  .description('List active missions')
+  .option('--json', 'Output as JSON')
+  .action((options) => MissionCommand.active(api, options));
+
+missionCmd
+  .command('show <missionId>')
+  .description('Show mission status')
+  .option('--detail', 'Include detail payload (plan/task status)')
+  .option('--json', 'Output as JSON')
+  .action((missionId, options) => MissionCommand.show(api, missionId, options));
+
+missionCmd
+  .command('watch <missionId>')
+  .description('Watch mission status until completion')
+  .option('--json', 'Output as JSON')
+  .action((missionId, options) => MissionCommand.watch(api, missionId, options));
+
+missionCmd
+  .command('stop <missionId>')
+  .description('Stop a mission')
+  .option('--json', 'Output as JSON')
+  .action((missionId, options) => MissionCommand.stop(api, missionId, options));
 
 program
   .command('auth [token]')
@@ -65,6 +114,50 @@ configCmd
   .command('reset')
   .description('Reset configuration to defaults')
   .action(() => ConfigCommand.reset(config));
+
+configCmd
+  .command('remote-terminal <mode>')
+  .description('Enable/disable remote execution on this computer (on/off)')
+  .action((mode) => {
+    const normalized = String(mode).trim().toLowerCase();
+    if (normalized === 'on' || normalized === 'enable' || normalized === 'enabled') {
+      ConfigCommand.setRemoteTerminal(config, true);
+      return;
+    }
+    if (normalized === 'off' || normalized === 'disable' || normalized === 'disabled') {
+      ConfigCommand.setRemoteTerminal(config, false);
+      return;
+    }
+    console.error(chalk.red('Invalid mode. Use: on|off'));
+    process.exit(1);
+  });
+
+configCmd
+  .command('remote-confirm <mode>')
+  .description('Require local confirmation for remote commands (on/off)')
+  .action((mode) => {
+    const normalized = String(mode).trim().toLowerCase();
+    if (normalized === 'on' || normalized === 'enable' || normalized === 'enabled') {
+      ConfigCommand.setRemoteTerminalConfirm(config, true);
+      return;
+    }
+    if (normalized === 'off' || normalized === 'disable' || normalized === 'disabled') {
+      ConfigCommand.setRemoteTerminalConfirm(config, false);
+      return;
+    }
+    console.error(chalk.red('Invalid mode. Use: on|off'));
+    process.exit(1);
+  });
+
+configCmd
+  .command('remote-allow <rule>')
+  .description('Add an allow rule for remote execution (prefix match, or "*")')
+  .action((rule) => ConfigCommand.addRemoteTerminalAllowRule(config, rule));
+
+configCmd
+  .command('remote-allow-clear')
+  .description('Clear remote execution allow rules')
+  .action(() => ConfigCommand.clearRemoteTerminalAllowRules(config));
 
 // QR commands
 const qrCmd = program

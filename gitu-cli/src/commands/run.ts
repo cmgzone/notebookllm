@@ -9,6 +9,10 @@ export class RunCommand {
     const remoteTerminal = new RemoteTerminalClient(config);
     await remoteTerminal.connect();
 
+    if (!config.get('remoteTerminalEnabled')) {
+      console.log(chalk.gray('Remote Terminal is disabled; execution will run on the backend if permitted.'));
+    }
+
     // Give a moment for WS to stabilize
     await new Promise(resolve => setTimeout(resolve, 500));
 

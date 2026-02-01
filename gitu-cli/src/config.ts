@@ -8,6 +8,10 @@ export interface GituConfig {
   userId?: string;
   deviceId?: string;
   defaultFormat?: string;
+  remoteTerminalEnabled?: boolean;
+  remoteTerminalRequireConfirm?: boolean;
+  remoteTerminalAllowedCommands?: string[];
+  remoteTerminalApprovalTtlSeconds?: number;
 }
 
 export class ConfigManager {
@@ -19,7 +23,11 @@ export class ConfigManager {
       cwd: join(homedir(), '.gitu'),
       defaults: {
         apiUrl: 'https://backend.taskiumnetwork.com/api/',
-        defaultFormat: 'terminal'
+        defaultFormat: 'terminal',
+        remoteTerminalEnabled: false,
+        remoteTerminalRequireConfirm: true,
+        remoteTerminalAllowedCommands: [],
+        remoteTerminalApprovalTtlSeconds: 60,
       }
     });
   }

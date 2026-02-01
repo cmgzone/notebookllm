@@ -21,6 +21,7 @@ import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { gituMessageGateway, IncomingMessage, RawMessage } from '../services/gituMessageGateway.js';
 import { gituSessionService } from '../services/gituSessionService.js';
 import { gituAIRouter } from '../services/gituAIRouter.js';
@@ -39,7 +40,8 @@ export interface WhatsAppAdapterConfig {
 }
 
 // ==================== STORE SETUP ====================
-const CONTACTS_FILE = path.join(process.cwd(), 'whatsapp_contacts.json');
+const ADAPTER_DIR = path.dirname(fileURLToPath(import.meta.url));
+const CONTACTS_FILE = path.resolve(ADAPTER_DIR, '..', '..', '..', 'whatsapp_contacts.json');
 let contactsStore: Record<string, any> = {};
 
 try {
@@ -60,13 +62,35 @@ const upsertContacts = (contacts: any[] | undefined) => {
     }
 };
 
-setInterval(() => {
-    try {
-        fs.writeFileSync(CONTACTS_FILE, JSON.stringify(contactsStore, null, 2), 'utf-8');
-    } catch (err) {
-        console.error('Failed to save WhatsApp contacts store file:', err);
+const upsertChats = (chats: any[] | undefined) => {
+    if (!Array.isArray(chats)) return;
+    for (const chat of chats) {
+        const id = chat?.id || chat?.jid || chat?.remoteJid;
+        if (!id || typeof id !== 'string') continue;
+        const name = chat?.name || chat?.subject || chat?.pushName || chat?.verifiedName || chat?.notify;
+        contactsStore[id] = {
+            ...(contactsStore[id] || {}),
+            ...chat,
+            ...(typeof name === 'string' && name.trim().length > 0 ? { name } : {}),
+        };
     }
-}, 10_000);
+};
+
+const shouldPersistContactsStore = !(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID);
+
+if (shouldPersistContactsStore) {
+    setInterval(() => {
+        try {
+            const dir = path.dirname(CONTACTS_FILE);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            fs.writeFileSync(CONTACTS_FILE, JSON.stringify(contactsStore, null, 2), 'utf-8');
+        } catch (err) {
+            console.error('Failed to save WhatsApp contacts store file:', err);
+        }
+    }, 10_000);
+}
 
 // ==================== ADAPTER CLASS ====================
 
@@ -153,6 +177,16 @@ class WhatsAppAdapter {
         });
         this.sock.ev.on('contacts.update' as any, (updates: any[]) => {
             upsertContacts(updates);
+        });
+
+        this.sock.ev.on('chats.set' as any, (payload: any) => {
+            upsertChats(payload?.chats);
+        });
+        this.sock.ev.on('chats.upsert' as any, (chats: any[]) => {
+            upsertChats(chats);
+        });
+        this.sock.ev.on('chats.update' as any, (updates: any[]) => {
+            upsertChats(updates);
         });
 
         // Handle connection update
@@ -626,15 +660,25 @@ class WhatsAppAdapter {
      * Search for contacts in the local store.
      */
     async searchContacts(query: string): Promise<Array<{ id: string; name: string; notify?: string }>> {
-        const q = query.toLowerCase();
+        const q = query.trim().toLowerCase();
+        const qDigits = query.replace(/\D/g, '');
         const results: Array<{ id: string; name: string; notify?: string }> = [];
+
+        if (q.length === 0 && qDigits.length === 0) return [];
 
         for (const id in contactsStore) {
             const contact = contactsStore[id];
-            const name = contact.name || contact.notify || contact.verifiedName || '';
+            const name = contact.name || contact.notify || contact.verifiedName || contact.pushName || contact.subject || '';
+            const idBare = id.split('@')[0] || id;
+            const idDigits = idBare.replace(/\D/g, '');
+            const nameText = typeof name === 'string' ? name.toLowerCase() : '';
             
             // Search by name or phone number
-            if (name.toLowerCase().includes(q) || id.includes(q)) {
+            const matchesName = q.length > 0 && nameText.includes(q);
+            const matchesId = q.length > 0 && idBare.toLowerCase().includes(q);
+            const matchesDigits = qDigits.length > 0 && idDigits.includes(qDigits);
+
+            if (matchesName || matchesId || matchesDigits) {
                 results.push({
                     id: id,
                     name: name || 'Unknown',

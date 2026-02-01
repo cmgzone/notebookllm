@@ -2,6 +2,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { gituAIRouter, TaskType } from './gituAIRouter.js';
 import { gituAgentManager, AgentConfig } from './gituAgentManager.js';
+import { gituEvaluationService } from './gituEvaluationService.js';
 import { gituMissionControl, Mission, MissionStatus } from './gituMissionControl.js';
 
 export interface MissionPlan {
@@ -257,6 +258,22 @@ class GituAgentOrchestrator {
                 completedAt: new Date(),
                 artifacts: { finalReport: response.content }
             });
+
+            const plan = mission.context.plan as MissionPlan | undefined;
+            const allTasksCompleted = Boolean(plan?.tasks?.length) && plan!.tasks.every(t => t.status === 'completed');
+            const finalReportPresent = typeof response.content === 'string' && response.content.trim().length > 0;
+
+            try {
+                await gituEvaluationService.createMissionCompletionEvaluation({
+                    userId: mission.userId,
+                    missionId: mission.id,
+                    agentCount: mission.agentCount,
+                    allTasksCompleted,
+                    finalReportPresent
+                });
+            } catch (e) {
+                console.error(`[Orchestrator] Failed to store mission evaluation for ${missionId}`, e);
+            }
 
             return response.content;
         } catch (e: any) {

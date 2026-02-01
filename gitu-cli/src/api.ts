@@ -112,6 +112,27 @@ export class ApiClient {
     return this.post('gitu/shell/execute', { command });
   }
 
+  // Missions (Swarm)
+  async startMission(objective: string) {
+    return this.post('gitu/mission', { objective });
+  }
+
+  async listActiveMissions() {
+    return this.get('gitu/mission/active');
+  }
+
+  async getMission(missionId: string) {
+    return this.get(`gitu/mission/${missionId}`);
+  }
+
+  async getMissionDetail(missionId: string) {
+    return this.get(`gitu/mission/${missionId}/detail`);
+  }
+
+  async stopMission(missionId: string) {
+    return this.post(`gitu/mission/${missionId}/stop`);
+  }
+
   async listNotebooks() {
     return this.get('notebooks');
   }

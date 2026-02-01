@@ -259,13 +259,20 @@ Potential improvements for future iterations:
 
 - [ ] Voice message transcription
 - [ ] Video message support
-- [ ] Group chat support
+- [x] Group chat support (basic: /gitu + mention/reply gating)
 - [ ] Inline query support
 - [ ] Payment integration
 - [ ] Game integration
 - [ ] Sticker support
 - [ ] Location sharing
 - [ ] Contact sharing
+
+## Group Chats (How to Use)
+
+- Recommended trigger in groups: `/gitu <message>`
+- To make the bot respond to every group message, set `GITU_TELEGRAM_GROUP_MODE=all` (default is mention/reply-only gating).
+- If your bot privacy mode is enabled, Telegram will only deliver commands/mentions to the bot in groups. Use `/gitu` or mention the bot (e.g. `@YourBotName ...`).
+- The bot can post messages and perform admin actions (if you grant permissions), but it cannot send messages “as you” (Telegram bots always speak as the bot).
 
 ---
 

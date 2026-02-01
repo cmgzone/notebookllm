@@ -1,4 +1,14 @@
-Based on my analysis of `gituAgentOrchestrator.ts`, I identified **two technical issues** (besides the "swam" typo):
+Based on my analysis of `gituAgentOrchestrator.ts`, I identified **two technical issues** (besides the "swam" typo).
+
+## Status (Current Code)
+- These issues appear to be addressed in the current implementation:
+  - Task completion now unlocks dependent tasks via `handleTaskCompletion(...)`.
+  - Task state changes are persisted immediately when agents are spawned and when tasks complete.
+- Reference:
+  - [gituAgentOrchestrator.ts](file:///c%3A/Users/Admin/Documents/project/NOTBOOK%20LLM/backend/src/services/gituAgentOrchestrator.ts)
+  - [gituAgentManager.ts](file:///c%3A/Users/Admin/Documents/project/NOTBOOK%20LLM/backend/src/services/gituAgentManager.ts)
+
+## Historical Notes (Kept for Reference)
 
 1.  **Incomplete Dependency Orchestration**: 
     The code currently launches "root" tasks (tasks with no dependencies) but lacks the logic to **trigger subsequent tasks** once the initial ones complete. There is no visible event handler that checks for completed tasks and unlocks dependent ones (e.g., "Task B can start now that Task A is done").

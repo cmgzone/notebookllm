@@ -3,6 +3,7 @@ import { IncomingMessage } from 'http';
 import { parse } from 'url';
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../config/secrets.js';
+import pool from '../config/database.js';
 import { ShellExecuteRequest, ShellExecuteResult, ShellExecutionHooks } from './gituShellManager.js';
 
 interface RemoteConnection {
@@ -11,7 +12,7 @@ interface RemoteConnection {
     deviceId: string;
     deviceName: string;
     pendingRequests: Map<string, {
-        resolve: (result: ShellExecuteResult) => void,
+        resolve: (result: { result: ShellExecuteResult; deviceId: string; deviceName: string }) => void,
         reject: (error: any) => void,
         hooks: ShellExecutionHooks
     }>;
@@ -37,7 +38,7 @@ class GituRemoteTerminalService {
     private async handleConnection(ws: WebSocket, req: IncomingMessage): Promise<void> {
         const url = parse(req.url || '', true);
         const token = url.query.token as string | undefined;
-        const deviceId = url.query.deviceId as string || 'default';
+        const requestedDeviceId = url.query.deviceId as string | undefined;
         const deviceName = url.query.deviceName as string || 'Gitu CLI';
 
         if (!token) {
@@ -45,26 +46,46 @@ class GituRemoteTerminalService {
             return;
         }
 
-        const userId = this.verifyJwt(token);
-        if (!userId) {
+        const decoded = this.verifyJwt(token);
+        if (!decoded) {
             ws.close(4002, 'Invalid token');
+            return;
+        }
+        if (decoded.type !== 'gitu_terminal' || decoded.platform !== 'terminal' || !decoded.deviceId) {
+            ws.close(4002, 'Invalid token');
+            return;
+        }
+
+        if (requestedDeviceId && requestedDeviceId !== decoded.deviceId) {
+            ws.close(4004, 'Device mismatch');
+            return;
+        }
+
+        const link = await pool.query(
+            `SELECT status FROM gitu_linked_accounts
+             WHERE user_id = $1 AND platform = 'terminal' AND platform_user_id = $2
+             LIMIT 1`,
+            [decoded.userId, decoded.deviceId]
+        );
+        if (link.rows.length === 0 || link.rows[0]?.status !== 'active') {
+            ws.close(4003, 'Device not linked');
             return;
         }
 
         const connection: RemoteConnection = {
             ws,
-            userId,
-            deviceId,
+            userId: decoded.userId,
+            deviceId: decoded.deviceId,
             deviceName,
             pendingRequests: new Map()
         };
 
-        if (!this.connections.has(userId)) {
-            this.connections.set(userId, []);
+        if (!this.connections.has(decoded.userId)) {
+            this.connections.set(decoded.userId, []);
         }
-        this.connections.get(userId)!.push(connection);
+        this.connections.get(decoded.userId)!.push(connection);
 
-        console.log(`[RemoteTerminal] User ${userId} connected from ${deviceName} (${deviceId})`);
+        console.log(`[RemoteTerminal] User ${decoded.userId} connected from ${deviceName} (${decoded.deviceId})`);
 
         ws.on('message', (data) => this.handleMessage(connection, data));
         ws.on('close', () => this.handleDisconnect(connection));
@@ -97,7 +118,11 @@ class GituRemoteTerminalService {
             if (message.type === 'execute_result' && message.id) {
                 const pending = connection.pendingRequests.get(message.id);
                 if (pending) {
-                    pending.resolve(message.payload);
+                    pending.resolve({
+                        result: message.payload,
+                        deviceId: connection.deviceId,
+                        deviceName: connection.deviceName,
+                    });
                     connection.pendingRequests.delete(message.id);
                 }
             } else if (message.type === 'execute_output' && message.id) {
@@ -115,11 +140,17 @@ class GituRemoteTerminalService {
         }
     }
 
-    private verifyJwt(token: string): string | null {
+    private verifyJwt(token: string): { userId: string; deviceId?: string; type?: string; platform?: string } | null {
         try {
             const jwtSecret = getJwtSecret();
-            const decoded = jwt.verify(token, jwtSecret) as { userId?: string };
-            return decoded?.userId || null;
+            const decoded = jwt.verify(token, jwtSecret) as any;
+            if (!decoded?.userId || typeof decoded.userId !== 'string') return null;
+            return {
+                userId: decoded.userId,
+                deviceId: typeof decoded.deviceId === 'string' ? decoded.deviceId : undefined,
+                type: typeof decoded.type === 'string' ? decoded.type : undefined,
+                platform: typeof decoded.platform === 'string' ? decoded.platform : undefined,
+            };
         } catch {
             return null;
         }
@@ -135,7 +166,7 @@ class GituRemoteTerminalService {
     /**
      * Execute a command on a remote terminal
      */
-    async executeRemote(userId: string, request: ShellExecuteRequest, hooks: ShellExecutionHooks = {}): Promise<ShellExecuteResult> {
+    async executeRemote(userId: string, request: ShellExecuteRequest, hooks: ShellExecutionHooks = {}): Promise<{ result: ShellExecuteResult; deviceId: string; deviceName: string }> {
         const userConns = this.connections.get(userId);
         if (!userConns || userConns.length === 0) {
             throw new Error('No remote terminal connected for this user');
@@ -143,9 +174,23 @@ class GituRemoteTerminalService {
 
         // Pick the most recent connection (or first available)
         const connection = userConns[userConns.length - 1];
+        const link = await pool.query(
+            `SELECT status FROM gitu_linked_accounts
+             WHERE user_id = $1 AND platform = 'terminal' AND platform_user_id = $2
+             LIMIT 1`,
+            [userId, connection.deviceId]
+        );
+        if (link.rows.length === 0 || link.rows[0]?.status !== 'active') {
+            try {
+                connection.ws.close(4003, 'Device not linked');
+            } catch { }
+            this.handleDisconnect(connection);
+            throw new Error('Remote terminal device is not linked');
+        }
+
         const requestId = `req_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
-        return new Promise<ShellExecuteResult>((resolve, reject) => {
+        return new Promise<{ result: ShellExecuteResult; deviceId: string; deviceName: string }>((resolve, reject) => {
             connection.pendingRequests.set(requestId, { resolve, reject, hooks });
 
             try {
@@ -159,6 +204,18 @@ class GituRemoteTerminalService {
                 reject(err);
             }
         });
+    }
+
+    disconnectDevice(userId: string, deviceId: string): void {
+        const userConns = this.connections.get(userId);
+        if (!userConns || userConns.length === 0) return;
+
+        for (const conn of userConns.filter(c => c.deviceId === deviceId)) {
+            try {
+                conn.ws.close(4003, 'Device unlinked');
+            } catch { }
+            this.handleDisconnect(conn);
+        }
     }
 }
 

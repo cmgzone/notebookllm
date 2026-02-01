@@ -20,6 +20,19 @@ export class InitCommand {
         name: 'apiUrl',
         message: 'Enter API URL:',
         default: config.get('apiUrl') || 'https://backend.taskiumnetwork.com/api/'
+      },
+      {
+        type: 'confirm',
+        name: 'remoteTerminalEnabled',
+        message: 'Enable Remote Terminal (allows backend to run commands on this computer)?',
+        default: false
+      },
+      {
+        type: 'confirm',
+        name: 'remoteTerminalRequireConfirm',
+        message: 'Require local confirmation before running remote commands?',
+        default: true,
+        when: (a: any) => Boolean(a.remoteTerminalEnabled),
       }
     ]);
 
@@ -27,6 +40,10 @@ export class InitCommand {
       let apiUrl = answers.apiUrl;
       if (!apiUrl.endsWith('/')) apiUrl += '/';
       config.set('apiUrl', apiUrl);
+      config.set('remoteTerminalEnabled', Boolean(answers.remoteTerminalEnabled));
+      if (answers.remoteTerminalEnabled) {
+        config.set('remoteTerminalRequireConfirm', Boolean(answers.remoteTerminalRequireConfirm));
+      }
 
       if (answers.token) {
         config.set('apiToken', answers.token);

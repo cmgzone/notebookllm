@@ -35,7 +35,11 @@ export class ConfigCommand {
     console.log(chalk.cyan('API URL:'), allConfig.apiUrl || chalk.gray('(not set)'));
     console.log(chalk.cyan('API Token:'), allConfig.apiToken ? chalk.green('✓ Set') : chalk.red('✗ Not set'));
     console.log(chalk.cyan('User ID:'), allConfig.userId || chalk.gray('(not set)'));
+    console.log(chalk.cyan('Device ID:'), allConfig.deviceId || chalk.gray('(not set)'));
     console.log(chalk.cyan('Default Format:'), allConfig.defaultFormat || 'terminal');
+    console.log(chalk.cyan('Remote Terminal:'), allConfig.remoteTerminalEnabled ? chalk.green('enabled') : chalk.gray('disabled'));
+    console.log(chalk.cyan('Remote Confirm:'), allConfig.remoteTerminalRequireConfirm ? chalk.green('on') : chalk.gray('off'));
+    console.log(chalk.cyan('Remote Allowlist:'), Array.isArray(allConfig.remoteTerminalAllowedCommands) ? `${allConfig.remoteTerminalAllowedCommands.length} rule(s)` : '0 rule(s)');
     console.log('');
 
     if (!allConfig.apiToken) {
@@ -53,5 +57,29 @@ export class ConfigCommand {
     console.log('');
     console.log('Set your API token:');
     console.log(chalk.cyan('  gitu config set-token YOUR_TOKEN'));
+  }
+
+  static setRemoteTerminal(config: ConfigManager, enabled: boolean) {
+    config.set('remoteTerminalEnabled', enabled);
+    console.log(chalk.green(`✓ Remote Terminal ${enabled ? 'enabled' : 'disabled'}`));
+    console.log(chalk.gray('This controls whether the backend may execute commands on this computer via the remote-terminal channel.'));
+  }
+
+  static setRemoteTerminalConfirm(config: ConfigManager, enabled: boolean) {
+    config.set('remoteTerminalRequireConfirm', enabled);
+    console.log(chalk.green(`✓ Remote confirmation ${enabled ? 'enabled' : 'disabled'}`));
+  }
+
+  static addRemoteTerminalAllowRule(config: ConfigManager, rule: string) {
+    const existing = config.get('remoteTerminalAllowedCommands');
+    const list = Array.isArray(existing) ? existing.slice() : [];
+    list.push(rule);
+    config.set('remoteTerminalAllowedCommands', list);
+    console.log(chalk.green(`✓ Added allow rule: ${rule}`));
+  }
+
+  static clearRemoteTerminalAllowRules(config: ConfigManager) {
+    config.set('remoteTerminalAllowedCommands', []);
+    console.log(chalk.green('✓ Cleared remote allow rules'));
   }
 }

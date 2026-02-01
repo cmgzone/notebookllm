@@ -105,29 +105,63 @@ async function writeAuditLog(
     stderrBytes: number;
     stdoutTruncated: boolean;
     stderrTruncated: boolean;
+    deviceId?: string;
+    deviceName?: string;
   }
 ) {
   try {
+    const columnsResult = await poolClient.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'gitu_shell_audit_logs'`
+    );
+    const columns = new Set((columnsResult.rows as any[]).map(r => String(r.column_name)));
+    const hasDeviceId = columns.has('device_id');
+    const hasDeviceName = columns.has('device_name');
+
+    const insertColumns = [
+      'user_id',
+      'mode',
+      'command',
+      'args',
+      'cwd',
+      'success',
+      'exit_code',
+      'error_message',
+      'duration_ms',
+      'stdout_bytes',
+      'stderr_bytes',
+      'stdout_truncated',
+      'stderr_truncated',
+      ...(hasDeviceId ? ['device_id'] : []),
+      ...(hasDeviceName ? ['device_name'] : []),
+    ];
+
+    const values: any[] = [
+      input.userId,
+      input.mode,
+      input.command,
+      JSON.stringify(input.args),
+      input.cwd,
+      input.success,
+      input.exitCode,
+      input.errorMessage,
+      input.durationMs,
+      input.stdoutBytes,
+      input.stderrBytes,
+      input.stdoutTruncated,
+      input.stderrTruncated,
+      ...(hasDeviceId ? [input.deviceId ?? null] : []),
+      ...(hasDeviceName ? [input.deviceName ?? null] : []),
+    ];
+
+    const placeholders = insertColumns.map((_, i) => `$${i + 1}`).join(', ');
+
     const result = await poolClient.query(
-      `INSERT INTO gitu_shell_audit_logs
-       (user_id, mode, command, args, cwd, success, exit_code, error_message, duration_ms, stdout_bytes, stderr_bytes, stdout_truncated, stderr_truncated)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `INSERT INTO gitu_shell_audit_logs (${insertColumns.join(', ')})
+       VALUES (${placeholders})
        RETURNING id`,
-      [
-        input.userId,
-        input.mode,
-        input.command,
-        JSON.stringify(input.args),
-        input.cwd,
-        input.success,
-        input.exitCode,
-        input.errorMessage,
-        input.durationMs,
-        input.stdoutBytes,
-        input.stderrBytes,
-        input.stdoutTruncated,
-        input.stderrTruncated,
-      ]
+      values
     );
     return String(result.rows[0]?.id);
   } catch {
@@ -154,18 +188,6 @@ export class GituShellManager {
         ? Math.min(request.timeoutMs, 10 * 60_000)
         : DEFAULT_TIMEOUT_MS;
     const sandboxed = request.sandboxed !== false;
-
-    // Check if user has a remote terminal connected.
-    // If so, we route the command to the user's actual computer.
-    if (gituRemoteTerminalService.hasConnection(userId)) {
-      console.log(`[ShellManager] User ${userId} has remote terminal. Routing execution...`);
-      // For remote execution, we skip the sandbox logic on the SERVER 
-      // as it will run on the user's actual local machine.
-      return gituRemoteTerminalService.executeRemote(userId, {
-        ...request,
-        sandboxed: false, // Don't try to sandbox on user's machine unless they handle it
-      }, hooks);
-    }
 
     if (!request.command || typeof request.command !== 'string' || request.command.trim().length === 0) {
       return {
@@ -223,6 +245,142 @@ export class GituShellManager {
         stdoutTruncated: false,
         stderrTruncated: false,
         error: 'SHELL_COMMAND_NOT_ALLOWED',
+      };
+    }
+
+    // Check if user has a remote terminal connected.
+    // If so, we may route the command to the user's actual computer, but only after permission checks.
+    if (gituRemoteTerminalService.hasConnection(userId)) {
+      const remoteAllowed = executePermissions.some(hasUnsandboxedAllowance);
+      if (!remoteAllowed) {
+        return {
+          success: false,
+          mode: 'unsandboxed',
+          command: request.command,
+          args,
+          cwd,
+          exitCode: null,
+          stdout: '',
+          stderr: '',
+          timedOut: false,
+          durationMs: 0,
+          stdoutTruncated: false,
+          stderrTruncated: false,
+          error: 'REMOTE_EXECUTION_NOT_ALLOWED',
+        };
+      }
+
+      if (cwd) {
+        const cwdOk = executePermissions.some(p => pathAllowed(p.scope?.allowedPaths, cwd));
+        if (!cwdOk) {
+          return {
+            success: false,
+            mode: 'unsandboxed',
+            command: request.command,
+            args,
+            cwd,
+            exitCode: null,
+            stdout: '',
+            stderr: '',
+            timedOut: false,
+            durationMs: 0,
+            stdoutTruncated: false,
+            stderrTruncated: false,
+            error: 'SHELL_CWD_NOT_ALLOWED',
+          };
+        }
+      }
+
+      const startTime = Date.now();
+      let stdout = '';
+      let stderr = '';
+      let stdoutBytes = 0;
+      let stderrBytes = 0;
+      let stdoutTruncated = false;
+      let stderrTruncated = false;
+
+      const wrappedHooks: ShellExecutionHooks = {
+        ...hooks,
+        onStdoutChunk: (chunk: Buffer) => {
+          hooks.onStdoutChunk?.(chunk);
+          stdoutBytes += chunk.length;
+          if (!stdoutTruncated) {
+            const remaining = MAX_STDOUT_BYTES - Buffer.byteLength(stdout, 'utf8');
+            if (remaining <= 0) {
+              stdoutTruncated = true;
+              return;
+            }
+            const text = chunk.toString('utf8');
+            stdout += text.length > remaining ? text.slice(0, remaining) : text;
+            if (text.length > remaining) stdoutTruncated = true;
+          }
+        },
+        onStderrChunk: (chunk: Buffer) => {
+          hooks.onStderrChunk?.(chunk);
+          stderrBytes += chunk.length;
+          if (!stderrTruncated) {
+            const remaining = MAX_STDERR_BYTES - Buffer.byteLength(stderr, 'utf8');
+            if (remaining <= 0) {
+              stderrTruncated = true;
+              return;
+            }
+            const text = chunk.toString('utf8');
+            stderr += text.length > remaining ? text.slice(0, remaining) : text;
+            if (text.length > remaining) stderrTruncated = true;
+          }
+        },
+      };
+
+      const remote = await gituRemoteTerminalService.executeRemote(
+        userId,
+        {
+          ...request,
+          sandboxed: false,
+        },
+        wrappedHooks
+      );
+
+      const exitCodeRaw = (remote.result as any)?.exitCode;
+      const exitCode = typeof exitCodeRaw === 'number' ? exitCodeRaw : null;
+      const successRaw = (remote.result as any)?.success;
+      const success = typeof successRaw === 'boolean' ? successRaw : exitCode === 0;
+      const errorMessage = typeof (remote.result as any)?.error === 'string' ? (remote.result as any).error : null;
+
+      const durationMs = Date.now() - startTime;
+
+      const auditLogId = await writeAuditLog(this.pool, {
+        userId,
+        mode: 'unsandboxed',
+        command: request.command,
+        args,
+        cwd,
+        success,
+        exitCode,
+        errorMessage,
+        durationMs,
+        stdoutBytes,
+        stderrBytes,
+        stdoutTruncated,
+        stderrTruncated,
+        deviceId: remote.deviceId,
+        deviceName: remote.deviceName,
+      });
+
+      return {
+        success,
+        mode: 'unsandboxed',
+        command: request.command,
+        args,
+        cwd,
+        exitCode,
+        stdout,
+        stderr,
+        timedOut: false,
+        durationMs,
+        stdoutTruncated,
+        stderrTruncated,
+        auditLogId,
+        ...(errorMessage ? { error: errorMessage } : {}),
       };
     }
 

@@ -2,6 +2,12 @@ Thank you for the clarification. You want to ensure that:
 1.  **Persistence:** Once a user links their WhatsApp, the connection and user mapping must strictly persist and survive restarts/reconnections without needing re-linking.
 2.  **Proactive Features:** Gitu should not just be a passive responder. It should be able to proactively interact on WhatsApp (e.g., send daily summaries, reminders, or welcome messages) once linked.
 
+### WhatsApp Contacts (Important Limitation)
+WhatsApp integration here uses the WhatsApp Web protocol (via Baileys). That means:
+* Gitu **cannot read your phone’s address book**.
+* Gitu can only “see” WhatsApp contacts/chats that the linked WhatsApp account has access to and that the session syncs (often chats you’ve messaged before).
+* Contact search should be treated as “search the WhatsApp session cache” (names from contacts/chats), not a full device contacts search.
+
 ### Refined Plan: Persistent Linking & Proactive Gitu
 
 #### 1. Robust & Persistent Account Linking

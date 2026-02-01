@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database.js';
 
 import { gituAIRouter } from './gituAIRouter.js';
+import { gituEvaluationService } from './gituEvaluationService.js';
 import { gituMessageGateway } from './gituMessageGateway.js';
 import { gituMCPHub } from './gituMCPHub.js';
 
@@ -174,6 +175,20 @@ export class GituAgentManager {
         `🎉 **Agent Task Completed**\n\n*Task:* ${agent.task}\n\n*Result:* ${content}`
       );
 
+      if (agent.memory.missionId) {
+        try {
+          await gituEvaluationService.createAgentCompletionEvaluation({
+            userId: agent.userId,
+            missionId: agent.memory.missionId,
+            agentId: agent.id,
+            status: 'completed',
+            toolCallsAttempted: toolCall ? 1 : 0
+          });
+        } catch (e) {
+          console.error(`[AgentManager] Failed to store evaluation for agent ${agent.id}`, e);
+        }
+      }
+
       // Notify Orchestrator if this agent is part of a swarm mission
       if (agent.memory.missionId) {
         try {
@@ -191,6 +206,20 @@ export class GituAgentManager {
         agent.userId,
         `❌ **Agent Task Failed**\n\n*Task:* ${agent.task}\n\n*Reason:* ${content}`
       );
+
+      if (agent.memory.missionId) {
+        try {
+          await gituEvaluationService.createAgentCompletionEvaluation({
+            userId: agent.userId,
+            missionId: agent.memory.missionId,
+            agentId: agent.id,
+            status: 'failed',
+            toolCallsAttempted: toolCall ? 1 : 0
+          });
+        } catch (e) {
+          console.error(`[AgentManager] Failed to store evaluation for agent ${agent.id}`, e);
+        }
+      }
     } else {
       // Keep active
       await pool.query(

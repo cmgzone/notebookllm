@@ -204,21 +204,42 @@ class GituAIRouter {
       let params: any[];
 
       if (sessionId) {
-        query = `SELECT role, content FROM gitu_messages WHERE session_id = $1 ORDER BY created_at ASC LIMIT $2`;
+        query = `SELECT role, content FROM gitu_messages WHERE session_id = $1 ORDER BY timestamp ASC LIMIT $2`;
         params = [sessionId, limit];
       } else {
-        query = `SELECT role, content FROM gitu_messages WHERE user_id = $1 AND session_id IS NULL AND created_at > NOW() - INTERVAL '2 hours' ORDER BY created_at ASC LIMIT $2`;
+        query = `SELECT role, content FROM gitu_messages WHERE user_id = $1 AND session_id IS NULL AND timestamp > NOW() - INTERVAL '2 hours' ORDER BY timestamp ASC LIMIT $2`;
         params = [userId, limit];
       }
 
       const result = await pool.query(query, params);
       return result.rows.map(row => ({
         role: row.role as 'user' | 'assistant' | 'system',
-        content: row.content
+        content: this.toChatContentString(row.content)
       }));
     } catch (error) {
       console.error('[Gitu AI Router] Error fetching chat history:', error);
       return [];
+    }
+  }
+
+  private toChatContentString(content: unknown): string {
+    if (content === null || content === undefined) return '';
+    if (typeof content === 'string') return content;
+    if (typeof content === 'object') {
+      const asRecord = content as Record<string, unknown>;
+      const text = asRecord.text;
+      if (typeof text === 'string') return text;
+      const message = asRecord.message;
+      if (typeof message === 'string') return message;
+      const value = asRecord.value;
+      if (typeof value === 'string') return value;
+      const innerContent = asRecord.content;
+      if (typeof innerContent === 'string') return innerContent;
+    }
+    try {
+      return JSON.stringify(content);
+    } catch {
+      return String(content);
     }
   }
 
@@ -230,7 +251,7 @@ class GituAIRouter {
       await pool.query(
         `INSERT INTO gitu_messages (user_id, role, content, platform, session_id, platform_user_id)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [userId, role, content, platform, sessionId, platformUserId]
+        [userId, role, { text: content }, platform, sessionId, platformUserId]
       );
     } catch (error) {
       console.error('[Gitu AI Router] Error saving message:', error);

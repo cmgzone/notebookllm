@@ -17,6 +17,7 @@ import { gituShellManager } from '../services/gituShellManager.js';
 import { gituRuleEngine } from '../services/gituRuleEngine.js';
 import { gituPluginSystem } from '../services/gituPluginSystem.js';
 import { gituTerminalService } from '../services/gituTerminalService.js';
+import { gituRemoteTerminalService } from '../services/gituRemoteTerminalService.js';
 import { gituGmailManager } from '../services/gituGmailManager.js';
 import { gituShopifyManager } from '../services/gituShopifyManager.js';
 import { gituAgentManager } from '../services/gituAgentManager.js';
@@ -39,6 +40,7 @@ import {
 import { gituAIRouter } from '../services/gituAIRouter.js';
 import { generateEmbedding } from '../services/aiService.js';
 import { gituMissionControl } from '../services/gituMissionControl.js';
+import { gituSelfImprovementService } from '../services/gituSelfImprovementService.js';
 
 const router = express.Router();
 const normalizeScopePath = (p: string) =>
@@ -163,6 +165,7 @@ router.post('/terminal/unlink', authenticateToken, async (req: AuthRequest, res:
       return res.status(400).json({ error: 'deviceId is required' });
     }
     await gituTerminalService.unlinkTerminal(req.userId!, deviceId);
+    gituRemoteTerminalService.disconnectDevice(req.userId!, deviceId);
     res.json({ success: true, message: 'Device unlinked successfully' });
   } catch (error: any) {
     if (String(error?.message || '').toLowerCase().includes('not found')) {
@@ -1899,6 +1902,54 @@ const startMissionHandler = async (req: AuthRequest, res: Response) => {
 };
 
 router.post('/mission', startMissionHandler);
+
+router.post('/improvement/start', async (req: AuthRequest, res: Response) => {
+  try {
+    const { objective, targetPaths, verificationCommands } = req.body as any;
+    if (!objective || typeof objective !== 'string') {
+      return res.status(400).json({ error: 'objective is required' });
+    }
+    if (!Array.isArray(targetPaths) || targetPaths.length === 0 || !targetPaths.every((p: any) => typeof p === 'string')) {
+      return res.status(400).json({ error: 'targetPaths must be a non-empty string array' });
+    }
+    if (targetPaths.length > 10) {
+      return res.status(400).json({ error: 'targetPaths too large (max 10)' });
+    }
+
+    const result = await gituSelfImprovementService.startSelfImprovement({
+      userId: req.userId!,
+      objective,
+      targetPaths,
+      verificationCommands: Array.isArray(verificationCommands) ? verificationCommands : undefined
+    });
+
+    res.status(201).json({ success: true, ...result });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to start self-improvement', message: error.message });
+  }
+});
+
+router.post('/improvement/:id/verify', async (req: AuthRequest, res: Response) => {
+  try {
+    const mission = await gituSelfImprovementService.runVerification(req.userId!, req.params.id);
+    res.json({ success: true, mission });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to verify self-improvement proposal', message: error.message });
+  }
+});
+
+router.post('/improvement/:id/apply', async (req: AuthRequest, res: Response) => {
+  try {
+    const { confirm } = req.body as any;
+    if (confirm !== true) {
+      return res.status(400).json({ error: 'confirm must be true to apply a proposal' });
+    }
+    const mission = await gituSelfImprovementService.applyProposal(req.userId!, req.params.id);
+    res.json({ success: true, mission });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to apply self-improvement proposal', message: error.message });
+  }
+});
 
 /**
  * GET /mission/active

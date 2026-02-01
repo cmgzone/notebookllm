@@ -29,6 +29,18 @@ Start an interactive chat session with Gitu directly in your terminal.
 gitu chat
 ```
 
+Inside `gitu chat`, you can also use slash commands:
+```text
+/help
+/whoami
+/shell git status
+/code "Fix failing tests in backend"
+/notebooks
+/notebook <id> <question>
+/agent list
+/agent spawn <task>
+```
+
 ### 🧠 Notebooks
 Manage and query your NotebookLLM knowledge base.
 ```bash
@@ -57,6 +69,39 @@ Execute single natural language instructions.
 ```bash
 gitu run "List all PDF files in ./documents"
 ```
+
+## Coding Autonomous Agent (Swarm Mission)
+
+Start an autonomous coding mission that can plan and execute multi-step work:
+```bash
+gitu code "Implement login endpoint and add tests"
+```
+
+Watch mission status:
+```bash
+gitu mission watch <mission-id>
+```
+
+Notes:
+- The agent can only run shell/file actions if the backend permissions allow them.
+- If Remote Terminal is enabled, some commands may run on your local computer (with local confirmation by default).
+
+## Remote Terminal (Runs Commands On Your Computer)
+
+If you enable Remote Terminal, the backend may send command execution requests to this CLI over a WebSocket connection. Those commands run locally with the same permissions as the user running `gitu`.
+
+- Remote Terminal is **disabled by default**.
+- Enable/disable it with:
+  - `gitu config remote-terminal on`
+  - `gitu config remote-terminal off`
+- By default, Remote Terminal requires **local confirmation** before running remote commands:
+  - `gitu config remote-confirm on|off`
+  - `gitu config remote-allow "<prefix>"` (prefix allowlist, or `*`)
+
+### Admin / “Run as Administrator”
+
+- The CLI **cannot** silently elevate privileges.
+- Commands run “as admin” only if you start the CLI as admin (Windows) or use a privileged install/service you configure manually.
 
 ### 🐚 Shell Integration
 Generate alias scripts for your shell (Bash, Zsh, PowerShell).
