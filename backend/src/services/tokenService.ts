@@ -64,14 +64,14 @@ class TokenService {
   generateTokenString(): string {
     // Generate 32 bytes of cryptographic randomness
     const randomBytes = crypto.randomBytes(TOKEN_RANDOM_BYTES);
-    
+
     // Encode as base64url (URL-safe base64 without padding)
     const base64url = randomBytes
       .toString('base64')
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=/g, '');
-    
+
     return `${TOKEN_PREFIX}${base64url}`;
   }
 
@@ -118,7 +118,7 @@ class TokenService {
     // Generate the token
     const token = this.generateTokenString();
     const tokenHash = this.hashToken(token);
-    
+
     // Extract prefix and suffix for display
     const tokenPrefix = token.substring(0, 8);  // "nllm_xxx"
     const tokenSuffix = token.substring(token.length - 4);  // Last 4 chars
@@ -154,13 +154,16 @@ class TokenService {
       return { valid: false, error: 'Invalid token format' };
     }
 
+    // Removed strict length check to avoid issues with different encoding/pasting
+    /*
     if (token.length !== TOKEN_TOTAL_LENGTH) {
       return { valid: false, error: 'Invalid token format' };
     }
+    */
 
     // Hash the token and look it up
     const tokenHash = this.hashToken(token);
-    
+
     const result = await pool.query(
       `SELECT * FROM api_tokens WHERE token_hash = $1`,
       [tokenHash]
