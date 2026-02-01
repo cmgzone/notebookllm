@@ -134,10 +134,16 @@ const runUserPluginTool: MCPTool = {
  */
 const createUserPluginTool: MCPTool = {
     name: 'create_user_plugin',
-    description: 'Create a new custom plugin/skill for the user. The plugin code runs in a sandboxed environment with access to gitu.files and gitu.shell APIs.',
+    description: 'Create a new custom plugin/skill for the user. Supports sandboxed JS plugins and container plugins (plugin.yaml + files).',
     schema: {
         type: 'object',
         properties: {
+            type: {
+                type: 'string',
+                description: 'Plugin type: "js" (sandboxed) or "container" (plugin.yaml + files)',
+                enum: ['js', 'container'],
+                default: 'js'
+            },
             name: {
                 type: 'string',
                 description: 'Name of the plugin (e.g., "Daily Report Generator")'
@@ -148,7 +154,15 @@ const createUserPluginTool: MCPTool = {
             },
             code: {
                 type: 'string',
-                description: 'JavaScript code for the plugin. Must export a function named "run" that receives { input, config, gitu }'
+                description: 'For type="js": JavaScript code. For type="container": plugin.yaml content'
+            },
+            files: {
+                type: 'object',
+                description: 'For type="container": map of filename -> content (must include the manifest entry file)'
+            },
+            config: {
+                type: 'object',
+                description: 'Optional config object stored with the plugin'
             },
             enabled: {
                 type: 'boolean',
@@ -156,18 +170,25 @@ const createUserPluginTool: MCPTool = {
                 default: true
             }
         },
-        required: ['name', 'code']
+        required: ['code']
     },
     handler: async (args: any, context: MCPContext) => {
-        const { name, description, code, enabled = true } = args;
+        const { type = 'js', name, description, code, files, config, enabled = true } = args;
 
-        // Validate first
-        const validation = gituPluginSystem.validatePlugin({
+        const payload: any = {
             name,
+            description,
             code,
-            entrypoint: 'run',
-            enabled
-        });
+            enabled,
+        };
+        if (type === 'container' || files) {
+            payload.config = { ...(typeof config === 'object' && config !== null ? config : {}), files: files || {} };
+        } else {
+            payload.entrypoint = 'run';
+            if (typeof config === 'object' && config !== null) payload.config = config;
+        }
+
+        const validation = gituPluginSystem.validatePlugin(payload);
 
         if (!validation.valid) {
             return {
@@ -178,19 +199,13 @@ const createUserPluginTool: MCPTool = {
         }
 
         // Create the plugin
-        const plugin = await gituPluginSystem.createPlugin(context.userId, {
-            name,
-            description,
-            code,
-            entrypoint: 'run',
-            enabled
-        });
+        const plugin = await gituPluginSystem.createPlugin(context.userId, payload);
 
         return {
             success: true,
             pluginId: plugin.id,
             name: plugin.name,
-            message: `Plugin "${name}" created successfully! You can now run it using run_user_plugin.`
+            message: `Plugin "${plugin.name}" created successfully! You can now run it using run_user_plugin.`
         };
     }
 };

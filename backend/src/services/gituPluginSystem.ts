@@ -4,6 +4,7 @@ import pool from '../config/database.js';
 import { gituPermissionManager } from './gituPermissionManager.js';
 import { listDir, readFile, writeFile } from './gituFileManager.js';
 import { gituShellManager, type ShellExecuteResult } from './gituShellManager.js';
+import { PluginManifestParser } from './plugins/pluginManifest.js';
 
 export interface GituPlugin {
   id: string;
@@ -62,12 +63,51 @@ function isString(v: any): v is string {
   return typeof v === 'string';
 }
 
+function looksLikeRecord(v: any): v is Record<string, any> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
 function safeJson(v: any) {
   try {
     return JSON.parse(JSON.stringify(v));
   } catch {
     return null;
   }
+}
+
+function parseContainerManifest(code: unknown): { ok: true; manifest: any } | { ok: false; error: string } {
+  if (!isString(code)) return { ok: false, error: 'CODE_REQUIRED' };
+  try {
+    const manifest = PluginManifestParser.parse(code);
+    return { ok: true, manifest };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'PLUGIN_MANIFEST_INVALID' };
+  }
+}
+
+function sanitizeContainerFiles(files: any): { ok: true; files: Record<string, string> } | { ok: false; error: string } {
+  if (!looksLikeRecord(files)) return { ok: false, error: 'FILES_REQUIRED' };
+  const out: Record<string, string> = {};
+
+  const entries = Object.entries(files);
+  if (entries.length === 0) return { ok: false, error: 'FILES_REQUIRED' };
+  if (entries.length > 50) return { ok: false, error: 'FILES_TOO_MANY' };
+
+  let totalBytes = 0;
+  for (const [name, content] of entries) {
+    if (!isString(name) || name.trim().length === 0) return { ok: false, error: 'FILE_NAME_INVALID' };
+    const normalized = name.replace(/\\/g, '/').trim();
+    if (normalized.includes('..') || normalized.startsWith('/') || normalized.startsWith('./') || normalized.includes('\0')) {
+      return { ok: false, error: 'FILE_NAME_INVALID' };
+    }
+    if (!isString(content)) return { ok: false, error: 'FILE_CONTENT_INVALID' };
+    const bytes = Buffer.byteLength(content, 'utf8');
+    if (bytes > 500_000) return { ok: false, error: 'FILE_TOO_LARGE' };
+    totalBytes += bytes;
+    if (totalBytes > 2_000_000) return { ok: false, error: 'FILES_TOTAL_TOO_LARGE' };
+    out[normalized] = content;
+  }
+  return { ok: true, files: out };
 }
 
 function buildSandbox(logs: string[]) {
@@ -120,9 +160,24 @@ class GituPluginSystem {
     config?: unknown;
   }): PluginValidationResult {
     const errors: string[] = [];
-    if (!isString(input.name) || input.name.trim().length < 2) errors.push('NAME_REQUIRED');
+
+    const containerParsed = parseContainerManifest(input.code);
+    const codeText = isString(input.code) ? input.code : '';
+    const likelyContainer =
+      isString(input.code) &&
+      (codeText.includes('runtime:') || codeText.includes('entry:') || codeText.includes('permissions:')) &&
+      (codeText.includes('name:') || codeText.includes('runtime:'));
+    const isContainer = containerParsed.ok;
+    if (likelyContainer && !isContainer) {
+      return { valid: false, errors: ['PLUGIN_MANIFEST_INVALID'] };
+    }
+    const derivedName = isContainer ? String(containerParsed.manifest?.name || '').trim() : '';
+
+    const nameValue = isString(input.name) ? input.name.trim() : derivedName;
+    if (!nameValue || nameValue.length < 2) errors.push('NAME_REQUIRED');
+
     if (!isString(input.code) || input.code.trim().length < 10) errors.push('CODE_REQUIRED');
-    if (isString(input.code) && input.code.length > 100_000) errors.push('CODE_TOO_LARGE');
+    if (isString(input.code) && input.code.length > 200_000) errors.push('CODE_TOO_LARGE');
     if (input.enabled !== undefined && typeof input.enabled !== 'boolean') errors.push('ENABLED_INVALID');
     if (input.entrypoint !== undefined && (!isString(input.entrypoint) || input.entrypoint.trim().length < 1)) {
       errors.push('ENTRYPOINT_INVALID');
@@ -131,16 +186,27 @@ class GituPluginSystem {
       errors.push('CONFIG_INVALID');
     }
 
+    if (errors.length > 0) return { valid: false, errors };
+
+    if (isContainer) {
+      const filesRaw = looksLikeRecord(input.config) ? (input.config as any).files : undefined;
+      const filesParsed = sanitizeContainerFiles(filesRaw);
+      if (!filesParsed.ok) return { valid: false, errors: [filesParsed.error] };
+      const entry = String(containerParsed.manifest.entry || '').trim();
+      if (!entry) return { valid: false, errors: ['ENTRYPOINT_INVALID'] };
+      if (!Object.prototype.hasOwnProperty.call(filesParsed.files, entry)) {
+        return { valid: false, errors: ['ENTRY_FILE_MISSING'] };
+      }
+      return { valid: true, errors: [] };
+    }
+
     if (isString(input.code)) {
       for (const re of bannedPatterns) {
         if (re.test(input.code)) {
-          errors.push('CODE_DISALLOWED');
-          break;
+          return { valid: false, errors: ['CODE_DISALLOWED'] };
         }
       }
     }
-
-    if (errors.length > 0) return { valid: false, errors };
 
     const logs: string[] = [];
     try {
@@ -158,8 +224,10 @@ class GituPluginSystem {
     const v = this.validatePlugin(input);
     if (!v.valid) throw new Error(v.errors.join(','));
 
+    const containerParsed = parseContainerManifest(input.code);
+    const isContainer = containerParsed.ok;
     const id = uuidv4();
-    const name = String(input.name).trim();
+    const name = isString(input.name) ? String(input.name).trim() : isContainer ? String(containerParsed.manifest?.name || '').trim() : '';
     const description = isString(input.description) ? input.description.trim() : null;
     const code = String(input.code);
     const entrypoint = isString(input.entrypoint) ? input.entrypoint.trim() : 'run';
@@ -312,10 +380,8 @@ class GituPluginSystem {
     const started = Date.now();
     const logs: string[] = [];
 
-    // Check if it's a v2 Container Plugin (has plugin.yaml in code or specific config)
-    // For now, let's assume if the code looks like a manifest, we treat it as v2?
-    // Or we can check if the entrypoint is a file extension like .py
-    const isContainerPlugin = plugin.code.includes('runtime:') && plugin.code.includes('entry:');
+    const containerParsed = parseContainerManifest(plugin.code);
+    const isContainerPlugin = containerParsed.ok;
     
     if (isContainerPlugin) {
       try {
@@ -332,7 +398,11 @@ class GituPluginSystem {
         
         // Let's assume `plugin.code` is just the `plugin.yaml` manifest.
         // And the actual code files are stored in `plugin.config.files` map.
-        const files: Record<string, string> = plugin.config?.files || {};
+        const filesParsed = sanitizeContainerFiles(plugin.config?.files);
+        if (!filesParsed.ok) {
+          throw new Error(filesParsed.error);
+        }
+        const files: Record<string, string> = filesParsed.files;
         files['plugin.yaml'] = plugin.code;
 
         // If files are empty (legacy/migration), maybe try to parse code as script?

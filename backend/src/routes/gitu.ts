@@ -658,7 +658,15 @@ router.post('/plugins', async (req: AuthRequest, res: Response) => {
       msg.includes('NAME_REQUIRED') ||
         msg.includes('CODE_REQUIRED') ||
         msg.includes('CODE_DISALLOWED') ||
-        msg.includes('CONFIG_INVALID')
+        msg.includes('CONFIG_INVALID') ||
+        msg.includes('FILES_REQUIRED') ||
+        msg.includes('FILES_TOO_MANY') ||
+        msg.includes('FILE_NAME_INVALID') ||
+        msg.includes('FILE_CONTENT_INVALID') ||
+        msg.includes('FILE_TOO_LARGE') ||
+        msg.includes('FILES_TOTAL_TOO_LARGE') ||
+        msg.includes('ENTRY_FILE_MISSING') ||
+        msg.includes('PLUGIN_MANIFEST_INVALID')
         ? 400
         : 500;
     res.status(status).json({ error: 'Failed to create plugin', message: msg });
@@ -677,7 +685,15 @@ router.put('/plugins/:id', async (req: AuthRequest, res: Response) => {
         : msg.includes('NAME_REQUIRED') ||
           msg.includes('CODE_REQUIRED') ||
           msg.includes('CODE_DISALLOWED') ||
-          msg.includes('CONFIG_INVALID')
+          msg.includes('CONFIG_INVALID') ||
+          msg.includes('FILES_REQUIRED') ||
+          msg.includes('FILES_TOO_MANY') ||
+          msg.includes('FILE_NAME_INVALID') ||
+          msg.includes('FILE_CONTENT_INVALID') ||
+          msg.includes('FILE_TOO_LARGE') ||
+          msg.includes('FILES_TOTAL_TOO_LARGE') ||
+          msg.includes('ENTRY_FILE_MISSING') ||
+          msg.includes('PLUGIN_MANIFEST_INVALID')
           ? 400
           : 500;
     res.status(status).json({ error: 'Failed to update plugin', message: msg });

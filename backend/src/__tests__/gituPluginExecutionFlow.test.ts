@@ -178,4 +178,34 @@ describe('Gitu Plugin System - Integration', () => {
       .expect(200);
     expect(res.body.result.valid).toBe(false);
   });
+
+  it('validates container plugins (plugin.yaml + files) for custom creation', async () => {
+    const manifest = `
+name: my_container_plugin
+version: 1.0.0
+description: test container plugin
+runtime: node18
+entry: main.js
+permissions:
+  network: false
+  filesystem: none
+  env: []
+`.trim();
+
+    const res = await request(app)
+      .post('/api/gitu/plugins/validate')
+      .set('Authorization', `Bearer ${userAuthToken}`)
+      .send({
+        name: 'My Container Plugin',
+        code: manifest,
+        config: {
+          files: {
+            'main.js': `console.log('hello');`,
+          },
+        },
+      })
+      .expect(200);
+
+    expect(res.body.result.valid).toBe(true);
+  });
 });
