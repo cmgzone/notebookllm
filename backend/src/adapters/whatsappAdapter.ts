@@ -29,6 +29,7 @@ import pool from '../config/database.js';
 import { gituAgentManager } from '../services/gituAgentManager.js';
 import { gituAgentOrchestrator } from '../services/gituAgentOrchestrator.js';
 import { gituMissionControl } from '../services/gituMissionControl.js';
+import { gituToolExecutionService } from '../services/gituToolExecutionService.js';
 
 // ==================== INTERFACES ====================
 
@@ -412,24 +413,48 @@ class WhatsAppAdapter {
 
             // Route to AI
             try {
-                const aiResponse = await gituAIRouter.route({
+                // Ensure session exists
+                const session = await gituSessionService.getOrCreateSession(userId, 'universal');
+
+                // Add User Message to History
+                await gituSessionService.addMessage(session.id, {
+                    role: 'user',
+                    content: text || '',
+                    platform: 'whatsapp'
+                });
+
+                // Prepare context
+                const history = session.context.conversationHistory || [];
+                const contextStart = Math.max(0, history.length - 10);
+                const recentHistory = history.slice(contextStart).map(m => ({
+                    role: m.role as 'user' | 'assistant' | 'system' | 'tool',
+                    content: m.content
+                }));
+
+                // Use Tool Execution Service for smart responses
+                const result = await gituToolExecutionService.processWithTools(
                     userId,
-                    platform: 'whatsapp',
-                    platformUserId: remoteJid, // Use original remoteJid for routing context
-                    content: text,
-                    metadata: {
+                    text || '',
+                    recentHistory,
+                    {
+                        platform: 'whatsapp',
+                        sessionId: session.id,
                         isNoteToSelf,
                         messageId: msg.key.id,
                         pushName: msg.pushName
-                    },
-                    taskType: 'chat',
-                    useRetrieval: true // Enable RAG so AI knows about notebooks/sources
+                    } as any
+                );
+
+                // Add Assistant Response to History
+                await gituSessionService.updateActivity(session.id);
+                await gituSessionService.addMessage(session.id, {
+                    role: 'assistant',
+                    content: result.response,
+                    platform: 'whatsapp'
                 });
 
-                // Send response
-                if (aiResponse && aiResponse.content) {
-                    await this.sendMessage(remoteJid, aiResponse.content);
-                }
+                // Send Response
+                await this.sendMessage(remoteJid, result.response);
             } catch (aiError) {
                 this.logger.error({ err: aiError }, 'Error processing AI response');
                 if (isNoteToSelf) {
