@@ -165,6 +165,16 @@ Common CRON patterns:
 - "Cancel all my reminders" → use cancel_reminder with name="" and cancelAll=true (or list_reminders first then cancel)
 - "Stop sending me messages" → use cancel_reminder with cancelAll=true to stop all active reminders
 You do NOT need to know the reminder ID. Just use the 'name' parameter with the keyword from the user's message.
+
+**User Plugins (Custom Skills):**
+Users can create custom plugins/skills that extend your capabilities. Use these tools:
+- list_user_plugins → Discover what custom plugins the user has created
+- run_user_plugin → Execute a plugin by name or ID
+- create_user_plugin → Help users create new plugins (JavaScript code)
+- delete_user_plugin → Remove a plugin
+
+When a user asks you to do something you can't do natively, check if they have a custom plugin for it!
+Example: "Run my daily report plugin" → use run_user_plugin with pluginName="daily report"
 `;
     }
 

@@ -53,6 +53,7 @@ import { registerGoogleDriveTools } from './services/googleDriveMCPTools.js';
 import { registerShopifyTools } from './services/shopifyMCPTools.js';
 import { registerLanguageTools } from './services/languageMCPTools.js';
 import { registerBrowserTools } from './services/browserMCPTools.js';
+import { registerPluginMCPTools } from './services/pluginMCPTools.js';
 import { whatsappAdapter } from './adapters/whatsappAdapter.js';
 import { whatsappHealthMonitor } from './services/whatsappHealthMonitor.js';
 import { telegramAdapter } from './adapters/telegramAdapter.js';
@@ -94,6 +95,7 @@ registerGoogleDriveTools();
 registerShopifyTools();
 registerLanguageTools();
 registerBrowserTools();
+registerPluginMCPTools();
 gituScheduler.start();
 
 // Initialize WhatsApp
