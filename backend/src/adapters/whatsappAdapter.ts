@@ -103,6 +103,7 @@ class WhatsAppAdapter {
     private qrCode: string | null = null;
     private connectionState: 'connected' | 'disconnected' | 'connecting' = 'disconnected';
     private connectedAccountJid: string | null = null;
+    private connectedAccountLid: string | null = null;
     private connectedAccountName: string | null = null;
     private sentMessageIds = new Set<string>();
     private reconnectTimer: NodeJS.Timeout | null = null;
@@ -145,6 +146,28 @@ class WhatsAppAdapter {
         return jid.split(':')[0].split('@')[0] + '@s.whatsapp.net';
     }
 
+    private normalizeLid(jid: string): string {
+        if (!jid) return '';
+        if (!jid.includes('@lid')) return '';
+        return jid.split(':')[0].split('@')[0] + '@lid';
+    }
+
+    private isSelfChat(remoteJid: string): boolean {
+        if (!remoteJid) return false;
+        const normalizedJid = this.normalizeJid(remoteJid);
+        const normalizedLid = this.normalizeLid(remoteJid);
+
+        if (this.connectedAccountJid) {
+            if (remoteJid === this.connectedAccountJid) return true;
+            if (normalizedJid === this.connectedAccountJid) return true;
+        }
+        if (this.connectedAccountLid) {
+            if (remoteJid === this.connectedAccountLid) return true;
+            if (normalizedLid && normalizedLid === this.connectedAccountLid) return true;
+        }
+        return false;
+    }
+
     /**
      * Connect to WhatsApp using Baileys.
      */
@@ -168,6 +191,7 @@ class WhatsAppAdapter {
 
         this.connectionState = 'connecting';
         this.connectedAccountJid = null;
+        this.connectedAccountLid = null;
         this.connectedAccountName = null;
 
         const { state, saveCreds } = await useMultiFileAuthState(this.config.authDir!);
@@ -243,12 +267,14 @@ class WhatsAppAdapter {
                     }
                     this.connectionState = 'disconnected';
                     this.connectedAccountJid = null;
+                    this.connectedAccountLid = null;
                     this.connectedAccountName = null;
                     this.scheduleReconnect('logged_out', 1000);
                 } else if (isConflict) {
                     this.logger.warn('Session conflict (replaced). Backing off before reconnecting.');
                     this.connectionState = 'disconnected';
                     this.connectedAccountJid = null;
+                    this.connectedAccountLid = null;
                     this.connectedAccountName = null;
                     this.scheduleReconnect('conflict', 30_000);
                 } else if (shouldReconnect) {
@@ -268,8 +294,10 @@ class WhatsAppAdapter {
                     this.reconnectTimer = null;
                 }
                 const jid = (this.sock as any)?.user?.id;
+                const lid = (this.sock as any)?.user?.lid;
                 const name = (this.sock as any)?.user?.name;
                 this.connectedAccountJid = typeof jid === 'string' ? this.normalizeJid(jid) : null;
+                this.connectedAccountLid = typeof lid === 'string' ? this.normalizeLid(lid) : null;
                 this.connectedAccountName = typeof name === 'string' ? name : null;
 
                 // Attempt to send welcome message to self if linked
@@ -308,8 +336,7 @@ class WhatsAppAdapter {
                             }
                             // Check for Note to Self
                             const remoteJid = msg.key.remoteJid || '';
-                            const normalizedJid = this.normalizeJid(remoteJid);
-                            if (this.connectedAccountJid && normalizedJid !== this.connectedAccountJid) {
+                            if (!this.isSelfChat(remoteJid)) {
                                 continue;
                             }
                         }
@@ -436,18 +463,17 @@ class WhatsAppAdapter {
         }
 
         // Check for Note to Self or direct user messages
-        // Trust msg.key.fromMe explicitly for sent messages (Note to Self)
-        const normalizedRemoteJid = this.normalizeJid(remoteJid);
-        const isNoteToSelf = msg.key.fromMe || normalizedRemoteJid === this.connectedAccountJid;
+        const isNoteToSelf = this.isSelfChat(remoteJid);
 
         // If it's not a note to self and not a direct message from a user, we might want to ignore it
         // But for now, let's process everything that looks like a user message
 
-        this.logger.info(`Received message from ${remoteJid}: ${text} (fromMe: ${msg.key.fromMe}, Connected: ${this.connectedAccountJid}, Note to Self: ${isNoteToSelf})`);
+        this.logger.info(`Received message from ${remoteJid}: ${text} (fromMe: ${msg.key.fromMe}, Connected: ${this.connectedAccountJid || this.connectedAccountLid}, Note to Self: ${isNoteToSelf})`);
 
         // Debug command: Ping
         if (text.toLowerCase() === 'ping' && isNoteToSelf) {
-            await this.sendMessage(remoteJid, 'pong 🏓 (Connection Verified)');
+            const replyJid = this.connectedAccountJid || remoteJid;
+            await this.sendMessage(replyJid, 'pong 🏓 (Connection Verified)');
             return;
         }
 
@@ -491,25 +517,26 @@ class WhatsAppAdapter {
 
             // ================== COMMAND HANDLING ==================
             if (text.startsWith('/agent')) {
+                const replyJid = isNoteToSelf && this.connectedAccountJid ? this.connectedAccountJid : remoteJid;
                 const parts = text.split(' ');
                 const command = parts[1];
                 const args = parts.slice(2).join(' ');
 
                 if (command === 'spawn' || command === 'create') {
                     if (!args) {
-                        await this.sendMessage(remoteJid, '⚠️ Usage: /agent spawn <task description>');
+                        await this.sendMessage(replyJid, '⚠️ Usage: /agent spawn <task description>');
                         return;
                     }
-                    await this.sendMessage(remoteJid, `🤖 Spawning agent for: "${args}"...`);
+                    await this.sendMessage(replyJid, `🤖 Spawning agent for: "${args}"...`);
                     try {
                         const agent = await gituAgentManager.spawnAgent(userId, args, {
                             role: 'autonomous_agent',
                             focus: 'general',
                             autoLoadPlugins: true
                         });
-                        await this.sendMessage(remoteJid, `✅ Agent spawned! ID: ${agent.id.substring(0, 8)}\nI will notify you when it completes.`);
+                        await this.sendMessage(replyJid, `✅ Agent spawned! ID: ${agent.id.substring(0, 8)}\nI will notify you when it completes.`);
                     } catch (e: any) {
-                        await this.sendMessage(remoteJid, `❌ Failed to spawn agent: ${e.message}`);
+                        await this.sendMessage(replyJid, `❌ Failed to spawn agent: ${e.message}`);
                     }
                     return;
                 }
@@ -517,22 +544,23 @@ class WhatsAppAdapter {
                 if (command === 'list') {
                     const agents = await gituAgentManager.listAgents(userId);
                     if (agents.length === 0) {
-                        await this.sendMessage(remoteJid, 'No active agents found.');
+                        await this.sendMessage(replyJid, 'No active agents found.');
                         return;
                     }
                     const list = agents.map(a =>
                         `- *${a.task.substring(0, 30)}...*\n  Status: ${a.status}\n  ID: ${a.id.substring(0, 8)}`
                     ).join('\n\n');
-                    await this.sendMessage(remoteJid, `📋 *Your Agents:*\n\n${list}`);
+                    await this.sendMessage(replyJid, `📋 *Your Agents:*\n\n${list}`);
                     return;
                 }
 
-                await this.sendMessage(remoteJid, 'ℹ️ Available commands:\n/agent spawn <task>\n/agent list');
+                await this.sendMessage(replyJid, 'ℹ️ Available commands:\n/agent spawn <task>\n/agent list');
                 return;
             }
 
             // ================== SWARM HANDLING ==================
             if (text.startsWith('/swarm')) {
+                const replyJid = isNoteToSelf && this.connectedAccountJid ? this.connectedAccountJid : remoteJid;
                 const parts = text.split(' ');
                 const command = parts[1]; // status or task
                 const args = parts.slice(1).join(' ');
@@ -541,30 +569,30 @@ class WhatsAppAdapter {
                     try {
                         const missions = await gituMissionControl.listActiveMissions(userId);
                         if (missions.length === 0) {
-                            await this.sendMessage(remoteJid, 'No active swarm missions.');
+                            await this.sendMessage(replyJid, 'No active swarm missions.');
                             return;
                         }
                         const list = missions.map(m =>
                             `- *${m.name}*\n  Status: ${m.status.toUpperCase()}\n  Agents: ${m.agentCount}`
                         ).join('\n\n');
-                        await this.sendMessage(remoteJid, `🛸 *Active Swarms:*\n\n${list}`);
+                        await this.sendMessage(replyJid, `🛸 *Active Swarms:*\n\n${list}`);
                     } catch (e: any) {
-                        await this.sendMessage(remoteJid, `❌ Error: ${e.message}`);
+                        await this.sendMessage(replyJid, `❌ Error: ${e.message}`);
                     }
                     return;
                 }
 
                 if (!args) {
-                    await this.sendMessage(remoteJid, '⚠️ Usage: /swarm <complex objective>');
+                    await this.sendMessage(replyJid, '⚠️ Usage: /swarm <complex objective>');
                     return;
                 }
 
-                await this.sendMessage(remoteJid, `🛸 Deploying Swarm: "${args}"...`);
+                await this.sendMessage(replyJid, `🛸 Deploying Swarm: "${args}"...`);
                 try {
                     const mission = await gituAgentOrchestrator.createMission(userId, args);
-                    await this.sendMessage(remoteJid, `✅ **Swarm Deployed!**\nMission ID: ${mission.id.substring(0, 8)}\nI will notify you when finished.`);
+                    await this.sendMessage(replyJid, `✅ **Swarm Deployed!**\nMission ID: ${mission.id.substring(0, 8)}\nI will notify you when finished.`);
                 } catch (e: any) {
-                    await this.sendMessage(remoteJid, `❌ Failed to deploy swarm: ${e.message}`);
+                    await this.sendMessage(replyJid, `❌ Failed to deploy swarm: ${e.message}`);
                 }
                 return;
             }
@@ -831,6 +859,7 @@ class WhatsAppAdapter {
         this.connectionState = 'disconnected';
         this.qrCode = null;
         this.connectedAccountJid = null;
+        this.connectedAccountLid = null;
         this.connectedAccountName = null;
     }
 }
