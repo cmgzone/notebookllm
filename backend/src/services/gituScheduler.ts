@@ -5,6 +5,7 @@ import { gituAgentManager } from './gituAgentManager.js';
 import { gituMCPHub } from './gituMCPHub.js';
 import { gituAIRouter } from './gituAIRouter.js';
 import { gituMessageGateway } from './gituMessageGateway.js';
+import { gituPluginSystem } from './gituPluginSystem.js';
 
 /**
  * Extended action types for scheduled tasks
@@ -159,12 +160,12 @@ class GituScheduler {
   private async executeTask(task: ScheduledTask) {
     const startedAt = new Date();
     try {
-      await this.runAction(task);
+      const output = await this.runAction(task);
       const durationMs = Date.now() - startedAt.getTime();
       await pool.query(
         `INSERT INTO gitu_task_executions (task_id, success, output, duration)
          VALUES ($1, true, $2, $3)`,
-        [task.id, null, durationMs]
+        [task.id, output ? JSON.stringify(output) : null, durationMs]
       );
       await pool.query(
         `UPDATE gitu_scheduled_tasks 
@@ -212,33 +213,33 @@ class GituScheduler {
     }
   }
 
-  private async runAction(task: ScheduledTask, overloadPayload?: any) {
+  private async runAction(task: ScheduledTask, overloadPayload?: any): Promise<any> {
     const payload = overloadPayload || task.payload || {};
 
     switch (task.action) {
       // System maintenance actions
       case 'memories.detectContradictions':
         await gituMemoryService.detectContradictions(task.userId, payload?.category);
-        break;
+        return null;
       case 'memories.expireUnverified':
         await gituMemoryService.expireUnverifiedMemories(payload?.days ?? 30);
-        break;
+        return null;
       case 'sessions.cleanupOldSessions':
         await gituSessionService.cleanupOldSessions(payload?.days ?? 30);
-        break;
+        return null;
       case 'agents.processQueue':
         await gituAgentManager.processAgentQueue(task.userId);
-        break;
+        return null;
 
       // User-defined actions
       case 'mcp.executeTool': {
         // Execute an MCP tool
         const { toolName, args } = payload || {};
         if (!toolName) throw new Error('toolName is required for mcp.executeTool');
-        await gituMCPHub.executeTool(toolName, args || {}, {
+        const result = await gituMCPHub.executeTool(toolName, args || {}, {
           userId: task.userId,
         });
-        break;
+        return result ?? null;
       }
 
       case 'ai.generateSummary': {
@@ -256,7 +257,7 @@ class GituScheduler {
         if (sendToUser) {
           await gituMessageGateway.notifyUser(task.userId, response.content);
         }
-        break;
+        return { content: response.content, notebookId: notebookId ?? null, sent: Boolean(sendToUser) };
       }
 
       case 'ai.sendMessage': {
@@ -270,14 +271,17 @@ class GituScheduler {
           includeSystemPrompt: false,
         })).content : 'This is a scheduled reminder from Gitu.');
         await gituMessageGateway.notifyUser(task.userId, content);
-        break;
+        return { content, generated: Boolean(prompt && !message) };
       }
 
       case 'plugin.execute': {
-        // Plugin execution would go here
-        // For now, just log that it would execute
-        console.log(`[Scheduler] Would execute plugin for user ${task.userId}:`, payload);
-        break;
+        const { pluginId, input, context, timeoutMs } = payload || {};
+        if (!pluginId || typeof pluginId !== 'string') throw new Error('pluginId is required for plugin.execute');
+        const result = await gituPluginSystem.executePlugin(task.userId, pluginId, input, context, {
+          timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : undefined,
+        });
+        if (!result.success) throw new Error(result.error || 'PLUGIN_EXECUTION_FAILED');
+        return result;
       }
 
       case 'notification.send': {
@@ -286,7 +290,7 @@ class GituScheduler {
         // Fallback to task description or name if message logic is strict
         const content = message || task.description || task.name || 'Notification';
         await gituMessageGateway.notifyUser(task.userId, content);
-        break;
+        return { content };
       }
 
       default:

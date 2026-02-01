@@ -1,6 +1,6 @@
 import pool from '../config/database.js';
 
-type Platform = 'flutter' | 'whatsapp' | 'telegram' | 'email' | 'terminal';
+type Platform = 'flutter' | 'whatsapp' | 'telegram' | 'email' | 'terminal' | 'web';
 
 interface LinkedAccountRow {
   id: string;
@@ -123,6 +123,7 @@ class GituIdentityManager {
       telegram: 'low',
       email: 'low',
       terminal: 'low',
+      web: 'low',
     };
     for (const acc of accounts) {
       if (acc.status && acc.status !== 'active') continue;
@@ -130,7 +131,12 @@ class GituIdentityManager {
         levels.email = acc.verified ? 'high' : 'medium';
       } else if (acc.platform === 'terminal') {
         levels.terminal = acc.verified ? 'high' : 'medium';
-      } else if (acc.platform === 'whatsapp' || acc.platform === 'telegram' || acc.platform === 'flutter') {
+      } else if (
+        acc.platform === 'whatsapp' ||
+        acc.platform === 'telegram' ||
+        acc.platform === 'flutter' ||
+        acc.platform === 'web'
+      ) {
         const lvl: 'low' | 'medium' | 'high' = acc.verified ? 'medium' : 'low';
         levels[acc.platform] = lvl;
       }

@@ -356,10 +356,10 @@ class WhatsAppAdapter {
         try {
             // Attempt to get user ID, with auto-linking check if needed
             let userId: string;
+            const targetJid = isNoteToSelf && this.connectedAccountJid ? this.connectedAccountJid : remoteJid;
             try {
                 // If fromMe is true, we should look up the user based on the CONNECTED account JID, not necessarily the remoteJid
                 // (remoteJid in Note to Self is usually the user's own JID, but let's be safe)
-                const targetJid = isNoteToSelf && this.connectedAccountJid ? this.connectedAccountJid : remoteJid;
                 userId = await this.getUserIdFromJid(targetJid);
             } catch (error) {
                 // If it's a note to self, we might be able to auto-link if we have a pending session
@@ -369,6 +369,26 @@ class WhatsAppAdapter {
                 } else {
                     throw error;
                 }
+            }
+
+            let gatewayMessageId: string | undefined;
+            try {
+                const normalized = await gituMessageGateway.processMessage({
+                    platform: 'whatsapp',
+                    platformUserId: targetJid,
+                    content: { message: msg.message, media: mediaBuffer },
+                    timestamp: new Date(),
+                    metadata: {
+                        remoteJid,
+                        messageId: msg.key.id,
+                        pushName: msg.pushName,
+                        fromMe: msg.key.fromMe,
+                        isNoteToSelf,
+                    },
+                });
+                gatewayMessageId = normalized.id;
+            } catch (e: any) {
+                this.logger.debug(`Failed to store WhatsApp message in gateway: ${e?.message || e}`);
             }
 
             // ================== COMMAND HANDLING ==================
@@ -496,6 +516,11 @@ class WhatsAppAdapter {
 
                 // Send Response
                 await this.sendMessage(remoteJid, result.response);
+                await gituMessageGateway.trackOutboundMessage(userId, 'whatsapp', result.response, {
+                    sessionId: session.id,
+                    replyToMessageId: gatewayMessageId,
+                    userMessageText: text || '',
+                });
             } catch (aiError) {
                 this.logger.error({ err: aiError }, 'Error processing AI response');
                 if (isNoteToSelf) {

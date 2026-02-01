@@ -4,6 +4,7 @@ import gituMemoryService, { MemoryCategory } from '../services/gituMemoryService
 
 describe('GituMemoryService', () => {
   const testUserId = 'test-user-memory-' + Date.now();
+  const otherUserId = 'test-user-memory-other-' + Date.now();
   const category: MemoryCategory = 'fact';
   const createdMemoryIds: string[] = [];
   const createdContradictionIds: string[] = [];
@@ -15,6 +16,12 @@ describe('GituMemoryService', () => {
        ON CONFLICT (id) DO NOTHING`,
       [testUserId, `test-${testUserId}@example.com`, 'Test User', 'dummy-hash']
     );
+    await pool.query(
+      `INSERT INTO users (id, email, display_name, password_hash) 
+       VALUES ($1, $2, $3, $4) 
+       ON CONFLICT (id) DO NOTHING`,
+      [otherUserId, `test-${otherUserId}@example.com`, 'Other User', 'dummy-hash']
+    );
   });
 
   afterEach(async () => {
@@ -25,7 +32,13 @@ describe('GituMemoryService', () => {
       await pool.query(`DELETE FROM gitu_memories WHERE user_id = $1`, [testUserId]);
     } catch {}
     try {
+      await pool.query(`DELETE FROM gitu_memories WHERE user_id = $1`, [otherUserId]);
+    } catch {}
+    try {
       await pool.query(`DELETE FROM users WHERE id = $1`, [testUserId]);
+    } catch {}
+    try {
+      await pool.query(`DELETE FROM users WHERE id = $1`, [otherUserId]);
     } catch {}
     createdMemoryIds.length = 0;
     createdContradictionIds.length = 0;
@@ -53,7 +66,7 @@ describe('GituMemoryService', () => {
       source: 'system',
     });
     createdMemoryIds.push(mem.id);
-    const updated = await gituMemoryService.updateMemory(mem.id, {
+    const updated = await gituMemoryService.updateMemory(testUserId, mem.id, {
       verified: true,
       confidence: 0.99,
       tags: ['billing'],
@@ -110,7 +123,7 @@ describe('GituMemoryService', () => {
       source: 'user',
     });
     createdMemoryIds.push(mem.id);
-    const confirmed = await gituMemoryService.confirmMemory(mem.id);
+    const confirmed = await gituMemoryService.confirmMemory(testUserId, mem.id);
     expect(confirmed.verified).toBe(true);
     expect(confirmed.verificationRequired).toBe(false);
     expect(confirmed.lastConfirmedByUser).toBeInstanceOf(Date);
@@ -123,7 +136,7 @@ describe('GituMemoryService', () => {
       source: 'system',
     });
     createdMemoryIds.push(mem.id);
-    await gituMemoryService.deleteMemory(mem.id);
+    await gituMemoryService.deleteMemory(testUserId, mem.id);
     const fetched = await gituMemoryService.getMemory(mem.id);
     expect(fetched).toBeNull();
   });
@@ -135,11 +148,27 @@ describe('GituMemoryService', () => {
       source: 'user',
     });
     createdMemoryIds.push(mem.id);
-    const requested = await gituMemoryService.requestVerification(mem.id);
+    const requested = await gituMemoryService.requestVerification(testUserId, mem.id);
     expect(requested.verificationRequired).toBe(true);
-    const confirmed = await gituMemoryService.confirmMemory(mem.id);
+    const confirmed = await gituMemoryService.confirmMemory(testUserId, mem.id);
     expect(confirmed.verified).toBe(true);
     expect(confirmed.verificationRequired).toBe(false);
+  });
+
+  it('prevents one user from mutating another user memory', async () => {
+    const mem = await gituMemoryService.createMemory(testUserId, {
+      category,
+      content: 'Preferred language is TypeScript',
+      source: 'user',
+    });
+    createdMemoryIds.push(mem.id);
+
+    await expect(gituMemoryService.confirmMemory(otherUserId, mem.id)).rejects.toThrow('MEMORY_NOT_FOUND');
+    await expect(gituMemoryService.requestVerification(otherUserId, mem.id)).rejects.toThrow('MEMORY_NOT_FOUND');
+    await expect(gituMemoryService.updateMemory(otherUserId, mem.id, { verified: true })).rejects.toThrow(
+      'MEMORY_NOT_FOUND'
+    );
+    await expect(gituMemoryService.deleteMemory(otherUserId, mem.id)).rejects.toThrow('MEMORY_NOT_FOUND');
   });
 
   it('expires unverified memories older than threshold', async () => {

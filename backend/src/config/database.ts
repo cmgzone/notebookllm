@@ -24,6 +24,8 @@ const pool = new Pool({
 
 (globalThis as any).__notebookLlmPgPool = pool;
 
+const shouldLogDbEvents = !(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID);
+
 // Helper function to execute query with retry for connection issues
 export async function queryWithRetry<T>(
     queryFn: () => Promise<T>,
@@ -46,7 +48,9 @@ export async function queryWithRetry<T>(
                 throw error;
             }
 
-            console.log(`Database connection attempt ${attempt}/${maxRetries} failed, retrying...`);
+            if (shouldLogDbEvents) {
+                console.log(`Database connection attempt ${attempt}/${maxRetries} failed, retrying...`);
+            }
             await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
         }
     }
@@ -55,9 +59,11 @@ export async function queryWithRetry<T>(
 }
 
 // Test the connection
-pool.on('connect', () => {
-    console.log('✅ Connected to Neon database');
-});
+if (shouldLogDbEvents) {
+    pool.on('connect', () => {
+        console.log('✅ Connected to Neon database');
+    });
+}
 
 pool.on('error', (err) => {
     console.error('❌ Unexpected error on idle client', err);

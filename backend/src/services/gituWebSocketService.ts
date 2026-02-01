@@ -151,7 +151,7 @@ class GituWebSocketService {
     if (!connection) return;
 
     // Unregister WebSocket from broadcasting
-    gituMessageGateway.unregisterWebSocketClient(connection.userId);
+    gituMessageGateway.unregisterWebSocketClient(connection.userId, connection.ws);
 
     this.connections.delete(connectionId);
     const set = this.userConnections.get(connection.userId);

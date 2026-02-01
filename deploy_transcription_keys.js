@@ -2,13 +2,25 @@
 const { Client } = require('pg');
 
 async function deployKeys() {
+  const databaseUrl = process.env.DATABASE_URL;
+  const deepgramKey = process.env.DEEPGRAM_API_KEY;
+  const assemblyAiKey = process.env.ASSEMBLYAI_API_KEY;
+
+  if (!databaseUrl) {
+    console.error('Missing DATABASE_URL environment variable');
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!deepgramKey || !assemblyAiKey) {
+    console.error('Missing DEEPGRAM_API_KEY and/or ASSEMBLYAI_API_KEY environment variables');
+    process.exitCode = 1;
+    return;
+  }
+
   const client = new Client({
-    host: 'ep-steep-butterfly-ad9nrtp4-pooler.c-2.us-east-1.aws.neon.tech',
-    database: 'neondb',
-    user: 'neondb_owner',
-    password: 'npg_86DhEiUzwJAW',
-    port: 5432,
-    ssl: { rejectUnauthorized: false }
+    connectionString: databaseUrl,
+    ssl: { rejectUnauthorized: false },
   });
 
   try {
@@ -32,7 +44,7 @@ async function deployKeys() {
       VALUES ('deepgram', $1, 'Deepgram Real-time Transcription API', CURRENT_TIMESTAMP)
       ON CONFLICT (service_name) 
       DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = CURRENT_TIMESTAMP
-    `, ['d10e6978cacebc8ce3a9c563b2d70a04a79bfc9b']);
+    `, [deepgramKey]);
     console.log('✓ Deepgram API key deployed');
 
     // Insert AssemblyAI key
@@ -41,7 +53,7 @@ async function deployKeys() {
       VALUES ('assemblyai', $1, 'AssemblyAI Transcription API', CURRENT_TIMESTAMP)
       ON CONFLICT (service_name) 
       DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = CURRENT_TIMESTAMP
-    `, ['c6de92243f934029ab3a7a0b2f656821']);
+    `, [assemblyAiKey]);
     console.log('✓ AssemblyAI API key deployed');
 
     // Verify

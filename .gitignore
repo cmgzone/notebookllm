@@ -28,6 +28,7 @@ node_modules/
 npm-debug.log
 backend/node_modules/
 backend/dist/
+backend/whatsapp_contacts.json
 .env
 backend/.env
 admin_panel/.env

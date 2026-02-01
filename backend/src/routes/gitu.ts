@@ -762,36 +762,48 @@ router.get('/memories', async (req: AuthRequest, res: Response) => {
 
 router.post('/memories/:id/confirm', async (req: AuthRequest, res: Response) => {
   try {
-    const memory = await gituMemoryService.confirmMemory(req.params.id);
+    const memory = await gituMemoryService.confirmMemory(req.userId!, req.params.id);
     res.json({ success: true, memory });
   } catch (error: any) {
+    if (String(error?.message) === 'MEMORY_NOT_FOUND') {
+      return res.status(404).json({ error: 'Memory not found' });
+    }
     res.status(500).json({ error: 'Failed to confirm memory', message: error.message });
   }
 });
 
 router.post('/memories/:id/request-verification', async (req: AuthRequest, res: Response) => {
   try {
-    const memory = await gituMemoryService.requestVerification(req.params.id);
+    const memory = await gituMemoryService.requestVerification(req.userId!, req.params.id);
     res.json({ success: true, memory });
   } catch (error: any) {
+    if (String(error?.message) === 'MEMORY_NOT_FOUND') {
+      return res.status(404).json({ error: 'Memory not found' });
+    }
     res.status(500).json({ error: 'Failed to request verification', message: error.message });
   }
 });
 
 router.post('/memories/:id/correct', async (req: AuthRequest, res: Response) => {
   try {
-    const memory = await gituMemoryService.correctMemory(req.params.id, req.body);
+    const memory = await gituMemoryService.correctMemory(req.userId!, req.params.id, req.body);
     res.json({ success: true, memory });
   } catch (error: any) {
+    if (String(error?.message) === 'MEMORY_NOT_FOUND') {
+      return res.status(404).json({ error: 'Memory not found' });
+    }
     res.status(500).json({ error: 'Failed to correct memory', message: error.message });
   }
 });
 
 router.delete('/memories/:id', async (req: AuthRequest, res: Response) => {
   try {
-    await gituMemoryService.deleteMemory(req.params.id);
+    await gituMemoryService.deleteMemory(req.userId!, req.params.id);
     res.json({ success: true });
   } catch (error: any) {
+    if (String(error?.message) === 'MEMORY_NOT_FOUND') {
+      return res.status(404).json({ error: 'Memory not found' });
+    }
     res.status(500).json({ error: 'Failed to delete memory', message: error.message });
   }
 });
@@ -1872,7 +1884,7 @@ router.post('/proactive-insights/refresh', async (req: AuthRequest, res: Respons
  * POST /mission
  * Start a new Autonomous Swarm Mission
  */
-router.post('/mission', async (req: AuthRequest, res: Response) => {
+const startMissionHandler = async (req: AuthRequest, res: Response) => {
   try {
     const { objective } = req.body;
     if (!objective || typeof objective !== 'string') {
@@ -1884,7 +1896,9 @@ router.post('/mission', async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to start mission', message: error.message });
   }
-});
+};
+
+router.post('/mission', startMissionHandler);
 
 /**
  * GET /mission/active
@@ -1914,6 +1928,53 @@ router.get('/mission/:id', async (req: AuthRequest, res: Response) => {
     res.json({ success: true, mission });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to get mission details', message: error.message });
+  }
+});
+
+/**
+ * GET /mission/:id/detail
+ * Get mission plan plus per-task agent status/result (for swarm dashboard)
+ */
+router.get('/mission/:id/detail', async (req: AuthRequest, res: Response) => {
+  try {
+    const mission = await gituMissionControl.getMission(req.params.id);
+    if (!mission) return res.status(404).json({ error: 'Mission not found' });
+    if (mission.userId !== req.userId) return res.status(403).json({ error: 'Access denied' });
+
+    const plan = mission.context?.plan;
+    const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
+
+    const missionAgents = await gituAgentManager.listAgentsByMission(req.userId!, mission.id);
+    const agentsById = new Map(missionAgents.map(a => [a.id, a]));
+
+    const enrichedTasks = tasks.map((t: any) => {
+      const agentId = t?.agentId;
+      const agent = agentId ? agentsById.get(agentId) : undefined;
+      return {
+        ...t,
+        agent: agent
+          ? {
+            id: agent.id,
+            status: agent.status,
+            result: agent.result,
+            updatedAt: agent.updatedAt,
+          }
+          : null,
+      };
+    });
+
+    res.json({
+      success: true,
+      mission: {
+        ...mission,
+        context: {
+          ...mission.context,
+          plan: plan ? { ...plan, tasks: enrichedTasks } : null,
+        },
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to get mission detail', message: error.message });
   }
 });
 
@@ -1978,21 +2039,6 @@ router.post('/insights/refresh', async (req: AuthRequest, res: Response) => {
  * POST /missions/start
  * Start a new Swarm mission via proactive service
  */
-router.post('/missions/start', async (req: AuthRequest, res: Response) => {
-  try {
-    const { objective } = req.body;
-    if (!objective || typeof objective !== 'string') {
-      return res.status(400).json({ error: 'objective is required' });
-    }
-    const mission = await gituProactiveService.startMission(req.userId!, objective);
-    res.json({ success: true, mission });
-  } catch (error: any) {
-    console.error('[Mission Start] Error:', error);
-    res.status(500).json({
-      error: 'Failed to start mission',
-      message: error.message
-    });
-  }
-});
+router.post('/missions/start', startMissionHandler);
 
 export default router;

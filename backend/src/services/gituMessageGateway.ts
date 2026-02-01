@@ -103,6 +103,7 @@ class GituMessageGateway {
       options: { 
           replyToMessageId?: string;
           sessionId?: string;
+          userMessageText?: string;
           metadata?: any;
       } = {}
   ): Promise<void> {
@@ -116,7 +117,7 @@ class GituMessageGateway {
       // Otherwise, we fetch the last user message from this platform.
       
       try {
-          let userMessageText = '';
+          let userMessageText = typeof options.userMessageText === 'string' ? options.userMessageText : '';
           
           if (options.replyToMessageId) {
               const originalMsg = await this.getMessage(options.replyToMessageId);
@@ -715,22 +716,30 @@ class GituMessageGateway {
 
   // ==================== WEBSOCKET BROADCASTING ====================
 
-  private wsClients: Map<string, any> = new Map(); // userId -> WebSocket
+  private wsClients: Map<string, Set<any>> = new Map(); // userId -> Set<WebSocket>
 
   /**
    * Register a WebSocket client for a user.
    * This allows broadcasting real-time updates to connected clients.
    */
   registerWebSocketClient(userId: string, ws: any): void {
-    this.wsClients.set(userId, ws);
+    if (!this.wsClients.has(userId)) {
+      this.wsClients.set(userId, new Set());
+    }
+    this.wsClients.get(userId)!.add(ws);
     console.log(`[Gitu Gateway] WebSocket registered for user ${userId}`);
   }
 
   /**
    * Unregister a WebSocket client.
    */
-  unregisterWebSocketClient(userId: string): void {
-    this.wsClients.delete(userId);
+  unregisterWebSocketClient(userId: string, ws: any): void {
+    const set = this.wsClients.get(userId);
+    if (!set) return;
+    set.delete(ws);
+    if (set.size === 0) {
+      this.wsClients.delete(userId);
+    }
     console.log(`[Gitu Gateway] WebSocket unregistered for user ${userId}`);
   }
 
@@ -738,15 +747,18 @@ class GituMessageGateway {
    * Broadcast insights update to user's WebSocket.
    */
   broadcastInsightsUpdate(userId: string): void {
-    const ws = this.wsClients.get(userId);
-    if (ws && ws.readyState === 1) { // 1 = OPEN
-      try {
-        ws.send(JSON.stringify({
-          type: 'insights_updated',
-          payload: { timestamp: new Date().toISOString() }
-        }));
-      } catch (error) {
-        console.error(`[Gitu Gateway] Failed to broadcast insights update to ${userId}:`, error);
+    const set = this.wsClients.get(userId);
+    if (!set) return;
+    for (const ws of set) {
+      if (ws && ws.readyState === 1) {
+        try {
+          ws.send(JSON.stringify({
+            type: 'insights_updated',
+            payload: { timestamp: new Date().toISOString() }
+          }));
+        } catch (error) {
+          console.error(`[Gitu Gateway] Failed to broadcast insights update to ${userId}:`, error);
+        }
       }
     }
   }
@@ -755,15 +767,18 @@ class GituMessageGateway {
    * Broadcast mission status update to user's WebSocket.
    */
   broadcastMissionUpdate(userId: string, missionId: string, status: string): void {
-    const ws = this.wsClients.get(userId);
-    if (ws && ws.readyState === 1) {
-      try {
-        ws.send(JSON.stringify({
-          type: 'mission_updated',
-          payload: { missionId, status, timestamp: new Date().toISOString() }
-        }));
-      } catch (error) {
-        console.error(`[Gitu Gateway] Failed to broadcast mission update to ${userId}:`, error);
+    const set = this.wsClients.get(userId);
+    if (!set) return;
+    for (const ws of set) {
+      if (ws && ws.readyState === 1) {
+        try {
+          ws.send(JSON.stringify({
+            type: 'mission_updated',
+            payload: { missionId, status, timestamp: new Date().toISOString() }
+          }));
+        } catch (error) {
+          console.error(`[Gitu Gateway] Failed to broadcast mission update to ${userId}:`, error);
+        }
       }
     }
   }
@@ -772,15 +787,18 @@ class GituMessageGateway {
    * Broadcast incoming platform message to user's WebSocket.
    */
   broadcastIncomingMessage(userId: string, platform: Platform, message: string): void {
-    const ws = this.wsClients.get(userId);
-    if (ws && ws.readyState === 1) {
-      try {
-        ws.send(JSON.stringify({
-          type: 'incoming_message',
-          payload: { platform, message, timestamp: new Date().toISOString() }
-        }));
-      } catch (error) {
-        console.error(`[Gitu Gateway] Failed to broadcast incoming message to ${userId}:`, error);
+    const set = this.wsClients.get(userId);
+    if (!set) return;
+    for (const ws of set) {
+      if (ws && ws.readyState === 1) {
+        try {
+          ws.send(JSON.stringify({
+            type: 'incoming_message',
+            payload: { platform, message, timestamp: new Date().toISOString() }
+          }));
+        } catch (error) {
+          console.error(`[Gitu Gateway] Failed to broadcast incoming message to ${userId}:`, error);
+        }
       }
     }
   }
@@ -789,15 +807,18 @@ class GituMessageGateway {
    * Broadcast generic notification to user's WebSocket.
    */
   broadcastNotification(userId: string, title: string, body: string, type: 'info' | 'success' | 'warning' | 'error' = 'info'): void {
-    const ws = this.wsClients.get(userId);
-    if (ws && ws.readyState === 1) {
-      try {
-        ws.send(JSON.stringify({
-          type: 'notification',
-          payload: { title, body, notificationType: type, timestamp: new Date().toISOString() }
-        }));
-      } catch (error) {
-        console.error(`[Gitu Gateway] Failed to broadcast notification to ${userId}:`, error);
+    const set = this.wsClients.get(userId);
+    if (!set) return;
+    for (const ws of set) {
+      if (ws && ws.readyState === 1) {
+        try {
+          ws.send(JSON.stringify({
+            type: 'notification',
+            payload: { title, body, notificationType: type, timestamp: new Date().toISOString() }
+          }));
+        } catch (error) {
+          console.error(`[Gitu Gateway] Failed to broadcast notification to ${userId}:`, error);
+        }
       }
     }
   }

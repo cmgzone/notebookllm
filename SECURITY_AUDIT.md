@@ -79,20 +79,20 @@ postgresql://user:password@host/db?sslmode=require&channel_binding=require
 
 ```env
 # Neon Database (Encrypted in transit)
-NEON_HOST=ep-steep-butterfly-ad9nrtp4-pooler...
-NEON_DATABASE=neondb
-NEON_USERNAME=neondb_owner
-NEON_PASSWORD=npg_86DhEiUzwJAW  # ⚠️ Keep secret!
+NEON_HOST=your-neon-host
+NEON_DATABASE=your-neon-database
+NEON_USERNAME=your-neon-username
+NEON_PASSWORD=your-neon-password
 
 # Firebase (Public config - safe)
-FIREBASE_API_KEY=AIzaSyBND2p3Xtdu4IAf8X5XMda8hVBhjPD4nTE
-FIREBASE_PROJECT_ID=chatzone-z
-FIREBASE_APP_ID=1:999701239646:android:...
+FIREBASE_API_KEY=your-firebase-api-key
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_APP_ID=your-firebase-app-id
 
 # AI Services (Keep secret!)
-GEMINI_API_KEY=AIzaSyB-IGUHHXx0u8ipsDEVarBfrO08jXzzziI  # ⚠️
-ELEVENLABS_API_KEY=sk_9e0c3f56b4add24f64be40d7a55e865e710d27c8926dd157  # ⚠️
-SERPER_API_KEY=ec5f971deb548fa4e187daffe2092ee20c36a584  # ⚠️
+GEMINI_API_KEY=your-gemini-api-key
+ELEVENLABS_API_KEY=your-elevenlabs-api-key
+SERPER_API_KEY=your-serper-api-key
 ```
 
 **Status:** ✅ Protected by `.gitignore`

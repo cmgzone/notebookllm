@@ -10,16 +10,16 @@ CREATE TABLE IF NOT EXISTS api_keys (
 );
 
 -- Deepgram API Key (for real-time transcription)
--- Key: d10e6978cacebc8ce3a9c563b2d70a04a79bfc9b
+-- Set this value from your secret manager (do not commit real keys)
 INSERT INTO api_keys (service_name, encrypted_value, description, updated_at)
-VALUES ('deepgram', 'd10e6978cacebc8ce3a9c563b2d70a04a79bfc9b', 'Deepgram Real-time Transcription API', CURRENT_TIMESTAMP)
+VALUES ('deepgram', 'REPLACE_WITH_DEEPGRAM_API_KEY', 'Deepgram Real-time Transcription API', CURRENT_TIMESTAMP)
 ON CONFLICT (service_name) 
 DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = CURRENT_TIMESTAMP;
 
 -- AssemblyAI API Key (for high-accuracy transcription)
--- Key: c6de92243f934029ab3a7a0b2f656821
+-- Set this value from your secret manager (do not commit real keys)
 INSERT INTO api_keys (service_name, encrypted_value, description, updated_at)
-VALUES ('assemblyai', 'c6de92243f934029ab3a7a0b2f656821', 'AssemblyAI Transcription API', CURRENT_TIMESTAMP)
+VALUES ('assemblyai', 'REPLACE_WITH_ASSEMBLYAI_API_KEY', 'AssemblyAI Transcription API', CURRENT_TIMESTAMP)
 ON CONFLICT (service_name) 
 DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = CURRENT_TIMESTAMP;
 

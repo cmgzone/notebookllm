@@ -108,12 +108,7 @@ class _BootstrapAppState extends State<_BootstrapApp> {
       debugPrint('✅ Environment loaded (${dotenv.env.length} variables)');
     } catch (e) {
       debugPrint('⚠️ Dotenv error: $e - using fallback config');
-      dotenv.testLoad(fileInput: '''
-NEON_HOST=ep-steep-butterfly-ad9nrtp4-pooler.c-2.us-east-1.aws.neon.tech
-NEON_DATABASE=neondb
-NEON_USERNAME=neondb_owner
-NEON_PASSWORD=npg_86DhEiUzwJAW
-''');
+      dotenv.testLoad(fileInput: '');
     }
   }
 

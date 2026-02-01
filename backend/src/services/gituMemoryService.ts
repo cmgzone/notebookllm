@@ -126,9 +126,9 @@ class GituMemoryService {
     return result.rows.map(r => this.mapRowToMemory(r));
   }
 
-  async updateMemory(id: string, updates: UpdateMemoryOptions): Promise<Memory> {
-    const existing = await this.getMemory(id);
-    if (!existing) throw new Error(`Memory ${id} not found`);
+  async updateMemory(userId: string, id: string, updates: UpdateMemoryOptions): Promise<Memory> {
+    const existing = await pool.query(`SELECT id FROM gitu_memories WHERE id = $1 AND user_id = $2`, [id, userId]);
+    if (existing.rows.length === 0) throw new Error('MEMORY_NOT_FOUND');
     const fields: string[] = [];
     const values: any[] = [];
     let p = 1;
@@ -165,11 +165,12 @@ class GituMemoryService {
       values.push(updates.tags);
     }
     fields.push(`last_accessed_at = NOW()`);
-    values.push(id);
+    values.push(id, userId);
     const res = await pool.query(
-      `UPDATE gitu_memories SET ${fields.join(', ')} WHERE id = $${p} RETURNING *`,
+      `UPDATE gitu_memories SET ${fields.join(', ')} WHERE id = $${p} AND user_id = $${p + 1} RETURNING *`,
       values
     );
+    if (res.rows.length === 0) throw new Error('MEMORY_NOT_FOUND');
     const mem = this.mapRowToMemory(res.rows[0]);
     const scored = this.scoreConfidence(mem);
     if (Math.abs(scored - mem.confidence) > 0.0001) {
@@ -179,26 +180,29 @@ class GituMemoryService {
     return mem;
   }
 
-  async deleteMemory(id: string): Promise<void> {
-    await pool.query(`DELETE FROM gitu_memories WHERE id = $1`, [id]);
+  async deleteMemory(userId: string, id: string): Promise<void> {
+    const res = await pool.query(`DELETE FROM gitu_memories WHERE id = $1 AND user_id = $2`, [id, userId]);
+    if ((res.rowCount || 0) === 0) throw new Error('MEMORY_NOT_FOUND');
   }
 
-  async requestVerification(id: string): Promise<Memory> {
+  async requestVerification(userId: string, id: string): Promise<Memory> {
     const res = await pool.query(
       `UPDATE gitu_memories 
        SET verification_required = true, verified = false
-       WHERE id = $1
+       WHERE id = $1 AND user_id = $2
        RETURNING *`,
-      [id]
+      [id, userId]
     );
+    if (res.rows.length === 0) throw new Error('MEMORY_NOT_FOUND');
     return this.mapRowToMemory(res.rows[0]);
   }
 
   async correctMemory(
+    userId: string,
     id: string,
     updates: { content?: string; category?: MemoryCategory; tags?: string[]; source?: string }
   ): Promise<Memory> {
-    const updated = await this.updateMemory(id, {
+    const updated = await this.updateMemory(userId, id, {
       content: updates.content,
       category: updates.category,
       tags: updates.tags,
@@ -222,14 +226,15 @@ class GituMemoryService {
     return res.rowCount || 0;
   }
 
-  async confirmMemory(id: string): Promise<Memory> {
+  async confirmMemory(userId: string, id: string): Promise<Memory> {
     const res = await pool.query(
       `UPDATE gitu_memories 
        SET verified = true, verification_required = false, last_confirmed_by_user = NOW()
-       WHERE id = $1
+       WHERE id = $1 AND user_id = $2
        RETURNING *`,
-      [id]
+      [id, userId]
     );
+    if (res.rows.length === 0) throw new Error('MEMORY_NOT_FOUND');
     const mem = this.mapRowToMemory(res.rows[0]);
     const scored = this.scoreConfidence(mem);
     if (Math.abs(scored - mem.confidence) > 0.0001) {

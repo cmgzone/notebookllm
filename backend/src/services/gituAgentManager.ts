@@ -4,7 +4,6 @@ import pool from '../config/database.js';
 import { gituAIRouter } from './gituAIRouter.js';
 import { gituMessageGateway } from './gituMessageGateway.js';
 import { gituMCPHub } from './gituMCPHub.js';
-import { gituSystemPromptBuilder } from './gituSystemPromptBuilder.js';
 
 export interface GituAgent {
   id: string;
@@ -119,97 +118,34 @@ export class GituAgentManager {
   private async executeAgentStep(agent: GituAgent): Promise<void> {
     const history = (agent.memory.history as any[]) || [];
 
-    // 1. Build System Prompt with Tools
-    const promptResult = await gituSystemPromptBuilder.buildSystemPrompt({
-      userId: agent.userId,
-      platform: 'agent_process',
-      includeTools: true,
-      includeMemories: true,
-    });
-
-    // 2. Add specific agent instructions
-    const agentInstructions = `
-      You are an autonomous Gitu Agent working on a background task.
-      
-      YOUR TASK: ${agent.task}
-      
-      STATUS:
-      - ID: ${agent.id}
-      - Steps taken: ${history.length}
-      
-      INSTRUCTIONS:
-      1. Review the history of your actions.
-      2. Use available tools to make progress on the task.
-      3. If the task is COMPLETED, respond with "DONE" and a summary of the result.
-      4. If you cannot complete the task, respond with "FAILED" and the reason.
-      5. Otherwise, act on the next step.
-      
-      Use the defined tool call format for any actions.
-    `;
-
-    // 3. Construct Messages
-    const messages = [
-      { role: 'system', content: promptResult.systemPrompt + '\n\n' + agentInstructions },
-      ...history.map(h => ({ role: h.role, content: h.content })),
-    ];
-
-    // 4. Call AI
-    const aiResponse = await gituAIRouter.route({
-      userId: agent.userId,
-      prompt: 'Execute next step', // Dummy prompt, real context is in messages
-      context: messages.map(m => `${m.role}: ${m.content}`), // Legacy adapter for router, or better: use router correctly
-      // Actually, gituAIRouter.route() is a bit high level. Let's use aiService directly or adapt route()
-      // For now, allow route() to handle it but we need to ensure it sees the system prompt.
-      // previous implementation of route() handles system prompt via includeSystemPrompt,
-      // but we built our own here. Let's disable the router's auto-system-prompt.
-      includeSystemPrompt: false, // We manually built it
-      taskType: 'coding', // Agents usually do complex work
-    });
-
-    // We need to inject our custom messages into route() or use a lower level.
-    // gituAIRouter.route takes `prompt` and `context`.
-    // Let's rely on the router's built-in system prompt builder by passing includeSystemPrompt: true but customized?
-    // Actually, let's just stick to the pattern: pass the task as the prompt.
-
     const response = await gituAIRouter.route({
       userId: agent.userId,
-      prompt: `Context: ${JSON.stringify(history.slice(-5))}\n\nTask: ${agent.task}\n\nExecute the next step. If done, say DONE.`,
-      taskType: 'coding',
-      platform: 'agent',
+      prompt: `Recent Context: ${JSON.stringify(history.slice(-5))}\n\nTask: ${agent.task}\n\nRespond with a single JSON object in a \`\`\`json\`\`\` code block:\n{\n  \"status\": \"continue\" | \"done\" | \"failed\",\n  \"message\": \"what you did / what you will do next\",\n  \"toolCall\": { \"tool\": \"tool_name\", \"args\": { } }\n}\n\nOmit toolCall if no tool is needed.`,
+      taskType: 'chat',
+      platform: 'terminal',
       includeSystemPrompt: true, // Let router build the standard Gitu prompt + tools
       includeTools: true,
     });
 
-    // 5. Parse and Execute Tools
-    const content = response.content;
+    const rawContent = response.content;
+    const envelope = this.tryParseAgentEnvelope(rawContent);
+    const content = envelope?.message ?? rawContent;
     let toolOutput = '';
 
-    // Simple tool parsing (same as ToolExecutionService)
-    const jsonMatch = content.match(/```tool\s*\n?([\s\S]*?)\n?```/) || content.match(/\{\s*"tool"\s*:\s*"([^"]+)"/);
-
-    if (jsonMatch) {
+    const toolCall = envelope?.toolCall || this.tryParseLegacyToolCall(rawContent);
+    if (toolCall?.tool && toolCall?.args) {
+      console.log(`[Agent ${agent.id}] Executing tool: ${toolCall.tool}`);
       try {
-        const jsonStr = jsonMatch[1] || jsonMatch[0];
-        const toolCall = JSON.parse(jsonStr);
-
-        if (toolCall.tool && toolCall.args) {
-          console.log(`[Agent ${agent.id}] Executing tool: ${toolCall.tool}`);
-          try {
-            const result = await gituMCPHub.executeTool(toolCall.tool, toolCall.args, {
-              userId: agent.userId,
-              sessionId: agent.id
-            });
-            toolOutput = `\nTool '${toolCall.tool}' Result: ${JSON.stringify(result)}`;
-          } catch (e: any) {
-            toolOutput = `\nTool '${toolCall.tool}' Failed: ${e.message}`;
-          }
-        }
-      } catch (e) {
-        console.warn(`[Agent ${agent.id}] Failed to parse tool call`);
+        const result = await gituMCPHub.executeTool(toolCall.tool, toolCall.args, {
+          userId: agent.userId,
+          sessionId: agent.id
+        });
+        toolOutput = `\nTool '${toolCall.tool}' Result: ${JSON.stringify(result)}`;
+      } catch (e: any) {
+        toolOutput = `\nTool '${toolCall.tool}' Failed: ${e.message}`;
       }
     }
 
-    // 6. Update Memory
     const newHistory = [...history, {
       role: 'assistant',
       content: content + toolOutput,
@@ -223,9 +159,15 @@ export class GituAgentManager {
 
     const newMemory = { ...agent.memory, history: newHistory };
 
-    // 7. Check for completion
-    if (content.includes('DONE')) {
-      await this.updateAgentStatus(agent.id, 'completed', { output: content });
+    const legacyStatus = this.detectLegacyCompletionStatus(rawContent);
+    const completionStatus = envelope?.status === 'done'
+      ? 'done'
+      : envelope?.status === 'failed'
+        ? 'failed'
+        : legacyStatus;
+
+    if (completionStatus === 'done') {
+      await this.updateAgentStatus(agent.id, 'completed', { output: content + toolOutput });
 
       await gituMessageGateway.notifyUser(
         agent.userId,
@@ -242,8 +184,8 @@ export class GituAgentManager {
           console.error(`[AgentManager] Failed to notify orchestrator for agent ${agent.id}`, e);
         }
       }
-    } else if (content.includes('FAILED')) {
-      await this.updateAgentStatus(agent.id, 'failed', { output: content });
+    } else if (completionStatus === 'failed') {
+      await this.updateAgentStatus(agent.id, 'failed', { output: content + toolOutput });
 
       await gituMessageGateway.notifyUser(
         agent.userId,
@@ -256,6 +198,50 @@ export class GituAgentManager {
         [JSON.stringify(newMemory), agent.id]
       );
     }
+  }
+
+  private tryParseAgentEnvelope(content: string): { status: 'continue' | 'done' | 'failed'; message: string; toolCall?: { tool: string; args: any } } | null {
+    const blockMatch = content.match(/```json\s*\n?([\s\S]*?)\n?```/i);
+    const jsonCandidate = (blockMatch?.[1] || '').trim();
+    if (!jsonCandidate) return null;
+    try {
+      const parsed = JSON.parse(jsonCandidate);
+      const status = parsed?.status;
+      const message = typeof parsed?.message === 'string' ? parsed.message : '';
+      if (status !== 'continue' && status !== 'done' && status !== 'failed') return null;
+      if (!message) return null;
+      const toolCall = parsed?.toolCall;
+      if (toolCall && typeof toolCall?.tool === 'string' && toolCall?.args && typeof toolCall?.args === 'object') {
+        return { status, message, toolCall: { tool: toolCall.tool, args: toolCall.args } };
+      }
+      return { status, message };
+    } catch {
+      return null;
+    }
+  }
+
+  private tryParseLegacyToolCall(content: string): { tool: string; args: any } | null {
+    const toolBlockMatch = content.match(/```tool\s*\n?([\s\S]*?)\n?```/i);
+    if (toolBlockMatch?.[1]) {
+      try {
+        const parsed = JSON.parse(toolBlockMatch[1]);
+        if (parsed?.tool && parsed?.args) return { tool: parsed.tool, args: parsed.args };
+      } catch { }
+    }
+    const inlineJsonMatch = content.match(/\{\s*"tool"\s*:\s*"[^"]+"\s*,[\s\S]*?\}/);
+    if (inlineJsonMatch?.[0]) {
+      try {
+        const parsed = JSON.parse(inlineJsonMatch[0]);
+        if (parsed?.tool && parsed?.args) return { tool: parsed.tool, args: parsed.args };
+      } catch { }
+    }
+    return null;
+  }
+
+  private detectLegacyCompletionStatus(content: string): 'done' | 'failed' | null {
+    if (/^\s*DONE\b/m.test(content)) return 'done';
+    if (/^\s*FAILED\b/m.test(content)) return 'failed';
+    return null;
   }
 
   /**
@@ -274,6 +260,16 @@ export class GituAgentManager {
     const result = await pool.query(
       `SELECT * FROM gitu_agents WHERE user_id = $1 ORDER BY created_at DESC`,
       [userId]
+    );
+    return result.rows.map(this.mapRowToAgent);
+  }
+
+  async listAgentsByMission(userId: string, missionId: string): Promise<GituAgent[]> {
+    const result = await pool.query(
+      `SELECT * FROM gitu_agents
+       WHERE user_id = $1 AND (memory->>'missionId') = $2
+       ORDER BY created_at DESC`,
+      [userId, missionId]
     );
     return result.rows.map(this.mapRowToAgent);
   }

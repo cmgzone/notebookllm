@@ -132,10 +132,14 @@ class GituMissionControl {
 
             const mission = this.mapRowToMission(result.rows[0]);
 
-            // 5. Notify frontend via socket (if we had one, for now push notification)
-            // Only for status changes to avoid spam
-            if (update.status && update.status !== current.status) {
-                // Notify logic here
+            const shouldBroadcastMissionUpdate = Boolean(
+                update.status ||
+                update.completedAt ||
+                update.contextUpdates?.plan ||
+                update.contextUpdates?.swarmState
+            );
+            if (shouldBroadcastMissionUpdate) {
+                gituMessageGateway.broadcastMissionUpdate(mission.userId, mission.id, mission.status);
             }
 
             return mission;

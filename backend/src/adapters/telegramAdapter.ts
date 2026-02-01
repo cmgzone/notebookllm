@@ -630,6 +630,12 @@ _Click buttons below to change settings:_
 
       await gituSessionService.updateSession(session.id, { context: session.context });
 
+      await gituMessageGateway.trackOutboundMessage(normalizedMessage.userId, 'telegram', result.response, {
+        sessionId: session.id,
+        replyToMessageId: normalizedMessage.id,
+        userMessageText: userText,
+      });
+
       const parts = this.splitMessageText(result.response);
       for (const part of parts) {
         await this.sendMessage(chatId, { text: part });

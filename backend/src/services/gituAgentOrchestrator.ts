@@ -59,7 +59,7 @@ class GituAgentOrchestrator {
                 userId,
                 prompt,
                 taskType: 'analysis',
-                platform: 'orchestrator'
+                platform: 'terminal'
             });
 
             // Parse AI plan
@@ -224,8 +224,8 @@ class GituAgentOrchestrator {
         const mission = await gituMissionControl.getMission(missionId);
         if (!mission) throw new Error('Mission not found');
 
-        const agents = await gituAgentManager.listAgents(mission.userId);
-        const missionAgents = agents.filter(a => a.memory.missionId === missionId && a.status === 'completed');
+        const agents = await gituAgentManager.listAgentsByMission(mission.userId, missionId);
+        const missionAgents = agents.filter(a => a.status === 'completed');
 
         if (missionAgents.length === 0) {
             return "No agents have completed their tasks yet.";
@@ -248,7 +248,7 @@ class GituAgentOrchestrator {
            Focus on the outcome and actionable next steps.
          `,
                 taskType: 'chat',
-                platform: 'orchestrator'
+                platform: 'terminal'
             });
 
             // Update Mission Control

@@ -15,14 +15,14 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS gitu_settings JSONB DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS gitu_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   platform TEXT NOT NULL,
   status TEXT DEFAULT 'active',
   context JSONB DEFAULT '{}',
   started_at TIMESTAMPTZ DEFAULT NOW(),
   last_activity_at TIMESTAMPTZ DEFAULT NOW(),
   ended_at TIMESTAMPTZ,
-  CONSTRAINT valid_session_platform CHECK (platform IN ('flutter', 'whatsapp', 'telegram', 'email', 'terminal')),
+  CONSTRAINT valid_session_platform CHECK (platform IN ('flutter', 'whatsapp', 'telegram', 'email', 'terminal', 'web')),
   CONSTRAINT valid_session_status CHECK (status IN ('active', 'paused', 'ended'))
 );
 
@@ -35,22 +35,18 @@ CREATE INDEX IF NOT EXISTS idx_gitu_sessions_activity ON gitu_sessions(last_acti
 
 CREATE TABLE IF NOT EXISTS gitu_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   platform TEXT NOT NULL,
   platform_user_id TEXT NOT NULL,
   content JSONB NOT NULL,
   timestamp TIMESTAMPTZ DEFAULT NOW(),
   metadata JSONB DEFAULT '{}',
-  CONSTRAINT valid_message_platform CHECK (platform IN ('flutter', 'whatsapp', 'telegram', 'email', 'terminal'))
+  CONSTRAINT valid_message_platform CHECK (platform IN ('flutter', 'whatsapp', 'telegram', 'email', 'terminal', 'web'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_gitu_messages_user ON gitu_messages(user_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_gitu_messages_platform ON gitu_messages(user_id, platform, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_gitu_messages_timestamp ON gitu_messages(timestamp DESC);
-
--- Add status column to linked accounts for active/inactive tracking
-ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
-ALTER TABLE gitu_linked_accounts ADD CONSTRAINT valid_linked_account_status CHECK (status IN ('active', 'inactive', 'suspended'));
 
 -- ============================================================================
 -- GITU MEMORIES
@@ -58,7 +54,7 @@ ALTER TABLE gitu_linked_accounts ADD CONSTRAINT valid_linked_account_status CHEC
 
 CREATE TABLE IF NOT EXISTS gitu_memories (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   category TEXT NOT NULL,
   content TEXT NOT NULL,
   source TEXT NOT NULL,
@@ -100,7 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_gitu_memory_contradictions_unresolved ON gitu_mem
 
 CREATE TABLE IF NOT EXISTS gitu_linked_accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   platform TEXT NOT NULL,
   platform_user_id TEXT NOT NULL,
   display_name TEXT,
@@ -109,7 +105,9 @@ CREATE TABLE IF NOT EXISTS gitu_linked_accounts (
   verified BOOLEAN DEFAULT false,
   is_primary BOOLEAN DEFAULT false,
   UNIQUE(platform, platform_user_id),
-  CONSTRAINT valid_linked_account_platform CHECK (platform IN ('flutter', 'whatsapp', 'telegram', 'email', 'terminal'))
+  status TEXT DEFAULT 'active',
+  CONSTRAINT valid_linked_account_platform CHECK (platform IN ('flutter', 'whatsapp', 'telegram', 'email', 'terminal', 'web')),
+  CONSTRAINT valid_linked_account_status CHECK (status IN ('active', 'inactive', 'suspended'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_gitu_linked_accounts_user ON gitu_linked_accounts(user_id);
@@ -121,7 +119,7 @@ CREATE INDEX IF NOT EXISTS idx_gitu_linked_accounts_platform ON gitu_linked_acco
 
 CREATE TABLE IF NOT EXISTS gitu_permissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   resource TEXT NOT NULL,
   actions TEXT[] NOT NULL,
   scope JSONB DEFAULT '{}',
@@ -139,7 +137,7 @@ CREATE INDEX IF NOT EXISTS idx_gitu_permissions_active ON gitu_permissions(user_
 
 CREATE TABLE IF NOT EXISTS gitu_vps_configs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   host TEXT NOT NULL,
   port INTEGER DEFAULT 22,
@@ -163,7 +161,7 @@ CREATE INDEX IF NOT EXISTS idx_gitu_vps_user ON gitu_vps_configs(user_id);
 
 CREATE TABLE IF NOT EXISTS gitu_vps_audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   vps_config_id UUID REFERENCES gitu_vps_configs(id) ON DELETE SET NULL,
   action TEXT NOT NULL,
   command TEXT,
@@ -182,7 +180,7 @@ CREATE INDEX IF NOT EXISTS idx_gitu_vps_audit_config ON gitu_vps_audit_logs(vps_
 
 CREATE TABLE IF NOT EXISTS gitu_shell_audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   mode TEXT NOT NULL CHECK (mode IN ('sandboxed', 'unsandboxed', 'dry_run')),
   command TEXT NOT NULL,
   args JSONB DEFAULT '[]',
@@ -207,7 +205,7 @@ CREATE INDEX IF NOT EXISTS idx_gitu_shell_audit_mode ON gitu_shell_audit_logs(mo
 
 CREATE TABLE IF NOT EXISTS gitu_gmail_connections (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   encrypted_access_token TEXT NOT NULL,
   encrypted_refresh_token TEXT NOT NULL,
@@ -226,7 +224,7 @@ CREATE INDEX IF NOT EXISTS idx_gitu_gmail_user ON gitu_gmail_connections(user_id
 
 CREATE TABLE IF NOT EXISTS gitu_scheduled_tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
   trigger JSONB NOT NULL,
@@ -264,7 +262,7 @@ CREATE INDEX IF NOT EXISTS idx_gitu_task_executions_task ON gitu_task_executions
 
 CREATE TABLE IF NOT EXISTS gitu_usage_records (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   operation TEXT NOT NULL,
   model TEXT,
   tokens_used INTEGER DEFAULT 0,
@@ -281,7 +279,7 @@ CREATE INDEX IF NOT EXISTS idx_gitu_usage_user_cost ON gitu_usage_records(user_i
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS gitu_usage_limits (
-  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   daily_limit_usd NUMERIC(10,2) DEFAULT 10.00,
   per_task_limit_usd NUMERIC(10,2) DEFAULT 1.00,
   monthly_limit_usd NUMERIC(10,2) DEFAULT 100.00,
@@ -296,7 +294,7 @@ CREATE TABLE IF NOT EXISTS gitu_usage_limits (
 
 CREATE TABLE IF NOT EXISTS gitu_automation_rules (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
   trigger JSONB NOT NULL,
@@ -314,7 +312,7 @@ CREATE INDEX IF NOT EXISTS idx_gitu_automation_user ON gitu_automation_rules(use
 
 CREATE TABLE IF NOT EXISTS gitu_rule_executions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   rule_id UUID NOT NULL REFERENCES gitu_automation_rules(id) ON DELETE CASCADE,
   matched BOOLEAN NOT NULL,
   success BOOLEAN NOT NULL,
@@ -332,7 +330,7 @@ CREATE INDEX IF NOT EXISTS idx_gitu_rule_exec_rule_time ON gitu_rule_executions(
 
 CREATE TABLE IF NOT EXISTS gitu_plugins (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
   code TEXT NOT NULL,
@@ -368,7 +366,7 @@ CREATE INDEX IF NOT EXISTS idx_gitu_plugin_catalog_updated ON gitu_plugin_catalo
 
 CREATE TABLE IF NOT EXISTS gitu_plugin_executions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   plugin_id UUID NOT NULL REFERENCES gitu_plugins(id) ON DELETE CASCADE,
   success BOOLEAN NOT NULL,
   duration_ms INTEGER DEFAULT 0,

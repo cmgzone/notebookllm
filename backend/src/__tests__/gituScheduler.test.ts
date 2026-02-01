@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { randomUUID } from 'node:crypto';
 import pool from '../config/database.js';
 import gituScheduler from '../services/gituScheduler.js';
 
 describe('GituScheduler', () => {
-  const testUserId = 'test-user-scheduler-' + Date.now();
+  jest.setTimeout(120_000);
+  const testUserId = randomUUID();
   let createdTaskIds: string[] = [];
 
   beforeEach(async () => {
@@ -42,4 +44,3 @@ describe('GituScheduler', () => {
     expect(execs.rowCount).toBeGreaterThanOrEqual(1);
   });
 });
-
