@@ -147,7 +147,19 @@ ${toolLines}
 When the user asks you to do something that requires a tool, use the appropriate tool. For example:
 - "List my notebooks" → use list_notebooks
 - "Search for documents about AI" → use search_sources
-- "Show me this source" → use get_source`;
+- "Show me this source" → use get_source
+- "Remind me to drink water tomorrow at 9am" → use schedule_reminder with datetime="tomorrow at 9am"
+- "Send me 'hi' every 2 minutes" → use schedule_reminder with cron="*/2 * * * *" and message="hi". DO NOT ask for a specific time.
+- "Remind me every Monday at 10am" → use schedule_reminder with cron="0 10 * * 1"
+
+**Important for Scheduling:**
+When the user says "every X minutes/hours/days" or any repeating interval, use the 'cron' parameter directly. Do NOT ask them for a specific datetime or "how many times". Generate the CRON expression yourself.
+Common CRON patterns:
+- "every 5 minutes": */5 * * * *
+- "every hour": 0 * * * *
+- "every day at 9am": 0 9 * * *
+- "every Monday at 10am": 0 10 * * 1
+`;
     }
 
     private buildGuidelinesSection(): string {
