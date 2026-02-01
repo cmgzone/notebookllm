@@ -29,7 +29,9 @@ interface ScheduledTask {
   id: string;
   userId: string;
   name: string;
+  description?: string;
   action: AllowedAction;
+  payload?: any;
   cron: string;
   enabled: boolean;
   maxRetries: number;
@@ -85,11 +87,30 @@ class GituScheduler {
   }
 
   private mapRowToTask(row: any): ScheduledTask {
+    let action = row.action;
+    let payload = {};
+
+    // Handle JSONB action from DB
+    if (typeof row.action === 'object' && row.action !== null) {
+      // If action is stored as { type: 'action.name', ...args }
+      if (row.action.type) {
+        action = row.action.type;
+        payload = row.action;
+      }
+      // If action is stored as { action: 'action.name', ...args }
+      else if (row.action.action) {
+        action = row.action.action;
+        payload = row.action;
+      }
+    }
+
     return {
       id: row.id,
       userId: row.user_id,
       name: row.name,
-      action: row.action,
+      description: row.description,
+      action: action as AllowedAction,
+      payload,
       cron: row.cron,
       enabled: row.enabled,
       maxRetries: row.max_retries,
@@ -191,7 +212,9 @@ class GituScheduler {
     }
   }
 
-  private async runAction(task: ScheduledTask, payload?: any) {
+  private async runAction(task: ScheduledTask, overloadPayload?: any) {
+    const payload = overloadPayload || task.payload || {};
+
     switch (task.action) {
       // System maintenance actions
       case 'memories.detectContradictions':
@@ -260,8 +283,9 @@ class GituScheduler {
       case 'notification.send': {
         // Send a notification to the user
         const { message } = payload || {};
-        if (!message) throw new Error('message is required for notification.send');
-        await gituMessageGateway.notifyUser(task.userId, message);
+        // Fallback to task description or name if message logic is strict
+        const content = message || task.description || task.name || 'Notification';
+        await gituMessageGateway.notifyUser(task.userId, content);
         break;
       }
 
