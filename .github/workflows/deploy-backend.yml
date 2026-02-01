@@ -47,8 +47,10 @@ jobs:
       - name: Run tests
         working-directory: backend
         run: npm test
+        if: ${{ secrets.DATABASE_URL != '' }}
         env:
           NODE_ENV: test
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
   build-and-push:
     needs: test
