@@ -27,10 +27,10 @@ export class NotebookCommand {
 
       response.notebooks.forEach((nb: any) => {
         table.push([
-          nb.title.length > 40 ? nb.title.substring(0, 37) + '...' : nb.title,
-          nb.id.substring(0, 8) + '...',
-          nb.sourceCount.toString(),
-          new Date(nb.updatedAt).toLocaleDateString()
+          nb.title?.length > 40 ? nb.title.substring(0, 37) + '...' : (nb.title || 'Untitled'),
+          nb.id?.substring(0, 8) + '...',
+          (nb.source_count || '0').toString(),
+          new Date(nb.updated_at || nb.created_at).toLocaleDateString()
         ]);
       });
 
@@ -55,7 +55,7 @@ export class NotebookCommand {
 
       console.log(chalk.bold.cyan('\nAnswer:'));
       console.log(response.answer);
-      
+
       if (response.sources && response.sources.length > 0) {
         console.log(chalk.bold.yellow('\nSources:'));
         response.sources.forEach((src: any) => {

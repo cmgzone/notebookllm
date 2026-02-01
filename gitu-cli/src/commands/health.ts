@@ -21,11 +21,11 @@ export class HealthCommand {
       console.log(chalk.green('✓ Connected to NotebookLLM'));
       console.log(chalk.green('✓ Authentication: Valid'));
       console.log(chalk.green('✓ Backend: Healthy'));
-      
+
       if (health.database) {
         console.log(chalk.green('✓ Database: Connected'));
       }
-      
+
       if (health.redis) {
         console.log(chalk.green('✓ Redis: Connected'));
       }
@@ -36,10 +36,10 @@ export class HealthCommand {
 
     } catch (error: any) {
       spinner.fail('Health check failed');
-      
+
       console.log('');
       console.log(chalk.red('✗ Cannot connect to backend'));
-      
+
       if (error.response?.status === 401) {
         console.log(chalk.red('✗ Authentication failed'));
         console.log('');
@@ -50,7 +50,7 @@ export class HealthCommand {
         console.log('Check your backend URL:');
         console.log(chalk.cyan('  gitu config show'));
       }
-      
+
       throw error;
     }
   }
@@ -59,11 +59,12 @@ export class HealthCommand {
     const spinner = ora('Fetching user info...').start();
 
     try {
-      const user = await api.whoami();
+      const data = await api.whoami();
+      const user = data.user;
       spinner.stop();
 
       if (options.json) {
-        console.log(JSON.stringify(user, null, 2));
+        console.log(JSON.stringify(data, null, 2));
         return;
       }
 
@@ -72,7 +73,7 @@ export class HealthCommand {
       console.log('');
       console.log(chalk.cyan('ID:'), user.id);
       console.log(chalk.cyan('Email:'), user.email);
-      console.log(chalk.cyan('Name:'), user.fullName || chalk.gray('(not set)'));
+      console.log(chalk.cyan('Name:'), user.displayName || chalk.gray('(not set)'));
       console.log(chalk.cyan('Role:'), user.role);
       console.log(chalk.cyan('Created:'), new Date(user.createdAt).toLocaleString());
 

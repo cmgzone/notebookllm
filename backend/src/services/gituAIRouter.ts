@@ -196,6 +196,48 @@ class GituAIRouter {
   }
 
   /**
+   * Fetch recent chat history for a session or user.
+   */
+  async getChatHistory(userId: string, sessionId?: string, limit: number = 10): Promise<Array<{ role: 'user' | 'assistant' | 'system'; content: string }>> {
+    try {
+      let query: string;
+      let params: any[];
+
+      if (sessionId) {
+        query = `SELECT role, content FROM gitu_messages WHERE session_id = $1 ORDER BY created_at ASC LIMIT $2`;
+        params = [sessionId, limit];
+      } else {
+        query = `SELECT role, content FROM gitu_messages WHERE user_id = $1 AND session_id IS NULL AND created_at > NOW() - INTERVAL '2 hours' ORDER BY created_at ASC LIMIT $2`;
+        params = [userId, limit];
+      }
+
+      const result = await pool.query(query, params);
+      return result.rows.map(row => ({
+        role: row.role as 'user' | 'assistant' | 'system',
+        content: row.content
+      }));
+    } catch (error) {
+      console.error('[Gitu AI Router] Error fetching chat history:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Save a message to history.
+   */
+  async saveMessage(userId: string, role: string, content: string, platform: string, sessionId?: string, platformUserId?: string): Promise<void> {
+    try {
+      await pool.query(
+        `INSERT INTO gitu_messages (user_id, role, content, platform, session_id, platform_user_id)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [userId, role, content, platform, sessionId, platformUserId]
+      );
+    } catch (error) {
+      console.error('[Gitu AI Router] Error saving message:', error);
+    }
+  }
+
+  /**
    * Retrieve relevant context from chunks using vector similarity.
    */
   async retrieveContext(query: string, userId: string, limit: number = 5): Promise<string[]> {
@@ -294,9 +336,16 @@ class GituAIRouter {
       messages.push({ role: 'system', content: systemPrompt });
     }
 
-    // Add context as user messages
+    // Load and add chat history
+    const history = await this.getChatHistory(request.userId, request.sessionId);
+    if (history.length > 0) {
+      console.log(`[Gitu AI Router] Injected ${history.length} messages of history.`);
+      messages.push(...history);
+    }
+
+    // Add context as user messages (simplified injection)
     for (const ctx of context) {
-      messages.push({ role: 'user', content: ctx });
+      messages.push({ role: 'user', content: `Source Context: ${ctx}` });
     }
 
     // Add the user's prompt
@@ -315,6 +364,25 @@ class GituAIRouter {
       tokensUsed = Math.ceil((prompt.length + content.length) / 4);
 
       const cost = (tokensUsed / 1000) * model.costPer1kTokens;
+
+      // Save exchange to history
+      await this.saveMessage(
+        request.userId,
+        'user',
+        prompt,
+        request.platform || 'web',
+        request.sessionId,
+        request.platformUserId
+      );
+
+      await this.saveMessage(
+        request.userId,
+        'assistant',
+        content,
+        request.platform || 'web',
+        request.sessionId,
+        request.platformUserId
+      );
 
       return {
         content,

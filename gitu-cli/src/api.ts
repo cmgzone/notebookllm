@@ -104,8 +104,8 @@ export class ApiClient {
     return this.get(`gitu/agents/${agentId}`);
   }
 
-  async sendMessage(message: string, context?: string[]) {
-    return this.post('gitu/message', { message, context });
+  async sendMessage(message: string, context?: string[], sessionId?: string) {
+    return this.post('gitu/message', { message, context, sessionId });
   }
 
   async executeShell(command: string) {

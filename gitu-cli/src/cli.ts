@@ -156,14 +156,14 @@ agentCmd
 program
   .command('chat')
   .description('Start interactive chat session')
-  .action(() => ChatCommand.start(api));
+  .action(() => ChatCommand.start(api, config));
 
 // Run command
 program
   .command('run <command>')
   .description('Execute a single natural language instruction')
   .option('--json', 'Output as JSON')
-  .action((command, options) => RunCommand.execute(api, command, options));
+  .action((command, options) => RunCommand.execute(api, config, command, options));
 
 // Notebook commands
 const notebookCmd = program

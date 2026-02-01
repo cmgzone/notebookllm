@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import pool from '../config/database.js';
 import { gituPermissionManager, type Permission } from './gituPermissionManager.js';
+import { gituRemoteTerminalService } from './gituRemoteTerminalService.js';
 
 export type ShellTrustMode = 'sandboxed' | 'unsandboxed';
 
@@ -91,20 +92,20 @@ function pathAllowed(allowedPaths: string[] | undefined, requestedPath: string) 
 async function writeAuditLog(
   poolClient: typeof pool,
   input: {
-  userId: string;
-  mode: 'sandboxed' | 'unsandboxed' | 'dry_run';
-  command: string;
-  args: string[];
-  cwd: string | null;
-  success: boolean;
-  exitCode: number | null;
-  errorMessage: string | null;
-  durationMs: number;
-  stdoutBytes: number;
-  stderrBytes: number;
-  stdoutTruncated: boolean;
-  stderrTruncated: boolean;
-}
+    userId: string;
+    mode: 'sandboxed' | 'unsandboxed' | 'dry_run';
+    command: string;
+    args: string[];
+    cwd: string | null;
+    success: boolean;
+    exitCode: number | null;
+    errorMessage: string | null;
+    durationMs: number;
+    stdoutBytes: number;
+    stderrBytes: number;
+    stdoutTruncated: boolean;
+    stderrTruncated: boolean;
+  }
 ) {
   try {
     const result = await poolClient.query(
@@ -153,6 +154,18 @@ export class GituShellManager {
         ? Math.min(request.timeoutMs, 10 * 60_000)
         : DEFAULT_TIMEOUT_MS;
     const sandboxed = request.sandboxed !== false;
+
+    // Check if user has a remote terminal connected.
+    // If so, we route the command to the user's actual computer.
+    if (gituRemoteTerminalService.hasConnection(userId)) {
+      console.log(`[ShellManager] User ${userId} has remote terminal. Routing execution...`);
+      // For remote execution, we skip the sandbox logic on the SERVER 
+      // as it will run on the user's actual local machine.
+      return gituRemoteTerminalService.executeRemote(userId, {
+        ...request,
+        sandboxed: false, // Don't try to sandbox on user's machine unless they handle it
+      }, hooks);
+    }
 
     if (!request.command || typeof request.command !== 'string' || request.command.trim().length === 0) {
       return {
@@ -320,7 +333,7 @@ export class GituShellManager {
     const stderrChunks: Buffer[] = [];
 
     let child;
-    
+
     if (sandboxed) {
       const fullCommand = commandForScope(request.command, args);
       const dockerArgs = [
@@ -359,7 +372,7 @@ export class GituShellManager {
     const kill = () => {
       try {
         child.kill('SIGKILL');
-      } catch {}
+      } catch { }
     };
 
     if (hooks.registerCancel) {

@@ -42,6 +42,7 @@ import agentSkillsRoutes from './routes/agentSkills.js';
 import gituRoutes from './routes/gitu.js';
 import { flutterAdapter } from './adapters/flutterAdapter.js';
 import { gituWebSocketService } from './services/gituWebSocketService.js';
+import { gituRemoteTerminalService } from './services/gituRemoteTerminalService.js';
 import { gituShellWebSocketService } from './services/gituShellWebSocketService.js';
 import { registerNotebookTools } from './services/notebookMCPTools.js';
 import { registerResearchTools } from './services/researchMCPTools.js';
@@ -263,6 +264,7 @@ flutterAdapter.initialize(server);
 gituWebSocketService.initialize(server);
 
 gituShellWebSocketService.initialize(server);
+gituRemoteTerminalService.initialize(server);
 
 let activePort = requestedPort;
 let portAttempts = 0;
@@ -291,6 +293,12 @@ const startListening = () => {
         if (url === '/ws/gitu-web' || url === '/ws/gitu-web/') {
             console.log(`[WS UPGRADE] Routing to Web Service`);
             gituWebSocketService.handleUpgrade(req, socket, head);
+            return;
+        }
+
+        if (url === '/ws/remote-terminal' || url === '/ws/remote-terminal/') {
+            console.log(`[WS UPGRADE] Routing to Remote Terminal Service`);
+            // The service handles its own upgrade in .initialize but we can also do it here manually for consistency
             return;
         }
 

@@ -82,6 +82,24 @@ export async function ensureGituSchema(): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_gitu_linked_accounts_id
       ON gitu_linked_accounts (id);
     `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS gitu_messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        session_id TEXT,
+        platform TEXT NOT NULL,
+        platform_user_id TEXT,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_gitu_messages_session ON gitu_messages(session_id);
+      CREATE INDEX IF NOT EXISTS idx_gitu_messages_user_platform ON gitu_messages(user_id, platform);
+      CREATE INDEX IF NOT EXISTS idx_gitu_messages_created ON gitu_messages(created_at);
+    `);
   } finally {
     client.release();
   }

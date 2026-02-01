@@ -48,6 +48,7 @@ class WhatsAppAdapter {
     private connectionState: 'connected' | 'disconnected' | 'connecting' = 'disconnected';
     private connectedAccountJid: string | null = null;
     private connectedAccountName: string | null = null;
+    private sentMessageIds = new Set<string>();
 
     /**
      * Initialize the WhatsApp Adapter.
@@ -193,9 +194,23 @@ class WhatsAppAdapter {
                             continue;
                         }
 
-                        if (!msg.key.fromMe) {
-                            await this.handleIncomingMessage(msg);
+                        // Handle "fromMe" messages (Note to Self via Phone) vs Bot Output
+                        if (msg.key.fromMe) {
+                            // Check for Bot Echoes (prevent loop)
+                            if (msg.key.id && this.sentMessageIds.has(msg.key.id)) {
+                                this.sentMessageIds.delete(msg.key.id);
+                                continue;
+                            }
+                            // Check for Note to Self
+                            const remoteJid = msg.key.remoteJid || '';
+                            const normalizedJid = this.normalizeJid(remoteJid);
+                            if (this.connectedAccountJid && normalizedJid !== this.connectedAccountJid) {
+                                continue;
+                            }
                         }
+
+                        // Process message
+                        await this.handleIncomingMessage(msg);
                     }
                 }
             } catch (error) {
@@ -424,14 +439,21 @@ class WhatsAppAdapter {
 
         } catch (authError) {
             // This catch block handles User ID lookup failures (Auth errors)
-            // Downgrade to info as this is common for unlinked users
-            this.logger.info(`Message from unlinked or unsupported WhatsApp account ${remoteJid}: ${authError instanceof Error ? authError.message : authError}`);
+            const isSpam = !isNoteToSelf;
 
-            if (isNoteToSelf) {
-                await this.sendMessage(remoteJid,
-                    '⚠️ Account not linked properly.\n' +
-                    'Please open the Gitu App > Settings > Link WhatsApp and click "Link Current Session".'
-                );
+            if (isSpam) {
+                // Low-level debug log for spam to avoid clutter
+                this.logger.debug(`Ignored unlinked message from ${remoteJid}`);
+            } else {
+                // Genuine user setup issue - Log Warning and Notify
+                this.logger.warn(`Message from unlinked Note-to-Self account ${remoteJid}: ${authError instanceof Error ? authError.message : authError}`);
+
+                if (isNoteToSelf) {
+                    await this.sendMessage(remoteJid,
+                        '⚠️ Account not linked properly.\n' +
+                        'Please open the Gitu App > Settings > Link WhatsApp and click "Link Current Session".'
+                    );
+                }
             }
         }
     }
@@ -465,6 +487,15 @@ class WhatsAppAdapter {
     async sendMessage(jid: string, content: string | { text?: string; image?: string; caption?: string }): Promise<void> {
         if (!this.sock) throw new Error('Socket not initialized');
 
+        const trackSentMsg = (msg: proto.IWebMessageInfo | undefined) => {
+            const id = msg?.key?.id;
+            if (id) {
+                this.sentMessageIds.add(id);
+                // Auto-cleanup after 15s
+                setTimeout(() => this.sentMessageIds.delete(id), 15000);
+            }
+        };
+
         if (typeof content === 'string') {
             // Format text (Markdown -> WhatsApp)
             let formattedText = content
@@ -472,7 +503,8 @@ class WhatsAppAdapter {
                 .replace(/\*(.*?)\*/g, '_$1_')     // Italic
                 .replace(/~~(.*?)~~/g, '~$1~');    // Strikethrough
 
-            await this.sock.sendMessage(jid, { text: formattedText });
+            const sent = await this.sock.sendMessage(jid, { text: formattedText });
+            trackSentMsg(sent);
         } else if (content.image) {
             // Handle Image
             let image: any = content.image;
@@ -489,10 +521,11 @@ class WhatsAppAdapter {
                 image = { url: image };
             }
 
-            await this.sock.sendMessage(jid, {
+            const sent = await this.sock.sendMessage(jid, {
                 image: image,
                 caption: content.caption || content.text
             });
+            trackSentMsg(sent);
         } else if (content.text) {
             await this.sendMessage(jid, content.text);
         }

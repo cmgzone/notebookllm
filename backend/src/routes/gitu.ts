@@ -51,7 +51,7 @@ const normalizeScopePath = (p: string) =>
 
 router.post('/message', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { message, context } = req.body;
+    const { message, context, sessionId } = req.body;
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'message is required' });
     }
@@ -61,6 +61,7 @@ router.post('/message', authenticateToken, async (req: AuthRequest, res: Respons
       userId: req.userId!,
       platform: 'cli',
       platformUserId: 'cli-user',
+      sessionId,
       content: message,
       taskType: 'chat',
       useRetrieval: true // Enable RAG by default for CLI

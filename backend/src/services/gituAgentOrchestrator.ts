@@ -210,7 +210,8 @@ class GituAgentOrchestrator {
             }
             throw new Error('No JSON found');
         } catch (e) {
-            console.warn('[Orchestrator] Failed to parse strict JSON plan, falling back to single task.');
+            console.warn('[Orchestrator] Failed to parse strict JSON plan. Raw content:', content.substring(0, 500));
+            console.warn('[Orchestrator] Falling back to single task.');
             // Fallback: Create a single task for the whole objective
             return {
                 objective: 'Execute Task',
