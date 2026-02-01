@@ -11,7 +11,7 @@ export class ApiClient {
   }
 
   reinitialize() {
-    let apiUrl = this.config.get('apiUrl') || 'https://notebookllm-ufj7.onrender.com/api/';
+    let apiUrl = this.config.get('apiUrl') || 'https://backend.taskiumnetwork.com/api/';
     if (!apiUrl.endsWith('/')) apiUrl += '/';
 
     const apiToken = this.config.get('apiToken');
