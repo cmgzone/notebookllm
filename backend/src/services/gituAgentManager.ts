@@ -231,6 +231,17 @@ export class GituAgentManager {
         agent.userId,
         `🎉 **Agent Task Completed**\n\n*Task:* ${agent.task}\n\n*Result:* ${content}`
       );
+
+      // Notify Orchestrator if this agent is part of a swarm mission
+      if (agent.memory.missionId) {
+        try {
+          // Dynamic import to avoid circular dependency
+          const { gituAgentOrchestrator } = await import('./gituAgentOrchestrator.js');
+          await gituAgentOrchestrator.handleTaskCompletion(agent.memory.missionId, agent.id);
+        } catch (e) {
+          console.error(`[AgentManager] Failed to notify orchestrator for agent ${agent.id}`, e);
+        }
+      }
     } else if (content.includes('FAILED')) {
       await this.updateAgentStatus(agent.id, 'failed', { output: content });
 

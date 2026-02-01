@@ -308,10 +308,68 @@ class GituPluginSystem {
     if (!plugin) throw new Error('PLUGIN_NOT_FOUND');
     if (!plugin.enabled) throw new Error('PLUGIN_DISABLED');
 
-    const timeoutMs = Math.min(Math.max(options?.timeoutMs ?? 10_000, 200), 60_000);
-    const logs: string[] = [];
+    const timeoutMs = Math.min(Math.max(options?.timeoutMs ?? 30_000, 200), 300_000); // Up to 5 mins
     const started = Date.now();
+    const logs: string[] = [];
 
+    // Check if it's a v2 Container Plugin (has plugin.yaml in code or specific config)
+    // For now, let's assume if the code looks like a manifest, we treat it as v2?
+    // Or we can check if the entrypoint is a file extension like .py
+    const isContainerPlugin = plugin.code.includes('runtime:') && plugin.code.includes('entry:');
+    
+    if (isContainerPlugin) {
+      try {
+        const { dockerPluginRunner } = await import('./plugins/dockerPluginRunner.js');
+        
+        // Prepare files
+        // In a real system, we'd store multiple files in a DB table `gitu_plugin_files`.
+        // For this MVP, we assume `plugin.code` is the manifest content 
+        // AND we might need a way to store the actual script.
+        // Let's adopt a convention: 
+        // If code is YAML, we look for other files in `plugin.config.files` (a temporary hack for MVP)
+        // OR, simpler: We only support single-file scripts embedded in the manifest for now?
+        // NO, the user wants "plugin.yaml", "index.js", "requirements.txt".
+        
+        // Let's assume `plugin.code` is just the `plugin.yaml` manifest.
+        // And the actual code files are stored in `plugin.config.files` map.
+        const files: Record<string, string> = plugin.config?.files || {};
+        files['plugin.yaml'] = plugin.code;
+
+        // If files are empty (legacy/migration), maybe try to parse code as script?
+        // No, let's stick to the new model.
+        
+        const result = await dockerPluginRunner.runPlugin(plugin.id, files, input || {});
+        
+        const durationMs = Date.now() - started;
+        const success = result.exitCode === 0;
+        
+        await this.recordExecution(
+            userId, 
+            pluginId, 
+            success, 
+            durationMs, 
+            success ? { stdout: result.stdout } : null, 
+            success ? null : result.stderr, 
+            [result.stdout, result.stderr]
+        );
+
+        return { 
+            success, 
+            result: success ? result.stdout : null, 
+            error: success ? null : result.stderr, 
+            logs: [result.stdout, result.stderr], 
+            durationMs 
+        };
+
+      } catch (e: any) {
+         const durationMs = Date.now() - started;
+         const msg = e?.message || String(e);
+         await this.recordExecution(userId, pluginId, false, durationMs, null, msg, []);
+         return { success: false, error: msg, logs: [], durationMs };
+      }
+    }
+
+    // Legacy VM execution
     try {
       const vmContext = buildSandbox(logs);
       const exportsObj = compilePlugin(plugin.code, vmContext, 200);

@@ -11,6 +11,7 @@ import makeWASocket, {
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
+    makeInMemoryStore,
     WASocket,
     BaileysEventMap,
     downloadMediaMessage,
@@ -37,6 +38,29 @@ export interface WhatsAppAdapterConfig {
     authDir?: string;
     printQRInTerminal?: boolean;
 }
+
+// ==================== STORE SETUP ====================
+// Global store to persist contacts and chats across restarts
+const store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
+const STORE_FILE = path.join(process.cwd(), 'baileys_store.json');
+
+// Read from file if exists
+try {
+    if (fs.existsSync(STORE_FILE)) {
+        store.readFromFile(STORE_FILE);
+    }
+} catch (err) {
+    console.error('Failed to read Baileys store file:', err);
+}
+
+// Save every 10s
+setInterval(() => {
+    try {
+        store.writeToFile(STORE_FILE);
+    } catch (err) {
+        console.error('Failed to save Baileys store file:', err);
+    }
+}, 10_000);
 
 // ==================== ADAPTER CLASS ====================
 
@@ -113,6 +137,9 @@ class WhatsAppAdapter {
             generateHighQualityLinkPreview: true,
             syncFullHistory: true, // Help with decryption of older messages
         });
+
+        // Bind store to socket events
+        store.bind(this.sock.ev);
 
         // Handle connection update
         this.sock.ev.on('connection.update', async (update) => {
@@ -554,6 +581,34 @@ class WhatsAppAdapter {
         } else if (content.text) {
             await this.sendMessage(jid, content.text);
         }
+    }
+
+    /**
+     * Search for contacts in the local store.
+     */
+    async searchContacts(query: string): Promise<Array<{ id: string; name: string; notify?: string }>> {
+        if (!store) return [];
+        
+        const q = query.toLowerCase();
+        const contacts = store.contacts || {};
+        const results: Array<{ id: string; name: string; notify?: string }> = [];
+
+        for (const id in contacts) {
+            const contact = contacts[id];
+            const name = contact.name || contact.notify || contact.verifiedName || '';
+            
+            // Search by name or phone number
+            if (name.toLowerCase().includes(q) || id.includes(q)) {
+                results.push({
+                    id: id,
+                    name: name || 'Unknown',
+                    notify: contact.notify
+                });
+            }
+        }
+        
+        // Limit results
+        return results.slice(0, 10);
     }
 
     /**

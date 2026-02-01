@@ -324,13 +324,82 @@ function analyzePluginCode(code: string): {
 }
 
 /**
+ * Tool: Create Container Plugin
+ * Allows the AI to help users create new secure containerized plugins
+ */
+const createContainerPluginTool: MCPTool = {
+    name: 'create_container_plugin',
+    description: 'Create a new secure containerized plugin. This is the preferred method for creating robust tools with dependencies.',
+    schema: {
+        type: 'object',
+        properties: {
+            name: {
+                type: 'string',
+                description: 'Name of the plugin (e.g., "Web Scraper")'
+            },
+            description: {
+                type: 'string',
+                description: 'What the plugin does'
+            },
+            manifest: {
+                type: 'string',
+                description: 'The plugin.yaml content describing runtime and permissions'
+            },
+            files: {
+                type: 'object',
+                description: 'Map of filenames to content (e.g., {"index.py": "print(1)", "requirements.txt": "requests"})'
+            },
+            enabled: {
+                type: 'boolean',
+                default: true
+            }
+        },
+        required: ['name', 'manifest', 'files']
+    },
+    handler: async (args: any, context: MCPContext) => {
+        const { name, description, manifest, files, enabled = true } = args;
+
+        // 1. Validate Manifest
+        try {
+            // Import dynamically to avoid top-level cyclic deps if any
+            const { PluginManifestParser } = await import('./plugins/pluginManifest.js');
+            PluginManifestParser.parse(manifest);
+        } catch (e: any) {
+            return {
+                success: false,
+                message: `Invalid plugin.yaml: ${e.message}`
+            };
+        }
+
+        // 2. Store Plugin
+        // We use the same `gitu_plugins` table but store files in `config.files`
+        const plugin = await gituPluginSystem.createPlugin(context.userId, {
+            name,
+            description,
+            code: manifest, // Store manifest as the main "code"
+            entrypoint: 'container', // Marker for container plugin
+            config: { files }, // Store actual code files here
+            enabled
+        });
+
+        return {
+            success: true,
+            pluginId: plugin.id,
+            name: plugin.name,
+            message: `Container plugin "${name}" created successfully! It runs in a secure Docker sandbox.`
+        };
+    }
+};
+
+/**
  * Register Plugin MCP Tools
  */
 export function registerPluginMCPTools() {
     gituMCPHub.registerTool(listUserPluginsTool);
     gituMCPHub.registerTool(runUserPluginTool);
     gituMCPHub.registerTool(createUserPluginTool);
+    gituMCPHub.registerTool(createContainerPluginTool); // New tool
     gituMCPHub.registerTool(deleteUserPluginTool);
     gituMCPHub.registerTool(learnPluginTool);
-    console.log('[PluginMCPTools] Registered user plugin tools (list, run, create, delete, learn)');
+    console.log('[PluginMCPTools] Registered user plugin tools (list, run, create, create_container, delete, learn)');
 }

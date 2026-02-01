@@ -12,6 +12,8 @@
 import { gituIdentityManager } from './gituIdentityManager.js';
 import { gituMemoryService } from './gituMemoryService.js';
 import { gituMCPHub } from './gituMCPHub.js';
+import { gituPluginSystem } from './gituPluginSystem.js';
+import { gituRuleEngine } from './gituRuleEngine.js';
 import pool from '../config/database.js';
 
 export interface SystemPromptContext {
@@ -37,11 +39,13 @@ class GituSystemPromptBuilder {
         const { userId, platform = 'web', includeTools = true, includeMemories = true } = context;
 
         // Gather all context in parallel
-        const [userInfo, linkedAccounts, memories, tools] = await Promise.all([
+        const [userInfo, linkedAccounts, memories, tools, userPlugins, activeRules] = await Promise.all([
             this.getUserInfo(userId),
             this.getLinkedAccounts(userId),
             includeMemories ? this.getRecentMemories(userId) : Promise.resolve([]),
             includeTools ? this.getAvailableTools(userId) : Promise.resolve([]),
+            includeTools ? this.getUserPlugins(userId) : Promise.resolve([]),
+            includeTools ? this.getActiveRules(userId) : Promise.resolve([]),
         ]);
 
         // Build the system prompt sections
@@ -56,6 +60,11 @@ class GituSystemPromptBuilder {
         // Memories (facts about the user)
         if (memories.length > 0) {
             sections.push(this.buildMemoriesSection(memories));
+        }
+
+        // Custom Skills (Plugins & Rules)
+        if (userPlugins.length > 0 || activeRules.length > 0) {
+            sections.push(this.buildCustomSkillsSection(userPlugins, activeRules));
         }
 
         // Available tools
@@ -131,6 +140,28 @@ These are facts and preferences you've learned about the user from past conversa
 ${memoryLines}
 
 Use this knowledge to personalize your responses, but don't mention that you "remember" things unless the user asks.`;
+    }
+
+    private buildCustomSkillsSection(
+        plugins: Array<{ name: string; description: string }>,
+        rules: Array<{ name: string; trigger: string }>
+    ): string {
+        let section = `# Your Custom Capabilities\n\n`;
+        section += `You have access to the following user-defined skills and automation rules. You should proactively use them when relevant to the user's request.\n\n`;
+
+        if (plugins.length > 0) {
+            section += `### User Plugins (Custom Tools)\n`;
+            section += plugins.map(p => `- **${p.name}**: ${p.description}`).join('\n');
+            section += `\nTo use a plugin, call 'run_user_plugin' with the plugin name. If you need to know more about it, call 'learn_plugin' first.\n\n`;
+        }
+
+        if (rules.length > 0) {
+            section += `### Active Automation Rules\n`;
+            section += rules.map(r => `- **${r.name}** (Trigger: ${r.trigger})`).join('\n');
+            section += `\nThese rules run automatically based on their triggers. You can manage them using 'list_rules', 'create_rule', or 'delete_rule'.\n`;
+        }
+
+        return section;
     }
 
     private buildToolsSection(tools: Array<{ name: string; description: string }>): string {
@@ -247,6 +278,32 @@ Example: "Run my daily report plugin" → use learn_plugin first, then run_user_
             }));
         } catch (error) {
             console.error('[SystemPromptBuilder] Error fetching memories:', error);
+            return [];
+        }
+    }
+
+    private async getUserPlugins(userId: string): Promise<Array<{ name: string; description: string }>> {
+        try {
+            const plugins = await gituPluginSystem.listPlugins(userId, { enabled: true });
+            return plugins.map(p => ({
+                name: p.name,
+                description: p.description || 'No description',
+            }));
+        } catch (error) {
+            console.error('[SystemPromptBuilder] Error fetching plugins:', error);
+            return [];
+        }
+    }
+
+    private async getActiveRules(userId: string): Promise<Array<{ name: string; trigger: string }>> {
+        try {
+            const rules = await gituRuleEngine.listRules(userId, { enabled: true });
+            return rules.map(r => ({
+                name: r.name,
+                trigger: r.trigger.type,
+            }));
+        } catch (error) {
+            console.error('[SystemPromptBuilder] Error fetching rules:', error);
             return [];
         }
     }

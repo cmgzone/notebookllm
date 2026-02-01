@@ -444,7 +444,7 @@ const rememberFactTool: MCPTool = {
       category: {
         type: 'string',
         description: 'Category of the fact',
-        enum: ['fact', 'preference', 'goal', 'work', 'relationship'],
+        enum: ['personal', 'work', 'preference', 'fact', 'context'],
         default: 'fact'
       }
     },

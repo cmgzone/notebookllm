@@ -8,6 +8,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database.js';
+import { gituMemoryExtractor } from './gituMemoryExtractor.js';
 
 // ==================== INTERFACES ====================
 
@@ -88,6 +89,60 @@ class GituMessageGateway {
   registerOutboundHandler(platform: Platform, handler: (userId: string, text: string) => Promise<void>): void {
     this.outboundHandlers.set(platform, handler);
     console.log(`[Gitu Gateway] Registered outbound handler for ${platform}`);
+  }
+
+  /**
+   * Track an outbound message to a user.
+   * This is called by outbound handlers or the AI router to log the response
+   * and trigger memory extraction.
+   */
+  async trackOutboundMessage(
+      userId: string, 
+      platform: Platform, 
+      content: string, 
+      options: { 
+          replyToMessageId?: string;
+          sessionId?: string;
+          metadata?: any;
+      } = {}
+  ): Promise<void> {
+      // 1. Log the outbound message (optional, but good for history)
+      // For now, we assume the AI Router logs the 'assistant' message to the session.
+      // But we might want to log strictly platform-bound messages here too.
+
+      // 2. Trigger Memory Extraction
+      // We need the user's last message to provide context.
+      // If replyToMessageId is provided, we fetch it.
+      // Otherwise, we fetch the last user message from this platform.
+      
+      try {
+          let userMessageText = '';
+          
+          if (options.replyToMessageId) {
+              const originalMsg = await this.getMessage(options.replyToMessageId);
+              if (originalMsg?.content.text) {
+                  userMessageText = originalMsg.content.text;
+              }
+          } else {
+              // Fetch last user message
+              const history = await this.getMessageHistory(userId, platform, 1);
+              if (history.length > 0 && history[0].content.text) {
+                  userMessageText = history[0].content.text;
+              }
+          }
+
+          if (userMessageText) {
+              // Fire and forget memory extraction
+              gituMemoryExtractor.extractFromConversation(
+                  userId,
+                  userMessageText,
+                  content,
+                  { platform, sessionId: options.sessionId }
+              ).catch(err => console.error('[Gitu Gateway] Memory extraction failed:', err));
+          }
+      } catch (error) {
+          console.error('[Gitu Gateway] Error in trackOutboundMessage:', error);
+      }
   }
 
   /**

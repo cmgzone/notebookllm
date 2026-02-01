@@ -98,16 +98,85 @@ class GituAgentOrchestrator {
     }
 
     /**
+     * Handle the completion of a task by an agent.
+     * Triggers dependent tasks or mission synthesis.
+     */
+    async handleTaskCompletion(missionId: string, agentId: string): Promise<void> {
+        console.log(`[Orchestrator] Handling completion for mission ${missionId}, agent ${agentId}`);
+        const mission = await gituMissionControl.getMission(missionId);
+        if (!mission) {
+            console.error(`[Orchestrator] Mission ${missionId} not found`);
+            return;
+        }
+
+        const plan = mission.context.plan as MissionPlan;
+        if (!plan) {
+            console.error(`[Orchestrator] Mission plan not found for ${missionId}`);
+            return;
+        }
+
+        // 1. Mark task as completed
+        let taskUpdated = false;
+        const completedTaskIds = new Set<string>();
+
+        for (const t of plan.tasks) {
+            if (t.agentId === agentId) {
+                t.status = 'completed';
+                taskUpdated = true;
+                console.log(`[Orchestrator] Task ${t.id} completed by agent ${agentId}`);
+            }
+            if (t.status === 'completed') {
+                completedTaskIds.add(t.id);
+            }
+        }
+
+        if (!taskUpdated) {
+            console.warn(`[Orchestrator] No task found for agent ${agentId} in mission ${missionId}`);
+            return;
+        }
+
+        // 2. Persist completion immediately
+        await gituMissionControl.updateMissionState(missionId, {
+            contextUpdates: { plan }
+        });
+
+        // 3. Check for dependent tasks to launch
+        const pendingTasks = plan.tasks.filter(t => t.status === 'pending');
+        const readyTasks: SwarmTask[] = [];
+
+        for (const t of pendingTasks) {
+            const allDependenciesMet = t.dependencies.every(depId => completedTaskIds.has(depId));
+            if (allDependenciesMet) {
+                readyTasks.push(t);
+            }
+        }
+
+        if (readyTasks.length > 0) {
+            console.log(`[Orchestrator] Unlocking ${readyTasks.length} dependent tasks`);
+            await this.dispatchTasks(mission.userId, missionId, plan, readyTasks);
+        } else if (pendingTasks.length === 0 && plan.tasks.every(t => t.status === 'completed')) {
+            // All tasks done!
+            console.log(`[Orchestrator] All tasks completed. Synthesizing results.`);
+            await this.synthesizeMissionResults(missionId);
+        }
+    }
+
+    /**
      * Activate the swarm based on the plan.
      * Spawns agents for all tasks that have satisfied dependencies.
      */
     async unleashSwarm(userId: string, missionId: string, plan: MissionPlan): Promise<void> {
         // Find tasks ready to execute (no incomplete dependencies)
         // For simplicity in this v1, we just launch all "root" tasks (no dependencies)
-
         const readyTasks = plan.tasks.filter(t => t.status === 'pending' && t.dependencies.length === 0);
+        await this.dispatchTasks(userId, missionId, plan, readyTasks);
+    }
 
-        for (const task of readyTasks) {
+    /**
+     * Internal helper to dispatch specific tasks
+     */
+    private async dispatchTasks(userId: string, missionId: string, plan: MissionPlan, tasks: SwarmTask[]): Promise<void> {
+        for (const task of tasks) {
             console.log(`[Orchestrator] Spawning agent for task: ${task.description}`);
 
             const config: AgentConfig = {
@@ -127,23 +196,20 @@ class GituAgentOrchestrator {
                 // Register agent with Mission Control
                 await gituMissionControl.registerAgent(missionId);
 
-                // Update task status in plan (this needs to be persisted in Mission Context really)
-                // For now we just log it. A robust system would update the plan in DB.
+                // Update task status and persist IMMEDIATELY
                 task.agentId = agent.id;
                 task.status = 'in_progress';
+                
+                await gituMissionControl.updateMissionState(missionId, {
+                    contextUpdates: { plan }
+                });
 
             } catch (e) {
                 console.error(`[Orchestrator] Failed to spawn agent for task ${task.id}`, e);
             }
         }
 
-        // Persist updated plan to Mission Control
-        await gituMissionControl.updateMissionState(missionId, {
-            contextUpdates: { plan }
-        });
-
-        // Trigger immediate processing of the agent queue so the user doesn't wait for scheduler
-        // using the scheduler logic but manually triggered
+        // Trigger immediate processing of the agent queue
         try {
             await gituAgentManager.processAgentQueue(userId);
         } catch (e) {

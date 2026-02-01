@@ -181,11 +181,48 @@ const sendTelegramTool: MCPTool = {
 };
 
 /**
+ * Tool: Search Contacts
+ */
+const searchContactsTool: MCPTool = {
+    name: 'search_contacts',
+    description: 'Search for WhatsApp contacts by name or phone number.',
+    schema: {
+        type: 'object',
+        properties: {
+            query: { type: 'string', description: 'Name or partial number to search for' }
+        },
+        required: ['query']
+    },
+    handler: async (args: any, context: MCPContext) => {
+        const { query } = args;
+        const contacts = await whatsappAdapter.searchContacts(query);
+        
+        if (contacts.length === 0) {
+            return {
+                found: false,
+                message: `No contacts found matching "${query}".`
+            };
+        }
+
+        return {
+            found: true,
+            contacts: contacts.map(c => ({
+                name: c.name,
+                number: c.id.split('@')[0],
+                jid: c.id
+            })),
+            message: `Found ${contacts.length} contact(s).`
+        };
+    }
+};
+
+/**
  * Register Messaging Tools
  */
 export function registerMessagingTools() {
     gituMCPHub.registerTool(sendWhatsAppTool);
     gituMCPHub.registerTool(sendTelegramTool);
     gituMCPHub.registerTool(getMessagingProfileTool);
-    console.log('[MessagingMCPTools] Registered messaging tools with image support');
+    gituMCPHub.registerTool(searchContactsTool);
+    console.log('[MessagingMCPTools] Registered messaging tools with image support and contact search');
 }
