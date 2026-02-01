@@ -39,7 +39,7 @@ export class PluginManifestParser {
       return PluginManifestSchema.parse(parsed);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
-        throw new Error(`Invalid plugin manifest: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
+        throw new Error(`Invalid plugin manifest: ${error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
       }
       throw new Error(`Failed to parse plugin YAML: ${error.message}`);
     }
