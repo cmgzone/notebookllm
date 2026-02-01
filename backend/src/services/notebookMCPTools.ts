@@ -261,37 +261,48 @@ const scheduleReminderTool: MCPTool = {
     type: 'object',
     properties: {
       message: { type: 'string', description: 'The reminder message to send' },
-      datetime: { type: 'string', description: 'When to send the reminder (ISO format or natural language like "tomorrow at 9am")' },
+      datetime: { type: 'string', description: 'When to send the reminder (ISO format or natural language like "tomorrow at 9am"). Required for one-time events.' },
       recurring: { type: 'boolean', description: 'Should this reminder repeat?', default: false },
-      interval: { type: 'string', description: 'Recurrence interval: daily, weekly, monthly', enum: ['daily', 'weekly', 'monthly'] }
+      interval: { type: 'string', description: 'Simple recurrence: daily, weekly, monthly' },
+      cron: { type: 'string', description: 'CRON expression for complex schedules (e.g. "*/2 * * * *" for every 2 minutes). precise usage.' }
     },
-    required: ['message', 'datetime']
+    required: ['message']
   },
   handler: async (args: any, context: MCPContext) => {
-    const { message, datetime, recurring, interval } = args;
+    const { message, datetime, recurring, interval, cron: explicitCron } = args;
 
-    // Parse the datetime
-    const scheduledTime = parseDatetime(datetime);
-    if (!scheduledTime) {
-      throw new Error('Could not parse datetime. Please use ISO format or phrases like "tomorrow at 9am".');
-    }
+    // Logic:
+    // 1. If explicit CRON is provided, use it.
+    // 2. If valid datetime is provided, use it (and optionally build simple cron from interval).
+    // 3. Fallback/Error if neither.
 
-    // Create a cron expression if recurring
-    let cron: string | null = null;
-    if (recurring && interval) {
-      const hour = scheduledTime.getHours();
-      const minute = scheduledTime.getMinutes();
-      switch (interval) {
-        case 'daily':
-          cron = `${minute} ${hour} * * *`;
-          break;
-        case 'weekly':
-          cron = `${minute} ${hour} * * ${scheduledTime.getDay()}`;
-          break;
-        case 'monthly':
-          cron = `${minute} ${hour} ${scheduledTime.getDate()} * *`;
-          break;
+    let cron: string | null = explicitCron || null;
+    let scheduledTime: Date | null = datetime ? parseDatetime(datetime) : null;
+
+    if (cron) {
+      // Validation check for cron could go here
+    } else if (scheduledTime) {
+      // Standard datetime based scheduling
+      if (recurring && interval) {
+        const hour = scheduledTime.getHours();
+        const minute = scheduledTime.getMinutes();
+        switch (interval) {
+          case 'daily':
+            cron = `${minute} ${hour} * * *`;
+            break;
+          case 'weekly':
+            cron = `${minute} ${hour} * * ${scheduledTime.getDay()}`;
+            break;
+          case 'monthly':
+            cron = `${minute} ${hour} ${scheduledTime.getDate()} * *`;
+            break;
+        }
+      } else {
+        cron = `${scheduledTime.getMinutes()} ${scheduledTime.getHours()} ${scheduledTime.getDate()} ${scheduledTime.getMonth() + 1} *`;
       }
+    } else {
+      // If no cron and no valid datetime, we can't schedule
+      throw new Error('Please provide either a valid datetime (e.g., "tomorrow at 9am") or a CRON expression for the schedule.');
     }
 
     // Insert into scheduled tasks
@@ -304,16 +315,16 @@ const scheduleReminderTool: MCPTool = {
         context.userId,
         `Reminder: ${message.substring(0, 50)}`,
         'notification.send',
-        cron || `${scheduledTime.getMinutes()} ${scheduledTime.getHours()} ${scheduledTime.getDate()} ${scheduledTime.getMonth() + 1} *`
+        cron
       ]
     );
 
     return {
       success: true,
       reminderId: result.rows[0].id,
-      scheduledFor: scheduledTime.toISOString(),
+      scheduledFor: scheduledTime ? scheduledTime.toISOString() : 'Custom Schedule',
       message: `I'll remind you: "${message}"`,
-      recurring: recurring && interval ? `Repeats ${interval}` : 'One-time reminder'
+      recurring: (recurring || !!explicitCron) ? (interval || explicitCron || 'Custom Recurrence') : 'One-time reminder'
     };
   }
 };
