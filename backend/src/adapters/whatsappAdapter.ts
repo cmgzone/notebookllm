@@ -21,6 +21,7 @@ import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import path from 'path';
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { gituMessageGateway, IncomingMessage, RawMessage } from '../services/gituMessageGateway.js';
 import { gituSessionService } from '../services/gituSessionService.js';
@@ -104,6 +105,8 @@ class WhatsAppAdapter {
     private connectedAccountJid: string | null = null;
     private connectedAccountName: string | null = null;
     private sentMessageIds = new Set<string>();
+    private reconnectTimer: NodeJS.Timeout | null = null;
+    private reconnectAttempts = 0;
 
     /**
      * Initialize the WhatsApp Adapter.
@@ -147,6 +150,22 @@ class WhatsAppAdapter {
      */
     private async connectToWhatsApp(): Promise<void> {
         if (!this.config) throw new Error('Config not initialized');
+
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+
+        if (this.sock) {
+            try {
+                (this.sock as any)?.ev?.removeAllListeners?.();
+            } catch {}
+            try {
+                (this.sock as any)?.end?.();
+            } catch {}
+            this.sock = null;
+        }
+
         this.connectionState = 'connecting';
         this.connectedAccountJid = null;
         this.connectedAccountName = null;
@@ -165,7 +184,9 @@ class WhatsAppAdapter {
                 keys: makeCacheableSignalKeyStore(state.keys, this.logger),
             },
             generateHighQualityLinkPreview: true,
-            syncFullHistory: true, // Help with decryption of older messages
+            syncFullHistory: process.env.GITU_WHATSAPP_SYNC_FULL_HISTORY === 'true',
+            connectTimeoutMs: 60_000,
+            defaultQueryTimeoutMs: 60_000,
         });
         
         // Keep a lightweight contacts store without relying on Baileys internal store exports
@@ -208,29 +229,32 @@ class WhatsAppAdapter {
                 this.logger.info(`Connection closed: ${statusCode}, reconnecting: ${shouldReconnect}`);
 
                 // Conflict (409) or Logged Out
-                const isConflict = statusCode === 409 || error?.message?.includes('conflict');
+                const errorMessage = String((error as any)?.message || '');
+                const isConflict =
+                    statusCode === 440 ||
+                    statusCode === 409 ||
+                    errorMessage.toLowerCase().includes('conflict');
                 const isLoggedOut = statusCode === DisconnectReason.loggedOut;
 
-                if (isConflict || isLoggedOut) {
-                    this.logger.warn(`Session terminated (${isConflict ? 'Conflict' : 'Logged Out'}). Clearing session.`);
-
-                    // Clear auth directory
+                if (isLoggedOut) {
+                    this.logger.warn('Session logged out. Clearing auth state and requiring re-pair.');
                     if (this.config?.authDir && fs.existsSync(this.config.authDir)) {
-                        try {
-                            fs.rmSync(this.config.authDir, { recursive: true, force: true });
-                        } catch (e) {
-                            this.logger.error({ err: e }, 'Failed to clear auth dir');
-                        }
+                        await this.safeRemoveDir(this.config.authDir);
                     }
-
-                    // Restart to generate new QR
                     this.connectionState = 'disconnected';
                     this.connectedAccountJid = null;
                     this.connectedAccountName = null;
-                    await this.connectToWhatsApp();
+                    this.scheduleReconnect('logged_out', 1000);
+                } else if (isConflict) {
+                    this.logger.warn('Session conflict (replaced). Backing off before reconnecting.');
+                    this.connectionState = 'disconnected';
+                    this.connectedAccountJid = null;
+                    this.connectedAccountName = null;
+                    this.scheduleReconnect('conflict', 30_000);
                 } else if (shouldReconnect) {
                     // Generic disconnect - Just reconnect, preserve session
-                    await this.connectToWhatsApp();
+                    const delayMs = Math.min(60_000, 2_000 * Math.pow(2, this.reconnectAttempts));
+                    this.scheduleReconnect('reconnect', delayMs);
                 } else {
                     this.connectionState = 'disconnected';
                 }
@@ -238,6 +262,11 @@ class WhatsAppAdapter {
                 this.logger.info('Opened connection to WhatsApp');
                 this.qrCode = null;
                 this.connectionState = 'connected';
+                this.reconnectAttempts = 0;
+                if (this.reconnectTimer) {
+                    clearTimeout(this.reconnectTimer);
+                    this.reconnectTimer = null;
+                }
                 const jid = (this.sock as any)?.user?.id;
                 const name = (this.sock as any)?.user?.name;
                 this.connectedAccountJid = typeof jid === 'string' ? this.normalizeJid(jid) : null;
@@ -293,6 +322,41 @@ class WhatsAppAdapter {
                 this.logger.error({ err: error }, 'Error processing incoming message');
             }
         });
+    }
+
+    private scheduleReconnect(reason: string, delayMs: number) {
+        if (this.reconnectTimer) return;
+        this.reconnectAttempts += 1;
+        const delay = Math.max(500, Math.min(delayMs, 120_000));
+        this.logger.info({ reason, delayMs: delay, attempt: this.reconnectAttempts }, 'Scheduling WhatsApp reconnect');
+
+        this.reconnectTimer = setTimeout(async () => {
+            this.reconnectTimer = null;
+            try {
+                await this.connectToWhatsApp();
+            } catch (e) {
+                this.logger.error({ err: e }, 'Reconnect attempt failed');
+                this.scheduleReconnect('reconnect_failed', Math.min(120_000, delay * 2));
+            }
+        }, delay);
+    }
+
+    private async safeRemoveDir(dir: string) {
+        const maxAttempts = 6;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                await fsPromises.rm(dir, { recursive: true, force: true });
+                return;
+            } catch (e: any) {
+                const code = String(e?.code || '');
+                const retryable = code === 'EBUSY' || code === 'EPERM' || code === 'ENOTEMPTY';
+                if (!retryable || attempt === maxAttempts) {
+                    this.logger.error({ err: e }, 'Failed to clear auth dir');
+                    return;
+                }
+                await new Promise(resolve => setTimeout(resolve, 250 * attempt));
+            }
+        }
     }
 
     /**
