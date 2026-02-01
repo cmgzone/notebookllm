@@ -15,6 +15,7 @@ import { RunCommand } from './commands/run.js';
 import { NotebookCommand } from './commands/notebook.js';
 import { InitCommand } from './commands/init.js';
 import { AliasCommand } from './commands/alias.js';
+import { AuthCommand } from './commands/auth.js';
 
 const program = new Command();
 const config = new ConfigManager();
@@ -29,6 +30,11 @@ program
   .command('init')
   .description('Initialize Gitu CLI configuration')
   .action(() => InitCommand.start(api, config));
+
+program
+  .command('auth [token]')
+  .description('Authenticate CLI with a pairing token from the app')
+  .action((token) => AuthCommand.link(api, config, token));
 
 program
   .command('alias [shell]')

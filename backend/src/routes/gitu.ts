@@ -49,7 +49,7 @@ const normalizeScopePath = (p: string) =>
     .replace(/\/+/g, '/')
     .replace(/\/$/, '');
 
-router.post('/message', async (req: AuthRequest, res: Response) => {
+router.post('/message', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { message, context } = req.body;
     if (!message || typeof message !== 'string') {
@@ -1373,7 +1373,7 @@ router.post('/shell/permissions/revoke', async (req: AuthRequest, res: Response)
   }
 });
 
-router.post('/shell/execute', async (req: AuthRequest, res: Response) => {
+router.post('/shell/execute', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { command, args, cwd, timeoutMs, sandboxed, dryRun } = req.body as any;
     const result = await gituShellManager.execute(req.userId!, {

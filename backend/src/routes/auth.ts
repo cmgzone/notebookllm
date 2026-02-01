@@ -195,9 +195,9 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 // Get current user
-router.get('/me', async (req: Request, res: Response) => {
+router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
     try {
-        const userId = getUserFromToken(req);
+        const userId = req.userId;
         if (!userId) {
             return res.status(401).json({ error: 'Unauthorized' });
         }

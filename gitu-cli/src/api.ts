@@ -45,6 +45,10 @@ export class ApiClient {
   }
 
   // Gitu-specific endpoints
+  async linkTerminal(token: string, deviceId: string, deviceName?: string) {
+    return this.post('/gitu/terminal/link', { token, deviceId, deviceName: deviceName || 'Gitu CLI' });
+  }
+
   async generateQR() {
     return this.post('/gitu/qr/generate');
   }

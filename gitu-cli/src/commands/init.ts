@@ -11,8 +11,8 @@ export class InitCommand {
       {
         type: 'input',
         name: 'token',
-        message: 'Enter your Gitu Auth Token:',
-        validate: (input: string) => input.length > 0 ? true : 'Token is required'
+        message: 'Enter your API Token (starts with nllm_) or skip to use "gitu auth":',
+        validate: (input: string) => true // Allow empty if they want to use 'auth' later
       },
       {
         type: 'input',
@@ -23,19 +23,26 @@ export class InitCommand {
     ]);
 
     try {
-      config.set('apiToken', answers.token);
       config.set('apiUrl', answers.apiUrl);
 
-      // Re-initialize API client with new config
-      (api as any).reinitialize();
+      if (answers.token) {
+        config.set('apiToken', answers.token);
+        // Re-initialize API client with new config
+        (api as any).reinitialize();
 
-      console.log(chalk.green('\n✅ Configuration saved!'));
+        console.log(chalk.green('\n✅ Configuration saved!'));
 
-      // Test connection
-      process.stdout.write(chalk.gray('Testing connection... '));
-      const me = await api.whoami();
-      console.log(chalk.green('Success!'));
-      console.log(chalk.gray(`Connected as: ${me.user.email} (${me.user.role})`));
+        // Test connection
+        process.stdout.write(chalk.gray('Testing connection... '));
+        const me = await api.whoami();
+        console.log(chalk.green('Success!'));
+        console.log(chalk.gray(`Connected as: ${me.user.email} (${me.user.role})`));
+      } else {
+        console.log(chalk.green('\n✅ API URL saved!'));
+        console.log(chalk.yellow('\nNo token provided. To link your terminal, run:'));
+        console.log(chalk.bold('  gitu auth <pairing-token>'));
+        console.log(chalk.gray('(Get a pairing token in the app under Settings -> Terminal)'));
+      }
 
     } catch (error: any) {
       console.log(chalk.red('Failed!'));

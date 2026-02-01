@@ -6,6 +6,7 @@ export interface GituConfig {
   apiToken?: string;
   apiUrl?: string;
   userId?: string;
+  deviceId?: string;
   defaultFormat?: string;
 }
 
