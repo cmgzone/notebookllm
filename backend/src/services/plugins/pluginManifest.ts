@@ -18,7 +18,11 @@ export const PluginManifestSchema = z.object({
   description: z.string().max(200).optional(),
   runtime: z.enum(['node18', 'python3.11']),
   entry: z.string(),
-  permissions: PluginPermissionsSchema.default({}),
+  permissions: PluginPermissionsSchema.default({
+    network: false,
+    filesystem: 'none',
+    env: []
+  }),
   dependencies: z.record(z.string()).optional(), // e.g. { "axios": "^1.0.0" }
 });
 
