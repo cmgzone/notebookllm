@@ -8,6 +8,8 @@ export interface MCPToolParameter {
   enum?: string[];
   default?: any;
   items?: any; // For array types
+  properties?: Record<string, MCPToolParameter>; // For nested object types
+  required?: string[]; // For required properties in nested objects
 }
 
 export interface MCPToolSchema {

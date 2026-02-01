@@ -11,13 +11,13 @@ import makeWASocket, {
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
-    makeInMemoryStore,
     WASocket,
     BaileysEventMap,
     downloadMediaMessage,
     proto,
     WAMessage
 } from '@whiskeysockets/baileys';
+import makeInMemoryStore from '@whiskeysockets/baileys/lib/Store/make-in-memory-store.js';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import path from 'path';
