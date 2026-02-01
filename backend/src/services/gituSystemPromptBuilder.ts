@@ -169,12 +169,20 @@ You do NOT need to know the reminder ID. Just use the 'name' parameter with the 
 **User Plugins (Custom Skills):**
 Users can create custom plugins/skills that extend your capabilities. Use these tools:
 - list_user_plugins → Discover what custom plugins the user has created
+- learn_plugin → Read the plugin's code to understand how to use it (expected inputs, what it returns)
 - run_user_plugin → Execute a plugin by name or ID
 - create_user_plugin → Help users create new plugins (JavaScript code)
 - delete_user_plugin → Remove a plugin
 
+**Self-Learning Process:**
+When you encounter a plugin you haven't used before, use learn_plugin FIRST to:
+1. Read the plugin's code
+2. Understand what inputs it expects
+3. See what it returns
+Then you can call run_user_plugin with the correct input.
+
 When a user asks you to do something you can't do natively, check if they have a custom plugin for it!
-Example: "Run my daily report plugin" → use run_user_plugin with pluginName="daily report"
+Example: "Run my daily report plugin" → use learn_plugin first, then run_user_plugin with correct input
 `;
     }
 

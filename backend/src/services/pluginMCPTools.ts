@@ -244,6 +244,86 @@ const deleteUserPluginTool: MCPTool = {
 };
 
 /**
+ * Tool: Learn Plugin
+ * Allows the AI to read and understand a plugin's code to learn how to use it
+ */
+const learnPluginTool: MCPTool = {
+    name: 'learn_plugin',
+    description: "Read a plugin's code and configuration to understand how to use it. Use this to learn what inputs a plugin expects and what it returns.",
+    schema: {
+        type: 'object',
+        properties: {
+            pluginId: { type: 'string', description: 'The ID of the plugin to learn about' },
+            pluginName: { type: 'string', description: 'The name of the plugin to learn about (alternative to pluginId)' }
+        }
+    },
+    handler: async (args: any, context: MCPContext) => {
+        const { pluginId, pluginName } = args;
+
+        if (!pluginId && !pluginName) {
+            throw new Error('Please provide either pluginId or pluginName');
+        }
+
+        let targetPlugin: Awaited<ReturnType<typeof gituPluginSystem.getPlugin>> = null;
+
+        if (pluginId) {
+            targetPlugin = await gituPluginSystem.getPlugin(context.userId, pluginId);
+        } else if (pluginName) {
+            const plugins = await gituPluginSystem.listPlugins(context.userId);
+            targetPlugin = plugins.find(p =>
+                p.name.toLowerCase().includes(pluginName.toLowerCase())
+            ) || null;
+        }
+
+        if (!targetPlugin) {
+            throw new Error('Plugin not found');
+        }
+
+        // Analyze the code to extract useful information
+        const codeAnalysis = analyzePluginCode(targetPlugin.code);
+
+        return {
+            id: targetPlugin.id,
+            name: targetPlugin.name,
+            description: targetPlugin.description || 'No description provided',
+            enabled: targetPlugin.enabled,
+            entrypoint: targetPlugin.entrypoint,
+            code: targetPlugin.code,
+            config: targetPlugin.config,
+            analysis: codeAnalysis,
+            usageHint: `To run this plugin, use run_user_plugin with pluginName="${targetPlugin.name}" and provide the expected input as described in the analysis.`
+        };
+    }
+};
+
+/**
+ * Analyze plugin code to extract useful information for the AI
+ */
+function analyzePluginCode(code: string): {
+    usesFiles: boolean;
+    usesShell: boolean;
+    expectedInputFields: string[];
+    returnType: string;
+} {
+    const usesFiles = code.includes('gitu.files');
+    const usesShell = code.includes('gitu.shell');
+
+    // Try to extract input field names from destructuring patterns
+    const inputMatch = code.match(/const\s*\{([^}]+)\}\s*=\s*(?:ctx\.)?input/);
+    const expectedInputFields = inputMatch
+        ? inputMatch[1].split(',').map(s => s.trim().split(':')[0].trim()).filter(Boolean)
+        : [];
+
+    // Try to detect return type
+    let returnType = 'unknown';
+    if (code.includes('return {')) returnType = 'object';
+    else if (code.includes('return [')) returnType = 'array';
+    else if (code.includes('return "') || code.includes("return '")) returnType = 'string';
+
+    return { usesFiles, usesShell, expectedInputFields, returnType };
+}
+
+/**
  * Register Plugin MCP Tools
  */
 export function registerPluginMCPTools() {
@@ -251,5 +331,6 @@ export function registerPluginMCPTools() {
     gituMCPHub.registerTool(runUserPluginTool);
     gituMCPHub.registerTool(createUserPluginTool);
     gituMCPHub.registerTool(deleteUserPluginTool);
-    console.log('[PluginMCPTools] Registered user plugin tools (list, run, create, delete)');
+    gituMCPHub.registerTool(learnPluginTool);
+    console.log('[PluginMCPTools] Registered user plugin tools (list, run, create, delete, learn)');
 }
