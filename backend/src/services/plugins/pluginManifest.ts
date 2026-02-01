@@ -23,7 +23,7 @@ export const PluginManifestSchema = z.object({
     filesystem: 'none',
     env: []
   }),
-  dependencies: z.record(z.string()).optional(), // e.g. { "axios": "^1.0.0" }
+  dependencies: z.record(z.string(), z.string()).optional(), // e.g. { "axios": "^1.0.0" }
 });
 
 export type PluginManifest = z.infer<typeof PluginManifestSchema>;
@@ -39,7 +39,8 @@ export class PluginManifestParser {
       return PluginManifestSchema.parse(parsed);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
-        throw new Error(`Invalid plugin manifest: ${error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
+        const issues = (error as any).issues || (error as any).errors || [];
+        throw new Error(`Invalid plugin manifest: ${issues.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
       }
       throw new Error(`Failed to parse plugin YAML: ${error.message}`);
     }

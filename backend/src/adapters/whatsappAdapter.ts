@@ -11,7 +11,6 @@ import makeWASocket, {
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
-    makeInMemoryStore,
     WASocket,
     BaileysEventMap,
     downloadMediaMessage,
@@ -40,25 +39,32 @@ export interface WhatsAppAdapterConfig {
 }
 
 // ==================== STORE SETUP ====================
-// Global store to persist contacts and chats across restarts
-const store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
-const STORE_FILE = path.join(process.cwd(), 'baileys_store.json');
+const CONTACTS_FILE = path.join(process.cwd(), 'whatsapp_contacts.json');
+let contactsStore: Record<string, any> = {};
 
-// Read from file if exists
 try {
-    if (fs.existsSync(STORE_FILE)) {
-        store.readFromFile(STORE_FILE);
+    if (fs.existsSync(CONTACTS_FILE)) {
+        const raw = fs.readFileSync(CONTACTS_FILE, 'utf-8');
+        contactsStore = JSON.parse(raw || '{}');
     }
 } catch (err) {
-    console.error('Failed to read Baileys store file:', err);
+    console.error('Failed to read WhatsApp contacts store file:', err);
 }
 
-// Save every 10s
+const upsertContacts = (contacts: any[] | undefined) => {
+    if (!Array.isArray(contacts)) return;
+    for (const contact of contacts) {
+        const id = contact?.id || contact?.jid || contact?.remoteJid;
+        if (!id || typeof id !== 'string') continue;
+        contactsStore[id] = { ...(contactsStore[id] || {}), ...contact };
+    }
+};
+
 setInterval(() => {
     try {
-        store.writeToFile(STORE_FILE);
+        fs.writeFileSync(CONTACTS_FILE, JSON.stringify(contactsStore, null, 2), 'utf-8');
     } catch (err) {
-        console.error('Failed to save Baileys store file:', err);
+        console.error('Failed to save WhatsApp contacts store file:', err);
     }
 }, 10_000);
 
@@ -137,9 +143,17 @@ class WhatsAppAdapter {
             generateHighQualityLinkPreview: true,
             syncFullHistory: true, // Help with decryption of older messages
         });
-
-        // Bind store to socket events
-        store.bind(this.sock.ev);
+        
+        // Keep a lightweight contacts store without relying on Baileys internal store exports
+        this.sock.ev.on('contacts.set' as any, (payload: any) => {
+            upsertContacts(payload?.contacts);
+        });
+        this.sock.ev.on('contacts.upsert' as any, (contacts: any[]) => {
+            upsertContacts(contacts);
+        });
+        this.sock.ev.on('contacts.update' as any, (updates: any[]) => {
+            upsertContacts(updates);
+        });
 
         // Handle connection update
         this.sock.ev.on('connection.update', async (update) => {
@@ -587,14 +601,11 @@ class WhatsAppAdapter {
      * Search for contacts in the local store.
      */
     async searchContacts(query: string): Promise<Array<{ id: string; name: string; notify?: string }>> {
-        if (!store) return [];
-        
         const q = query.toLowerCase();
-        const contacts = store.contacts || {};
         const results: Array<{ id: string; name: string; notify?: string }> = [];
 
-        for (const id in contacts) {
-            const contact = contacts[id];
+        for (const id in contactsStore) {
+            const contact = contactsStore[id];
             const name = contact.name || contact.notify || contact.verifiedName || '';
             
             // Search by name or phone number
