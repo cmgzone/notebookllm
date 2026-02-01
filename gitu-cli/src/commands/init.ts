@@ -12,6 +12,7 @@ export class InitCommand {
         type: 'input',
         name: 'token',
         message: 'Enter your API Token (starts with nllm_) or skip to use "gitu auth":',
+        filter: (val: string) => val.trim(),
         validate: (input: string) => true // Allow empty if they want to use 'auth' later
       },
       {
