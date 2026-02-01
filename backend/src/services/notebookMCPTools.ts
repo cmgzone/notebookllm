@@ -368,29 +368,65 @@ const listRemindersTool: MCPTool = {
  */
 const cancelReminderTool: MCPTool = {
   name: 'cancel_reminder',
-  description: 'Cancel a scheduled reminder',
+  description: 'Cancel a scheduled reminder by ID or by searching for its name/message.',
   schema: {
     type: 'object',
     properties: {
-      reminderId: { type: 'string', description: 'The ID of the reminder to cancel' }
-    },
-    required: ['reminderId']
+      reminderId: { type: 'string', description: 'The ID of the reminder to cancel (if known)' },
+      name: { type: 'string', description: 'Search for and cancel a reminder by name or message content (partial match is OK)' },
+      cancelAll: { type: 'boolean', description: 'If true, cancel all reminders matching the name', default: false }
+    }
   },
   handler: async (args: any, context: MCPContext) => {
-    const result = await pool.query(
-      `UPDATE gitu_scheduled_tasks SET enabled = false, updated_at = NOW()
-       WHERE id = $1 AND user_id = $2 AND action = 'notification.send'
-       RETURNING id`,
-      [args.reminderId, context.userId]
-    );
+    const { reminderId, name, cancelAll } = args;
 
-    if (result.rows.length === 0) {
-      throw new Error('Reminder not found or already cancelled');
+    if (!reminderId && !name) {
+      throw new Error('Please provide either a reminderId or a name to search for.');
     }
 
+    let result;
+
+    if (reminderId) {
+      // Cancel by specific ID
+      result = await pool.query(
+        `UPDATE gitu_scheduled_tasks SET enabled = false, updated_at = NOW()
+         WHERE id = $1 AND user_id = $2 AND action = 'notification.send'
+         RETURNING id, name`,
+        [reminderId, context.userId]
+      );
+    } else if (name) {
+      // Cancel by name match
+      if (cancelAll) {
+        result = await pool.query(
+          `UPDATE gitu_scheduled_tasks SET enabled = false, updated_at = NOW()
+           WHERE user_id = $1 AND action = 'notification.send' AND enabled = true AND name ILIKE $2
+           RETURNING id, name`,
+          [context.userId, `%${name}%`]
+        );
+      } else {
+        // Cancel only the first matching one
+        result = await pool.query(
+          `UPDATE gitu_scheduled_tasks SET enabled = false, updated_at = NOW()
+           WHERE id = (
+             SELECT id FROM gitu_scheduled_tasks 
+             WHERE user_id = $1 AND action = 'notification.send' AND enabled = true AND name ILIKE $2
+             ORDER BY created_at DESC LIMIT 1
+           )
+           RETURNING id, name`,
+          [context.userId, `%${name}%`]
+        );
+      }
+    }
+
+    if (!result || result.rows.length === 0) {
+      throw new Error('No matching reminder found or already cancelled.');
+    }
+
+    const cancelled = result.rows.map((r: any) => r.name).join(', ');
     return {
       success: true,
-      message: 'Reminder cancelled successfully'
+      cancelledCount: result.rows.length,
+      message: `Cancelled: ${cancelled}`
     };
   }
 };

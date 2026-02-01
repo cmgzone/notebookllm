@@ -159,6 +159,12 @@ Common CRON patterns:
 - "every hour": 0 * * * *
 - "every day at 9am": 0 9 * * *
 - "every Monday at 10am": 0 10 * * 1
+
+**Canceling Reminders:**
+- "Stop the hi reminder" → use cancel_reminder with name="hi"
+- "Cancel all my reminders" → use cancel_reminder with name="" and cancelAll=true (or list_reminders first then cancel)
+- "Stop sending me messages" → use cancel_reminder with cancelAll=true to stop all active reminders
+You do NOT need to know the reminder ID. Just use the 'name' parameter with the keyword from the user's message.
 `;
     }
 
