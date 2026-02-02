@@ -13,7 +13,7 @@ import { gituMCPHub, MCPContext } from './gituMCPHub.js';
 import { gituAIRouter, AIRequest, AIResponse } from './gituAIRouter.js';
 import { gituSystemPromptBuilder } from './gituSystemPromptBuilder.js';
 
-const MAX_TOOL_CALLS = 5; // Prevent infinite loops
+const MAX_TOOL_CALLS = 10; // Prevent infinite loops while allowing more complex workflows
 
 export interface ToolCall {
     name: string;
