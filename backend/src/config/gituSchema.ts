@@ -66,18 +66,6 @@ export async function ensureGituSchema(): Promise<void> {
       ALTER TABLE gitu_linked_accounts ALTER COLUMN id SET DEFAULT gen_random_uuid();
       UPDATE gitu_linked_accounts SET id = gen_random_uuid() WHERE id IS NULL;
       UPDATE gitu_linked_accounts SET status = 'active' WHERE status IS NULL;
-      DO $$
-      DECLARE
-        user_id_type TEXT;
-      BEGIN
-        SELECT data_type INTO user_id_type
-        FROM information_schema.columns
-        WHERE table_name = 'gitu_linked_accounts' AND column_name = 'user_id';
-
-        IF user_id_type IS NOT NULL AND user_id_type <> 'uuid' THEN
-          ALTER TABLE gitu_linked_accounts ALTER COLUMN user_id TYPE UUID USING user_id::uuid;
-        END IF;
-      END $$;
       ALTER TABLE gitu_linked_accounts DROP CONSTRAINT IF EXISTS valid_linked_account_platform;
       ALTER TABLE gitu_linked_accounts
         ADD CONSTRAINT valid_linked_account_platform
