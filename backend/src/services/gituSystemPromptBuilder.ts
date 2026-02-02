@@ -15,6 +15,7 @@ import { gituMCPHub } from './gituMCPHub.js';
 import { gituPluginSystem } from './gituPluginSystem.js';
 import { gituRuleEngine } from './gituRuleEngine.js';
 import pool from '../config/database.js';
+import { SOUL_DOCUMENT } from '../config/soul.js';
 
 export interface SystemPromptContext {
     userId: string;
@@ -54,6 +55,9 @@ class GituSystemPromptBuilder {
         // Core identity
         sections.push(this.buildIdentitySection());
 
+        // Soul Document
+        sections.push(SOUL_DOCUMENT);
+
         // User context
         sections.push(this.buildUserSection(userInfo, linkedAccounts, platform));
 
@@ -92,6 +96,9 @@ class GituSystemPromptBuilder {
         const userName = userInfo?.displayName || 'there';
 
         return `You are Gitu, a helpful AI assistant for NotebookLLM.
+
+${SOUL_DOCUMENT}
+
 You are talking to ${userName}.
 Be helpful, concise, and friendly.`;
     }
@@ -285,7 +292,8 @@ Example: "Run my daily report plugin" → use learn_plugin first, then run_user_
     private async getUserPlugins(userId: string): Promise<Array<{ name: string; description: string }>> {
         try {
             const plugins = await gituPluginSystem.listPlugins(userId, { enabled: true });
-            return plugins.map(p => ({
+            const eligible = plugins.filter(p => !(p.config?.disableModelInvocation === true));
+            return eligible.map(p => ({
                 name: p.name,
                 description: p.description || 'No description',
             }));

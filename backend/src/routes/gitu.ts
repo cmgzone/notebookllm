@@ -19,11 +19,13 @@ import { gituPluginSystem } from '../services/gituPluginSystem.js';
 import { gituTerminalService } from '../services/gituTerminalService.js';
 import { gituRemoteTerminalService } from '../services/gituRemoteTerminalService.js';
 import { gituGmailManager } from '../services/gituGmailManager.js';
+import { gituGoogleCalendarManager } from '../services/gituGoogleCalendarManager.js';
 import { gituShopifyManager } from '../services/gituShopifyManager.js';
 import { gituAgentManager } from '../services/gituAgentManager.js';
 import { gituMemoryService } from '../services/gituMemoryService.js';
 import { gituProactiveService } from '../services/gituProactiveService.js';
 import { whatsappAdapter } from '../adapters/whatsappAdapter.js';
+import { telegramAdapter } from '../adapters/telegramAdapter.js';
 import {
   listMessages as gmailList,
   getMessage as gmailGet,
@@ -366,6 +368,58 @@ router.post('/whatsapp/link-current', async (req: AuthRequest, res: Response) =>
     res.json({ success: true, platformUserId: account.jid, displayName });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to link WhatsApp account', message: error.message });
+  }
+});
+
+router.get('/telegram/status', async (req: AuthRequest, res: Response) => {
+  try {
+    const state = telegramAdapter.getConnectionState();
+    const botInfo = await telegramAdapter.getBotInfo();
+    const linked = await pool.query(
+      `SELECT platform_user_id, display_name, status
+       FROM gitu_linked_accounts
+       WHERE user_id = $1 AND platform = 'telegram' AND status = 'active'
+       ORDER BY last_used_at DESC NULLS LAST
+       LIMIT 1`,
+      [req.userId!]
+    );
+
+    res.json({
+      success: true,
+      status: state,
+      bot: botInfo?.username ? `@${botInfo.username}` : null,
+      platformUserId: linked.rows[0]?.platform_user_id || null,
+      displayName: linked.rows[0]?.display_name || null,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to get Telegram status', message: error.message });
+  }
+});
+
+router.post('/telegram/link', async (req: AuthRequest, res: Response) => {
+  try {
+    const { telegramUserId, displayName } = req.body as any;
+    if (!telegramUserId || typeof telegramUserId !== 'string') {
+      return res.status(400).json({ error: 'telegramUserId is required' });
+    }
+
+    const name = typeof displayName === 'string' && displayName.trim().length > 0 ? displayName.trim() : 'Telegram';
+
+    await pool.query(
+      `INSERT INTO gitu_linked_accounts (user_id, platform, platform_user_id, display_name, verified, status)
+       VALUES ($1, 'telegram', $2, $3, true, 'active')
+       ON CONFLICT (platform, platform_user_id) DO UPDATE
+       SET user_id = EXCLUDED.user_id,
+           display_name = EXCLUDED.display_name,
+           verified = true,
+           status = 'active',
+           last_used_at = NOW()`,
+      [req.userId!, telegramUserId.trim(), name]
+    );
+
+    res.status(201).json({ success: true, platformUserId: telegramUserId.trim(), displayName: name });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to link Telegram account', message: error.message });
   }
 });
 
@@ -1468,6 +1522,72 @@ router.get('/shell/audit-logs', async (req: AuthRequest, res: Response) => {
 
 // ==================== GMAIL OAUTH ====================
 const gmailStates = new Map<string, { userId: string; expiresAt: number }>();
+const calendarStates = new Map<string, { userId: string; expiresAt: number }>();
+
+router.get('/calendar/status', async (req: AuthRequest, res: Response) => {
+  try {
+    const connected = await gituGoogleCalendarManager.isConnected(req.userId!);
+    const connection = connected ? await gituGoogleCalendarManager.getConnection(req.userId!) : null;
+    res.json({
+      success: true,
+      connected,
+      connection: connection ? {
+        email: connection.email,
+        scopes: connection.scopes,
+        createdAt: connection.created_at,
+        lastUsedAt: connection.last_used_at,
+      } : null,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to check Google Calendar status', message: error.message });
+  }
+});
+
+router.post('/calendar/disconnect', async (req: AuthRequest, res: Response) => {
+  try {
+    await gituGoogleCalendarManager.disconnect(req.userId!);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to disconnect Google Calendar', message: error.message });
+  }
+});
+
+router.get('/calendar/auth-url', async (req: AuthRequest, res: Response) => {
+  try {
+    const state = uuidv4();
+    calendarStates.set(state, { userId: req.userId!, expiresAt: Date.now() + 10 * 60 * 1000 });
+    const authUrl = gituGoogleCalendarManager.getAuthUrl(state);
+    res.json({ success: true, authUrl, state });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to get Google Calendar auth URL', message: error.message });
+  }
+});
+
+router.get('/calendar/callback', async (req: any, res: any) => {
+  try {
+    const { code, state, error } = req.query;
+    if (error) {
+      return res.redirect(`/settings?calendar_error=${encodeURIComponent(error as string)}`);
+    }
+    if (!code || !state) {
+      return res.redirect('/settings?calendar_error=missing_params');
+    }
+    const stateData = calendarStates.get(state as string);
+    if (!stateData || stateData.expiresAt < Date.now()) {
+      calendarStates.delete(state as string);
+      return res.redirect('/settings?calendar_error=invalid_state');
+    }
+    const userId = stateData.userId;
+    calendarStates.delete(state as string);
+
+    const tokenData = await gituGoogleCalendarManager.exchangeCodeForToken(code as string);
+    await gituGoogleCalendarManager.connect(userId, tokenData);
+
+    res.redirect('/settings?calendar_connected=true');
+  } catch (error: any) {
+    res.redirect(`/settings?calendar_error=${encodeURIComponent(error.message)}`);
+  }
+});
 
 router.get('/gmail/status', async (req: AuthRequest, res: Response) => {
   try {

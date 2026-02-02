@@ -43,7 +43,8 @@ const listUserPluginsTool: MCPTool = {
                 name: p.name,
                 description: p.description || 'No description provided',
                 enabled: p.enabled,
-                entrypoint: p.entrypoint
+                entrypoint: p.entrypoint,
+                disableModelInvocation: Boolean(p.config?.disableModelInvocation)
             })),
             message: `Found ${plugins.length} custom plugin(s). You can run them using the run_user_plugin tool.`
         };
@@ -338,6 +339,62 @@ function analyzePluginCode(code: string): {
     return { usesFiles, usesShell, expectedInputFields, returnType };
 }
 
+const setPluginModelInvocationTool: MCPTool = {
+    name: 'set_plugin_model_invocation',
+    description: 'Enable or disable including a plugin in the AI model prompt. When disabled, the plugin can still be run by the user via run_user_plugin.',
+    schema: {
+        type: 'object',
+        properties: {
+            pluginId: { type: 'string', description: 'The ID of the plugin to update' },
+            pluginName: { type: 'string', description: 'The name of the plugin to update (if ID not known)' },
+            disableModelInvocation: { type: 'boolean', description: 'When true, exclude from model prompt (still user-invocable)' }
+        },
+        required: ['disableModelInvocation']
+    },
+    handler: async (args: any, context: MCPContext) => {
+        const { pluginId, pluginName, disableModelInvocation } = args;
+
+        if (!pluginId && !pluginName) {
+            throw new Error('Please provide either pluginId or pluginName');
+        }
+
+        let targetPluginId = pluginId as string | undefined;
+
+        if (!targetPluginId && pluginName) {
+            const plugins = await gituPluginSystem.listPlugins(context.userId);
+            const match = plugins.find(p => p.name.toLowerCase().includes(String(pluginName).toLowerCase()));
+            if (!match) {
+                throw new Error(`No plugin found matching "${pluginName}"`);
+            }
+            targetPluginId = match.id;
+        }
+
+        if (!targetPluginId) {
+            throw new Error('Plugin not found');
+        }
+
+        const existing = await gituPluginSystem.getPlugin(context.userId, targetPluginId);
+        if (!existing) {
+            throw new Error('Plugin not found');
+        }
+
+        const existingConfig = (typeof existing.config === 'object' && existing.config !== null && !Array.isArray(existing.config))
+            ? existing.config
+            : {};
+
+        const updated = await gituPluginSystem.updatePlugin(context.userId, targetPluginId, {
+            config: { ...existingConfig, disableModelInvocation: Boolean(disableModelInvocation) }
+        });
+
+        return {
+            success: true,
+            pluginId: updated.id,
+            name: updated.name,
+            disableModelInvocation: Boolean(updated.config?.disableModelInvocation)
+        };
+    }
+};
+
 /**
  * Tool: Create Container Plugin
  * Allows the AI to help users create new secure containerized plugins
@@ -414,7 +471,8 @@ export function registerPluginMCPTools() {
     gituMCPHub.registerTool(runUserPluginTool);
     gituMCPHub.registerTool(createUserPluginTool);
     gituMCPHub.registerTool(createContainerPluginTool); // New tool
+    gituMCPHub.registerTool(setPluginModelInvocationTool);
     gituMCPHub.registerTool(deleteUserPluginTool);
     gituMCPHub.registerTool(learnPluginTool);
-    console.log('[PluginMCPTools] Registered user plugin tools (list, run, create, create_container, delete, learn)');
+    console.log('[PluginMCPTools] Registered user plugin tools (list, run, create, create_container, set_plugin_model_invocation, delete, learn)');
 }
