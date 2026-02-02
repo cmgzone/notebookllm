@@ -41,6 +41,16 @@ export interface UserQuota {
   isMcpEnabled: boolean;
 }
 
+export interface UserMcpLimitOverrides {
+  userId: string;
+  sourcesLimitOverride: number | null;
+  tokensLimitOverride: number | null;
+  apiCallsPerDayOverride: number | null;
+  isMcpEnabledOverride: boolean | null;
+  updatedAt: Date;
+  updatedBy: string | null;
+}
+
 class McpLimitsService {
   /**
    * Get MCP settings
@@ -199,14 +209,86 @@ class McpLimitsService {
     return !result.rows[0].is_free_plan;
   }
 
+  async getUserLimitOverrides(userId: string): Promise<UserMcpLimitOverrides | null> {
+    try {
+      const res = await pool.query(
+        `SELECT user_id, sources_limit_override, tokens_limit_override, api_calls_per_day_override, is_mcp_enabled_override, updated_at, updated_by
+         FROM mcp_user_limits
+         WHERE user_id = $1`,
+        [userId]
+      );
+      if (res.rows.length === 0) return null;
+      const row = res.rows[0];
+      return {
+        userId: row.user_id,
+        sourcesLimitOverride: row.sources_limit_override ?? null,
+        tokensLimitOverride: row.tokens_limit_override ?? null,
+        apiCallsPerDayOverride: row.api_calls_per_day_override ?? null,
+        isMcpEnabledOverride: row.is_mcp_enabled_override ?? null,
+        updatedAt: row.updated_at,
+        updatedBy: row.updated_by ?? null,
+      };
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (msg.toLowerCase().includes('mcp_user_limits') && msg.toLowerCase().includes('does not exist')) {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  async upsertUserLimitOverrides(
+    userId: string,
+    overrides: Partial<Pick<UserMcpLimitOverrides, 'sourcesLimitOverride' | 'tokensLimitOverride' | 'apiCallsPerDayOverride' | 'isMcpEnabledOverride'>>,
+    adminUserId: string
+  ): Promise<UserMcpLimitOverrides> {
+    const existing = await this.getUserLimitOverrides(userId);
+    const sources = overrides.sourcesLimitOverride !== undefined ? overrides.sourcesLimitOverride : existing?.sourcesLimitOverride ?? null;
+    const tokens = overrides.tokensLimitOverride !== undefined ? overrides.tokensLimitOverride : existing?.tokensLimitOverride ?? null;
+    const apiCalls = overrides.apiCallsPerDayOverride !== undefined ? overrides.apiCallsPerDayOverride : existing?.apiCallsPerDayOverride ?? null;
+    const enabled = overrides.isMcpEnabledOverride !== undefined ? overrides.isMcpEnabledOverride : existing?.isMcpEnabledOverride ?? null;
+
+    await pool.query(
+      `INSERT INTO mcp_user_limits (user_id, sources_limit_override, tokens_limit_override, api_calls_per_day_override, is_mcp_enabled_override, updated_at, updated_by)
+       VALUES ($1,$2,$3,$4,$5,NOW(),$6)
+       ON CONFLICT (user_id) DO UPDATE SET
+         sources_limit_override = EXCLUDED.sources_limit_override,
+         tokens_limit_override = EXCLUDED.tokens_limit_override,
+         api_calls_per_day_override = EXCLUDED.api_calls_per_day_override,
+         is_mcp_enabled_override = EXCLUDED.is_mcp_enabled_override,
+         updated_at = NOW(),
+         updated_by = EXCLUDED.updated_by`,
+      [userId, sources, tokens, apiCalls, enabled, adminUserId]
+    );
+
+    const updated = await this.getUserLimitOverrides(userId);
+    if (!updated) {
+      throw new Error('FAILED_TO_UPDATE_USER_LIMITS');
+    }
+    return updated;
+  }
+
+  async clearUserLimitOverrides(userId: string): Promise<void> {
+    try {
+      await pool.query(`DELETE FROM mcp_user_limits WHERE user_id = $1`, [userId]);
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (msg.toLowerCase().includes('mcp_user_limits') && msg.toLowerCase().includes('does not exist')) {
+        return;
+      }
+      throw err;
+    }
+  }
+
   /**
    * Get user's quota information
    */
   async getUserQuota(userId: string): Promise<UserQuota> {
-    const [settings, usage, isPremium] = await Promise.all([
+    const [settings, usage, isPremium, overrides] = await Promise.all([
       this.getSettings(),
       this.getUserUsage(userId),
       this.isUserPremium(userId),
+      this.getUserLimitOverrides(userId),
     ]);
 
     // Get actual token count (active = not revoked)
@@ -216,9 +298,21 @@ class McpLimitsService {
     );
     const tokensUsed = parseInt(tokensResult.rows[0].count) || 0;
 
-    const sourcesLimit = isPremium ? settings.premiumSourcesLimit : settings.freeSourcesLimit;
-    const tokensLimit = isPremium ? settings.premiumTokensLimit : settings.freeTokensLimit;
-    const apiCallsLimit = isPremium ? settings.premiumApiCallsPerDay : settings.freeApiCallsPerDay;
+    const baseSourcesLimit = isPremium ? settings.premiumSourcesLimit : settings.freeSourcesLimit;
+    const baseTokensLimit = isPremium ? settings.premiumTokensLimit : settings.freeTokensLimit;
+    const baseApiCallsLimit = isPremium ? settings.premiumApiCallsPerDay : settings.freeApiCallsPerDay;
+
+    const sourcesLimit =
+      typeof overrides?.sourcesLimitOverride === 'number' ? overrides.sourcesLimitOverride : baseSourcesLimit;
+    const tokensLimit =
+      typeof overrides?.tokensLimitOverride === 'number' ? overrides.tokensLimitOverride : baseTokensLimit;
+    const apiCallsLimit =
+      typeof overrides?.apiCallsPerDayOverride === 'number' ? overrides.apiCallsPerDayOverride : baseApiCallsLimit;
+
+    const isMcpEnabled =
+      settings.isMcpEnabled && (overrides?.isMcpEnabledOverride === null || overrides?.isMcpEnabledOverride === undefined
+        ? true
+        : overrides.isMcpEnabledOverride === true);
 
     return {
       sourcesLimit,
@@ -231,7 +325,7 @@ class McpLimitsService {
       apiCallsUsed: usage.apiCallsToday,
       apiCallsRemaining: Math.max(0, apiCallsLimit - usage.apiCallsToday),
       isPremium,
-      isMcpEnabled: settings.isMcpEnabled,
+      isMcpEnabled,
     };
   }
 

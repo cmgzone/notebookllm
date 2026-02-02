@@ -98,7 +98,7 @@ export default function McpSettings() {
             )}
 
             {activeTab === 'usage' && (
-                <UsageTab users={users} onRefresh={fetchData} />
+                <UsageTab users={users} settings={settings} onRefresh={fetchData} />
             )}
 
             {activeTab === 'stats' && (
@@ -249,7 +249,57 @@ function SettingsTab({ settings, updateSetting, onSave, saving }) {
     );
 }
 
-function UsageTab({ users, onRefresh }) {
+function UsageTab({ users, settings, onRefresh }) {
+    const [editingUser, setEditingUser] = useState(null);
+    const [apiCallsOverride, setApiCallsOverride] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    const openEditor = (user) => {
+        setEditingUser(user);
+        const current = user?.limitsOverride?.apiCallsPerDayOverride;
+        setApiCallsOverride(current === null || current === undefined ? '' : String(current));
+    };
+
+    const closeEditor = () => {
+        setEditingUser(null);
+        setApiCallsOverride('');
+        setSaving(false);
+    };
+
+    const saveOverride = async () => {
+        if (!editingUser) return;
+        const raw = apiCallsOverride.trim();
+        const value = raw.length === 0 ? null : parseInt(raw, 10);
+        if (value !== null && (!Number.isFinite(value) || value < 0)) {
+            alert('API Calls/Day must be a number >= 0, or blank to clear.');
+            return;
+        }
+        setSaving(true);
+        try {
+            await api.updateMcpUserLimits(editingUser.id, { apiCallsPerDayOverride: value });
+            await onRefresh();
+            closeEditor();
+        } catch (err) {
+            console.error(err);
+            alert('Failed to update user limits');
+            setSaving(false);
+        }
+    };
+
+    const clearOverride = async () => {
+        if (!editingUser) return;
+        setSaving(true);
+        try {
+            await api.updateMcpUserLimits(editingUser.id, { apiCallsPerDayOverride: null });
+            await onRefresh();
+            closeEditor();
+        } catch (err) {
+            console.error(err);
+            alert('Failed to clear user limit override');
+            setSaving(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -275,18 +325,28 @@ function UsageTab({ users, onRefresh }) {
                             <th className="py-3 px-4 text-center text-sm font-semibold">Sources</th>
                             <th className="py-3 px-4 text-center text-sm font-semibold">Tokens</th>
                             <th className="py-3 px-4 text-center text-sm font-semibold">API Calls Today</th>
+                            <th className="py-3 px-4 text-center text-sm font-semibold">API Limit</th>
                             <th className="py-3 px-4 text-left text-sm font-semibold">Last Activity</th>
+                            <th className="py-3 px-4 text-right text-sm font-semibold">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                         {users.length === 0 ? (
                             <tr>
-                                <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                                <td colSpan={8} className="py-8 text-center text-muted-foreground">
                                     No MCP usage data yet.
                                 </td>
                             </tr>
                         ) : (
                             users.map((user) => (
+                                (() => {
+                                    const baseLimit = user.isPremium
+                                        ? (settings?.premiumApiCallsPerDay ?? null)
+                                        : (settings?.freeApiCallsPerDay ?? null);
+                                    const override = user?.limitsOverride?.apiCallsPerDayOverride;
+                                    const effectiveLimit = override ?? baseLimit;
+                                    const hasOverride = override !== null && override !== undefined;
+                                    return (
                                 <tr key={user.id} className="hover:bg-muted/30">
                                     <td className="py-3 px-4">
                                         <div className="font-medium">{user.displayName || 'N/A'}</div>
@@ -304,17 +364,85 @@ function UsageTab({ users, onRefresh }) {
                                     <td className="py-3 px-4 text-center font-mono">{user.sourcesCount}</td>
                                     <td className="py-3 px-4 text-center font-mono">{user.activeTokens}</td>
                                     <td className="py-3 px-4 text-center font-mono">{user.apiCallsToday}</td>
+                                    <td className="py-3 px-4 text-center font-mono">
+                                        <span className={hasOverride ? 'text-amber-500' : ''}>
+                                            {effectiveLimit ?? '—'}
+                                        </span>
+                                    </td>
                                     <td className="py-3 px-4 text-sm text-muted-foreground">
                                         {user.lastApiCallDate
                                             ? new Date(user.lastApiCallDate).toLocaleDateString()
                                             : 'Never'}
                                     </td>
+                                    <td className="py-3 px-4 text-right">
+                                        <button
+                                            onClick={() => openEditor(user)}
+                                            className="px-3 py-1.5 rounded-md bg-secondary hover:bg-secondary/80 text-xs"
+                                        >
+                                            Edit Limit
+                                        </button>
+                                    </td>
                                 </tr>
+                                    );
+                                })()
                             ))
                         )}
                     </tbody>
                 </table>
             </div>
+
+            {editingUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                    <div className="w-full max-w-lg rounded-lg bg-card border border-border p-6 space-y-4">
+                        <div>
+                            <div className="text-lg font-semibold">Edit User Tool Call Limit</div>
+                            <div className="text-sm text-muted-foreground">
+                                {editingUser.email}
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium">API Calls per Day (override)</label>
+                            <input
+                                type="number"
+                                min="0"
+                                value={apiCallsOverride}
+                                onChange={(e) => setApiCallsOverride(e.target.value)}
+                                placeholder="Leave blank to use plan default"
+                                className="w-full rounded-md border border-border bg-background p-2"
+                            />
+                            <div className="text-xs text-muted-foreground">
+                                Blank = use plan default. This affects Gitu tool calling quota.
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-2">
+                            <button
+                                onClick={closeEditor}
+                                disabled={saving}
+                                className="px-4 py-2 rounded-md bg-muted hover:bg-muted/80 text-sm disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={clearOverride}
+                                disabled={saving}
+                                className="px-4 py-2 rounded-md bg-secondary hover:bg-secondary/80 text-sm disabled:opacity-50"
+                            >
+                                Clear
+                            </button>
+                            <button
+                                onClick={saveOverride}
+                                disabled={saving}
+                                className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

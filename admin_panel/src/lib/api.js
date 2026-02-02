@@ -311,6 +311,18 @@ class ApiService {
         return this.get('/admin/mcp-stats');
     }
 
+    async getMcpUserLimits(userId) {
+        return this.get(`/admin/mcp-user-limits/${userId}`);
+    }
+
+    async updateMcpUserLimits(userId, overrides) {
+        return this.put(`/admin/mcp-user-limits/${userId}`, overrides);
+    }
+
+    async clearMcpUserLimits(userId) {
+        return this.delete(`/admin/mcp-user-limits/${userId}`);
+    }
+
     // ============ ADMIN - NOTIFICATIONS ============
     async sendBroadcastNotification(title, body, type = 'system', actionUrl) {
         return this.post('/admin/notifications/broadcast', { title, body, type, actionUrl });

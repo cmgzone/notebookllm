@@ -708,22 +708,54 @@ router.get('/mcp-usage', async (req: AuthRequest, res: Response) => {
         const limit = parseInt(req.query.limit as string) || 50;
         const offset = parseInt(req.query.offset as string) || 0;
 
-        // Get all users with their MCP usage - simplified query
-        const result = await pool.query(`
+        let supportsUserLimits = true;
+        let result;
+        try {
+            result = await pool.query(`
             SELECT 
                 u.id, u.email, u.display_name,
                 COALESCE(umu.sources_count, 0) as sources_count,
                 COALESCE(umu.api_calls_today, 0) as api_calls_today,
                 umu.last_api_call_date,
                 sp.name as plan_name,
-                sp.is_free_plan
+                sp.is_free_plan,
+                mul.sources_limit_override,
+                mul.tokens_limit_override,
+                mul.api_calls_per_day_override,
+                mul.is_mcp_enabled_override,
+                mul.updated_at as limits_updated_at,
+                mul.updated_by as limits_updated_by
             FROM users u
             LEFT JOIN user_mcp_usage umu ON u.id = umu.user_id
             LEFT JOIN user_subscriptions us ON u.id = us.user_id
             LEFT JOIN subscription_plans sp ON us.plan_id = sp.id
+            LEFT JOIN mcp_user_limits mul ON u.id = mul.user_id
             ORDER BY COALESCE(umu.sources_count, 0) DESC, u.created_at DESC
             LIMIT $1 OFFSET $2
-        `, [limit, offset]);
+            `, [limit, offset]);
+        } catch (e) {
+            const msg = String((e as any)?.message || '').toLowerCase();
+            if (msg.includes('mcp_user_limits') && msg.includes('does not exist')) {
+                supportsUserLimits = false;
+                result = await pool.query(`
+                    SELECT 
+                        u.id, u.email, u.display_name,
+                        COALESCE(umu.sources_count, 0) as sources_count,
+                        COALESCE(umu.api_calls_today, 0) as api_calls_today,
+                        umu.last_api_call_date,
+                        sp.name as plan_name,
+                        sp.is_free_plan
+                    FROM users u
+                    LEFT JOIN user_mcp_usage umu ON u.id = umu.user_id
+                    LEFT JOIN user_subscriptions us ON u.id = us.user_id
+                    LEFT JOIN subscription_plans sp ON us.plan_id = sp.id
+                    ORDER BY COALESCE(umu.sources_count, 0) DESC, u.created_at DESC
+                    LIMIT $1 OFFSET $2
+                `, [limit, offset]);
+            } else {
+                throw e;
+            }
+        }
 
         const countResult = await pool.query('SELECT COUNT(*) FROM users');
 
@@ -759,12 +791,111 @@ router.get('/mcp-usage', async (req: AuthRequest, res: Response) => {
                 planName: row.plan_name || 'Free',
                 isPremium: !row.is_free_plan,
                 activeTokens: tokenCounts[row.id] || 0,
+                limitsOverride: supportsUserLimits ? {
+                    sourcesLimitOverride: (row as any).sources_limit_override ?? null,
+                    tokensLimitOverride: (row as any).tokens_limit_override ?? null,
+                    apiCallsPerDayOverride: (row as any).api_calls_per_day_override ?? null,
+                    isMcpEnabledOverride: (row as any).is_mcp_enabled_override ?? null,
+                    updatedAt: (row as any).limits_updated_at ?? null,
+                    updatedBy: (row as any).limits_updated_by ?? null,
+                } : null
             })),
             total: parseInt(countResult.rows[0].count),
         });
     } catch (error) {
         console.error('Error fetching MCP usage:', error);
         res.status(500).json({ error: 'Failed to fetch MCP usage' });
+    }
+});
+
+router.get('/mcp-user-limits/:userId', async (req: AuthRequest, res: Response) => {
+    try {
+        const targetUserId = req.params.userId;
+        const overrides = await mcpLimitsService.getUserLimitOverrides(targetUserId);
+        const quota = await mcpLimitsService.getUserQuota(targetUserId);
+        res.json({ success: true, userId: targetUserId, overrides, quota });
+    } catch (error) {
+        console.error('Error fetching MCP user limits:', error);
+        res.status(500).json({ error: 'Failed to fetch MCP user limits' });
+    }
+});
+
+router.put('/mcp-user-limits/:userId', async (req: AuthRequest, res: Response) => {
+    try {
+        const adminUserId = req.userId!;
+        const targetUserId = req.params.userId;
+        const body = req.body || {};
+
+        const sourcesLimitOverride = body.sourcesLimitOverride ?? body.sources_limit_override;
+        const tokensLimitOverride = body.tokensLimitOverride ?? body.tokens_limit_override;
+        const apiCallsPerDayOverride = body.apiCallsPerDayOverride ?? body.api_calls_per_day_override;
+        const isMcpEnabledOverride = body.isMcpEnabledOverride ?? body.is_mcp_enabled_override;
+
+        const parseIntOrNull = (v: any) => {
+            if (v === null) return null;
+            if (v === undefined) return undefined;
+            const n = typeof v === 'number' ? v : parseInt(String(v), 10);
+            if (!Number.isFinite(n)) return undefined;
+            return n;
+        };
+
+        const parsedSources = parseIntOrNull(sourcesLimitOverride);
+        const parsedTokens = parseIntOrNull(tokensLimitOverride);
+        const parsedApiCalls = parseIntOrNull(apiCallsPerDayOverride);
+
+        const overrides: any = {};
+        if (parsedSources !== undefined) {
+            if (parsedSources !== null && parsedSources < 0) return res.status(400).json({ error: 'sourcesLimitOverride must be >= 0 or null' });
+            overrides.sourcesLimitOverride = parsedSources;
+        }
+        if (parsedTokens !== undefined) {
+            if (parsedTokens !== null && parsedTokens < 0) return res.status(400).json({ error: 'tokensLimitOverride must be >= 0 or null' });
+            overrides.tokensLimitOverride = parsedTokens;
+        }
+        if (parsedApiCalls !== undefined) {
+            if (parsedApiCalls !== null && parsedApiCalls < 0) return res.status(400).json({ error: 'apiCallsPerDayOverride must be >= 0 or null' });
+            overrides.apiCallsPerDayOverride = parsedApiCalls;
+        }
+        if (isMcpEnabledOverride !== undefined) {
+            if (isMcpEnabledOverride !== null && typeof isMcpEnabledOverride !== 'boolean') {
+                return res.status(400).json({ error: 'isMcpEnabledOverride must be boolean or null' });
+            }
+            overrides.isMcpEnabledOverride = isMcpEnabledOverride;
+        }
+
+        const allClearing =
+            ('sourcesLimitOverride' in overrides ? overrides.sourcesLimitOverride === null : false) &&
+            ('tokensLimitOverride' in overrides ? overrides.tokensLimitOverride === null : false) &&
+            ('apiCallsPerDayOverride' in overrides ? overrides.apiCallsPerDayOverride === null : false) &&
+            ('isMcpEnabledOverride' in overrides ? overrides.isMcpEnabledOverride === null : false);
+
+        if (Object.keys(overrides).length === 0) {
+            return res.status(400).json({ error: 'No overrides provided' });
+        }
+
+        if (allClearing) {
+            await mcpLimitsService.clearUserLimitOverrides(targetUserId);
+            const quota = await mcpLimitsService.getUserQuota(targetUserId);
+            return res.json({ success: true, userId: targetUserId, overrides: null, quota });
+        }
+
+        const updated = await mcpLimitsService.upsertUserLimitOverrides(targetUserId, overrides, adminUserId);
+        const quota = await mcpLimitsService.getUserQuota(targetUserId);
+        res.json({ success: true, userId: targetUserId, overrides: updated, quota });
+    } catch (error) {
+        console.error('Error updating MCP user limits:', error);
+        res.status(500).json({ error: 'Failed to update MCP user limits' });
+    }
+});
+
+router.delete('/mcp-user-limits/:userId', async (req: AuthRequest, res: Response) => {
+    try {
+        const targetUserId = req.params.userId;
+        await mcpLimitsService.clearUserLimitOverrides(targetUserId);
+        res.json({ success: true, userId: targetUserId });
+    } catch (error) {
+        console.error('Error clearing MCP user limits:', error);
+        res.status(500).json({ error: 'Failed to clear MCP user limits' });
     }
 });
 
