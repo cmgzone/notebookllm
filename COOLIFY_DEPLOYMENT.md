@@ -31,6 +31,8 @@ Once the repository is loaded, configure the following settings:
 
 Navigate to the **Environment Variables** tab of your new service and add the following keys. **You must replace the placeholder values with your actual secrets.**
 
+Important: in Coolify, each environment variable must be in `KEY=VALUE` form (one per line). Do not prefix lines with `-` or wrap values in backticks, otherwise the build container will treat them like shell commands and fail.
+
 ```env
 # Server Configuration
 PORT=3000
@@ -49,6 +51,11 @@ OPENROUTER_API_KEY=your-openrouter-api-key
 
 # Search & content fetching (Required for Research features)
 SERPER_API_KEY=your-serper-api-key
+
+# Google Calendar OAuth (Optional)
+GOOGLE_CALENDAR_CLIENT_ID=your-google-calendar-client-id
+GOOGLE_CALENDAR_CLIENT_SECRET=your-google-calendar-client-secret
+GOOGLE_CALENDAR_REDIRECT_URI=https://backend.taskiumnetwork.com/api/gitu/calendar/callback
 
 # Optional Integrations (Add if you use them)
 # Audio

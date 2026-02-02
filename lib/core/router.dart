@@ -67,6 +67,7 @@ import '../features/gitu/scheduled_tasks_screen.dart';
 import '../features/gitu/rules_screen.dart';
 import '../features/gitu/plugins_screen.dart';
 import '../features/gitu/gmail_connection_screen.dart';
+import '../features/gitu/google_calendar_connection_screen.dart';
 import '../features/gitu/shopify_connection_screen.dart';
 import '../features/gitu/file_permissions_screen.dart';
 import '../features/gitu/permissions_screen.dart';
@@ -243,6 +244,12 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
                 buildTransitionPage(child: const GmailConnectionScreen()),
           ),
           GoRoute(
+            path: '/gitu-calendar',
+            name: 'gitu-calendar',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GoogleCalendarConnectionScreen()),
+          ),
+          GoRoute(
             path: '/gitu-shopify',
             name: 'gitu-shopify',
             pageBuilder: (context, state) =>
@@ -309,6 +316,12 @@ GoRouter createRouter(bool hasSeenOnboarding, ProviderContainer container) {
             name: 'gitu-gmail-alias',
             pageBuilder: (context, state) =>
                 buildTransitionPage(child: const GmailConnectionScreen()),
+          ),
+          GoRoute(
+            path: '/gitu/calendar',
+            name: 'gitu-calendar-alias',
+            pageBuilder: (context, state) =>
+                buildTransitionPage(child: const GoogleCalendarConnectionScreen()),
           ),
           // API key management has been moved to the web admin panel
           // Users can no longer manage API keys from the mobile app

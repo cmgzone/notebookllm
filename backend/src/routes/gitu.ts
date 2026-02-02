@@ -251,7 +251,11 @@ router.post('/terminal/source', authenticateToken, async (req: AuthRequest, res:
   }
 });
 
-router.use(authenticateToken);
+router.use((req, res, next) => {
+  const p = req.path;
+  if (p === '/gmail/callback' || p === '/calendar/callback') return next();
+  return authenticateToken(req as any, res as any, next as any);
+});
 
 router.get('/settings', async (req: AuthRequest, res: Response) => {
   try {

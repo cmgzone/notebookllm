@@ -309,6 +309,14 @@ class GituSettingsScreen extends ConsumerWidget {
               ),
               const Divider(height: 1),
               ListTile(
+                leading: const Icon(Icons.calendar_month_outlined),
+                title: const Text('Google Calendar'),
+                subtitle: const Text('Connect for events and scheduling'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/gitu-calendar'),
+              ),
+              const Divider(height: 1),
+              ListTile(
                 leading: const Icon(Icons.shopping_bag_outlined),
                 title: const Text('Shopify'),
                 subtitle: const Text('Manage orders, products, and inventory'),
