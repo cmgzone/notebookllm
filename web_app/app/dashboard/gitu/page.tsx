@@ -592,9 +592,19 @@ function SettingsTab({ settings, aiModels, onRefresh }: {
     onRefresh: () => void;
 }) {
     const [isSaving, setIsSaving] = useState(false);
-    const [apiKeySource, setApiKeySource] = useState<'platform' | 'personal'>(settings?.modelPreferences.apiKeySource || 'platform');
-    const [personalKeys, setPersonalKeys] = useState<Record<string, string>>(settings?.modelPreferences.personalKeys || {});
+    const [apiKeySource, setApiKeySource] = useState<'platform' | 'personal'>('platform');
+    const [defaultModel, setDefaultModel] = useState<string>('default');
+    const [taskSpecificModels, setTaskSpecificModels] = useState<Record<string, string>>({});
+    const [personalKeys, setPersonalKeys] = useState<Record<string, string>>({});
     const [showKey, setShowKey] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!settings) return;
+        setApiKeySource(settings.modelPreferences.apiKeySource || 'platform');
+        setDefaultModel(settings.modelPreferences.defaultModel || 'default');
+        setTaskSpecificModels(settings.modelPreferences.taskSpecificModels || {});
+        setPersonalKeys(settings.modelPreferences.personalKeys || {});
+    }, [settings]);
 
     const handleSave = async () => {
         if (!settings) return;
@@ -604,6 +614,8 @@ function SettingsTab({ settings, aiModels, onRefresh }: {
                 modelPreferences: {
                     ...settings.modelPreferences,
                     apiKeySource,
+                    defaultModel,
+                    taskSpecificModels,
                     personalKeys,
                 }
             });
@@ -625,6 +637,57 @@ function SettingsTab({ settings, aiModels, onRefresh }: {
                 </h3>
 
                 <div className="rounded-3xl border border-white/5 bg-neutral-900/50 p-8 backdrop-blur-sm space-y-8">
+                    <div className="space-y-4">
+                        <label className="text-sm font-bold text-neutral-400 uppercase tracking-widest">Model Routing</label>
+                        <div className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-neutral-500 uppercase tracking-tighter ml-1">Default Model</label>
+                                <select
+                                    value={defaultModel}
+                                    onChange={(e) => setDefaultModel(e.target.value)}
+                                    className="w-full p-4 rounded-2xl bg-neutral-950 border border-white/5 focus:border-blue-500 outline-none transition-all text-sm"
+                                >
+                                    <option value="default">Auto (recommended)</option>
+                                    {aiModels.map((m) => (
+                                        <option key={m.modelId} value={m.modelId}>
+                                            {m.name} ({m.provider})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="text-xs font-bold text-neutral-500 uppercase tracking-tighter ml-1">Per-Task Model Overrides</div>
+                                <div className="grid md:grid-cols-2 gap-4">
+                                    {([
+                                        { key: "chat", label: "Chat" },
+                                        { key: "research", label: "Research" },
+                                        { key: "coding", label: "Coding" },
+                                        { key: "analysis", label: "Analysis" },
+                                        { key: "summarization", label: "Summarization" },
+                                        { key: "creative", label: "Creative" },
+                                    ] as const).map((t) => (
+                                        <div key={t.key} className="space-y-2">
+                                            <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-tighter ml-1">{t.label}</label>
+                                            <select
+                                                value={taskSpecificModels[t.key] || "default"}
+                                                onChange={(e) => setTaskSpecificModels({ ...taskSpecificModels, [t.key]: e.target.value })}
+                                                className="w-full p-3 rounded-2xl bg-neutral-950 border border-white/5 focus:border-blue-500 outline-none transition-all text-sm"
+                                            >
+                                                <option value="default">Use default</option>
+                                                {aiModels.map((m) => (
+                                                    <option key={`${t.key}:${m.modelId}`} value={m.modelId}>
+                                                        {m.name} ({m.provider})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="space-y-4">
                         <label className="text-sm font-bold text-neutral-400 uppercase tracking-widest">API Key Source</label>
                         <div className="grid sm:grid-cols-2 gap-4">
@@ -669,6 +732,14 @@ function SettingsTab({ settings, aiModels, onRefresh }: {
                                     isVisible={showKey === 'gemini'}
                                     toggleVisible={() => setShowKey(showKey === 'gemini' ? null : 'gemini')}
                                     onChange={(v) => setPersonalKeys({ ...personalKeys, gemini: v })}
+                                />
+                                <KeyField
+                                    label="OpenAI Key"
+                                    name="openai"
+                                    value={personalKeys.openai || ""}
+                                    isVisible={showKey === 'openai'}
+                                    toggleVisible={() => setShowKey(showKey === 'openai' ? null : 'openai')}
+                                    onChange={(v) => setPersonalKeys({ ...personalKeys, openai: v })}
                                 />
                                 <KeyField
                                     label="Anthropic Key"
