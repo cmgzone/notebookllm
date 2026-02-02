@@ -1527,6 +1527,13 @@ router.get('/shell/audit-logs', async (req: AuthRequest, res: Response) => {
 // ==================== GMAIL OAUTH ====================
 const gmailStates = new Map<string, { userId: string; expiresAt: number }>();
 const calendarStates = new Map<string, { userId: string; expiresAt: number }>();
+const htmlEscape = (v: unknown) =>
+  String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
 router.get('/calendar/status', async (req: AuthRequest, res: Response) => {
   try {
@@ -1571,15 +1578,15 @@ router.get('/calendar/callback', async (req: any, res: any) => {
   try {
     const { code, state, error } = req.query;
     if (error) {
-      return res.redirect(`/settings?calendar_error=${encodeURIComponent(error as string)}`);
+      return res.status(400).send(`<html><body><h3>Google Calendar connection failed</h3><p>${htmlEscape(error)}</p><p>You can close this window.</p></body></html>`);
     }
     if (!code || !state) {
-      return res.redirect('/settings?calendar_error=missing_params');
+      return res.status(400).send(`<html><body><h3>Google Calendar connection failed</h3><p>Missing parameters.</p><p>You can close this window.</p></body></html>`);
     }
     const stateData = calendarStates.get(state as string);
     if (!stateData || stateData.expiresAt < Date.now()) {
       calendarStates.delete(state as string);
-      return res.redirect('/settings?calendar_error=invalid_state');
+      return res.status(400).send(`<html><body><h3>Google Calendar connection failed</h3><p>Invalid or expired state.</p><p>You can close this window.</p></body></html>`);
     }
     const userId = stateData.userId;
     calendarStates.delete(state as string);
@@ -1587,9 +1594,9 @@ router.get('/calendar/callback', async (req: any, res: any) => {
     const tokenData = await gituGoogleCalendarManager.exchangeCodeForToken(code as string);
     await gituGoogleCalendarManager.connect(userId, tokenData);
 
-    res.redirect('/settings?calendar_connected=true');
+    res.status(200).send(`<html><body><h3>Google Calendar connected</h3><p>You can close this window and return to the app.</p></body></html>`);
   } catch (error: any) {
-    res.redirect(`/settings?calendar_error=${encodeURIComponent(error.message)}`);
+    res.status(500).send(`<html><body><h3>Google Calendar connection failed</h3><p>${htmlEscape(error?.message)}</p><p>You can close this window.</p></body></html>`);
   }
 });
 
@@ -1636,15 +1643,15 @@ router.get('/gmail/callback', async (req: any, res: any) => {
   try {
     const { code, state, error } = req.query;
     if (error) {
-      return res.redirect(`/settings?gmail_error=${encodeURIComponent(error as string)}`);
+      return res.status(400).send(`<html><body><h3>Gmail connection failed</h3><p>${htmlEscape(error)}</p><p>You can close this window.</p></body></html>`);
     }
     if (!code || !state) {
-      return res.redirect('/settings?gmail_error=missing_params');
+      return res.status(400).send(`<html><body><h3>Gmail connection failed</h3><p>Missing parameters.</p><p>You can close this window.</p></body></html>`);
     }
     const stateData = gmailStates.get(state as string);
     if (!stateData || stateData.expiresAt < Date.now()) {
       gmailStates.delete(state as string);
-      return res.redirect('/settings?gmail_error=invalid_state');
+      return res.status(400).send(`<html><body><h3>Gmail connection failed</h3><p>Invalid or expired state.</p><p>You can close this window.</p></body></html>`);
     }
     const userId = stateData.userId;
     gmailStates.delete(state as string);
@@ -1652,9 +1659,9 @@ router.get('/gmail/callback', async (req: any, res: any) => {
     const tokenData = await gituGmailManager.exchangeCodeForToken(code as string);
     await gituGmailManager.connect(userId, tokenData);
 
-    res.redirect('/settings?gmail_connected=true');
+    res.status(200).send(`<html><body><h3>Gmail connected</h3><p>You can close this window and return to the app.</p></body></html>`);
   } catch (error: any) {
-    res.redirect(`/settings?gmail_error=${encodeURIComponent(error.message)}`);
+    res.status(500).send(`<html><body><h3>Gmail connection failed</h3><p>${htmlEscape(error?.message)}</p><p>You can close this window.</p></body></html>`);
   }
 });
 
