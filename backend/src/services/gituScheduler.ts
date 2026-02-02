@@ -47,7 +47,9 @@ class GituScheduler {
 
   start() {
     if (this.interval) return;
-    this.interval = setInterval(() => this.tick(), 60_000);
+    this.interval = setInterval(() => {
+      this.tick().catch((err) => console.error('[GituScheduler] Tick failed:', err));
+    }, 60_000);
     console.log('🕒 GituScheduler started (tick every 60s)');
   }
 
@@ -112,16 +114,17 @@ class GituScheduler {
       description: row.description,
       action: action as AllowedAction,
       payload,
-      cron: row.cron,
+      cron: typeof row.cron === 'string' && row.cron.trim().length > 0 ? row.cron : '* * * * *',
       enabled: row.enabled,
-      maxRetries: row.max_retries,
-      retryCount: row.retry_count,
+      maxRetries: Number.isFinite(Number(row.max_retries)) ? Number(row.max_retries) : 0,
+      retryCount: Number.isFinite(Number(row.retry_count)) ? Number(row.retry_count) : 0,
       lastRunAt: row.last_run_at ? new Date(row.last_run_at) : undefined,
       lastRunStatus: row.last_run_status ?? undefined,
     };
   }
 
   private isDue(now: Date, cron: string, lastRun?: Date): boolean {
+    if (typeof cron !== 'string' || cron.trim().length === 0) return false;
     // cron format: "min hour day month weekday"
     const parts = cron.trim().split(/\s+/);
     if (parts.length !== 5) return false;

@@ -69,7 +69,50 @@ export class GituAgentManager {
       [id, userId, config.parentAgentId, task, JSON.stringify(memory)]
     );
 
+    await this.ensureAgentProcessingTask(userId);
+
     return this.mapRowToAgent(result.rows[0]);
+  }
+
+  private async ensureAgentProcessingTask(userId: string): Promise<void> {
+    await pool.query(
+      `INSERT INTO gitu_scheduled_tasks (
+         id,
+         user_id,
+         name,
+         description,
+         trigger,
+         action,
+         cron,
+         enabled,
+         max_retries,
+         retry_count,
+         created_at,
+         updated_at
+       )
+       SELECT
+         gen_random_uuid(),
+         $1,
+         'Process Autonomous Agents',
+         'Auto-run agents.processQueue',
+         jsonb_build_object('type','cron'),
+         jsonb_build_object('type','agents.processQueue'),
+         '* * * * *',
+         true,
+         3,
+         0,
+         NOW(),
+         NOW()
+       WHERE NOT EXISTS (
+         SELECT 1 FROM gitu_scheduled_tasks t
+         WHERE t.user_id = $1 AND (
+           t.action = to_jsonb('agents.processQueue'::text)
+           OR t.action->>'type' = 'agents.processQueue'
+           OR t.action->>'action' = 'agents.processQueue'
+         )
+       )`,
+      [userId]
+    );
   }
 
   /**

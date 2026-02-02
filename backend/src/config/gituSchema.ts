@@ -219,6 +219,202 @@ export async function ensureGituSchema(): Promise<void> {
         ADD CONSTRAINT valid_message_platform
         CHECK (platform IN ('flutter', 'whatsapp', 'telegram', 'email', 'terminal', 'web'));
     `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS gitu_scheduled_tasks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT,
+        trigger JSONB NOT NULL,
+        action JSONB NOT NULL,
+        cron TEXT NOT NULL DEFAULT '* * * * *',
+        enabled BOOLEAN DEFAULT true,
+        max_retries INTEGER NOT NULL DEFAULT 3,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        last_run_at TIMESTAMPTZ,
+        last_run_status TEXT,
+        next_run_at TIMESTAMPTZ,
+        run_count INTEGER DEFAULT 0,
+        failure_count INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_gitu_scheduled_tasks_user ON gitu_scheduled_tasks(user_id, enabled);
+      CREATE INDEX IF NOT EXISTS idx_gitu_scheduled_tasks_next_run ON gitu_scheduled_tasks(next_run_at) WHERE enabled = true;
+      CREATE INDEX IF NOT EXISTS idx_gitu_scheduled_tasks_cron ON gitu_scheduled_tasks(cron);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS gitu_task_executions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        task_id UUID NOT NULL REFERENCES gitu_scheduled_tasks(id) ON DELETE CASCADE,
+        success BOOLEAN NOT NULL,
+        output JSONB,
+        error TEXT,
+        duration INTEGER,
+        executed_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_gitu_task_executions_task ON gitu_task_executions(task_id, executed_at DESC);
+    `);
+
+    await client.query(`
+      CREATE OR REPLACE FUNCTION gitu_safe_to_jsonb(input TEXT) RETURNS JSONB
+      LANGUAGE plpgsql
+      AS $$
+      BEGIN
+        RETURN input::jsonb;
+      EXCEPTION WHEN OTHERS THEN
+        RETURN to_jsonb(input);
+      END;
+      $$;
+
+      DO $$
+      DECLARE
+        col_type TEXT;
+      BEGIN
+        SELECT data_type INTO col_type
+        FROM information_schema.columns
+        WHERE table_name = 'gitu_scheduled_tasks' AND column_name = 'user_id';
+        IF col_type IS NOT NULL AND col_type <> 'uuid' THEN
+          ALTER TABLE gitu_scheduled_tasks ALTER COLUMN user_id TYPE UUID USING user_id::uuid;
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='gitu_scheduled_tasks' AND column_name='action') THEN
+          ALTER TABLE gitu_scheduled_tasks ADD COLUMN action JSONB;
+        END IF;
+        SELECT data_type INTO col_type
+        FROM information_schema.columns
+        WHERE table_name = 'gitu_scheduled_tasks' AND column_name = 'action';
+        IF col_type IS NOT NULL AND col_type <> 'jsonb' THEN
+          ALTER TABLE gitu_scheduled_tasks ALTER COLUMN action TYPE JSONB USING gitu_safe_to_jsonb(action);
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='gitu_scheduled_tasks' AND column_name='trigger') THEN
+          ALTER TABLE gitu_scheduled_tasks ADD COLUMN trigger JSONB;
+        END IF;
+        SELECT data_type INTO col_type
+        FROM information_schema.columns
+        WHERE table_name = 'gitu_scheduled_tasks' AND column_name = 'trigger';
+        IF col_type IS NOT NULL AND col_type <> 'jsonb' THEN
+          ALTER TABLE gitu_scheduled_tasks ALTER COLUMN trigger TYPE JSONB USING gitu_safe_to_jsonb(trigger);
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='gitu_scheduled_tasks' AND column_name='cron') THEN
+          ALTER TABLE gitu_scheduled_tasks ADD COLUMN cron TEXT;
+        END IF;
+        UPDATE gitu_scheduled_tasks SET cron = '* * * * *' WHERE cron IS NULL;
+        ALTER TABLE gitu_scheduled_tasks ALTER COLUMN cron SET DEFAULT '* * * * *';
+        ALTER TABLE gitu_scheduled_tasks ALTER COLUMN cron SET NOT NULL;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='gitu_scheduled_tasks' AND column_name='max_retries') THEN
+          ALTER TABLE gitu_scheduled_tasks ADD COLUMN max_retries INTEGER;
+        END IF;
+        UPDATE gitu_scheduled_tasks SET max_retries = 3 WHERE max_retries IS NULL;
+        ALTER TABLE gitu_scheduled_tasks ALTER COLUMN max_retries SET DEFAULT 3;
+        ALTER TABLE gitu_scheduled_tasks ALTER COLUMN max_retries SET NOT NULL;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='gitu_scheduled_tasks' AND column_name='retry_count') THEN
+          ALTER TABLE gitu_scheduled_tasks ADD COLUMN retry_count INTEGER;
+        END IF;
+        UPDATE gitu_scheduled_tasks SET retry_count = 0 WHERE retry_count IS NULL;
+        ALTER TABLE gitu_scheduled_tasks ALTER COLUMN retry_count SET DEFAULT 0;
+        ALTER TABLE gitu_scheduled_tasks ALTER COLUMN retry_count SET NOT NULL;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='gitu_scheduled_tasks' AND column_name='last_run_status') THEN
+          ALTER TABLE gitu_scheduled_tasks ADD COLUMN last_run_status TEXT;
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='gitu_scheduled_tasks' AND column_name='updated_at') THEN
+          ALTER TABLE gitu_scheduled_tasks ADD COLUMN updated_at TIMESTAMPTZ;
+        END IF;
+        UPDATE gitu_scheduled_tasks SET updated_at = NOW() WHERE updated_at IS NULL;
+        ALTER TABLE gitu_scheduled_tasks ALTER COLUMN updated_at SET DEFAULT NOW();
+        ALTER TABLE gitu_scheduled_tasks ALTER COLUMN updated_at SET NOT NULL;
+
+        UPDATE gitu_scheduled_tasks SET trigger = jsonb_build_object('type','cron') WHERE trigger IS NULL;
+        ALTER TABLE gitu_scheduled_tasks ALTER COLUMN trigger SET NOT NULL;
+        UPDATE gitu_scheduled_tasks SET action = jsonb_build_object('type','memories.detectContradictions') WHERE action IS NULL;
+        ALTER TABLE gitu_scheduled_tasks ALTER COLUMN action SET NOT NULL;
+      END $$;
+
+      DROP FUNCTION IF EXISTS gitu_safe_to_jsonb(TEXT);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS gitu_missions (
+        id TEXT PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        objective TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('planning', 'active', 'completed', 'failed', 'paused')),
+        context JSONB NOT NULL DEFAULT '{}'::jsonb,
+        artifacts JSONB NOT NULL DEFAULT '{}'::jsonb,
+        agent_count INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        completed_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_gitu_missions_user_status ON gitu_missions(user_id, status);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS gitu_mission_logs (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        mission_id TEXT NOT NULL REFERENCES gitu_missions(id) ON DELETE CASCADE,
+        message TEXT NOT NULL,
+        metadata JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_gitu_mission_logs_mission ON gitu_mission_logs(mission_id, created_at DESC);
+    `);
+
+    await client.query(`
+      DO $$
+      DECLARE
+        col_type TEXT;
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'gitu_missions' AND column_name = 'user_id') THEN
+          SELECT data_type INTO col_type
+          FROM information_schema.columns
+          WHERE table_name = 'gitu_missions' AND column_name = 'user_id';
+          IF col_type IS NOT NULL AND col_type <> 'uuid' THEN
+            ALTER TABLE gitu_missions ALTER COLUMN user_id TYPE UUID USING user_id::uuid;
+          END IF;
+        END IF;
+      END $$;
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS gitu_agents (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        parent_agent_id UUID REFERENCES gitu_agents(id) ON DELETE SET NULL,
+        task TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        memory JSONB DEFAULT '{}'::jsonb,
+        result JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_gitu_agents_user_status ON gitu_agents(user_id, status);
+    `);
+
+    await client.query(`
+      DO $$
+      DECLARE
+        col_type TEXT;
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'gitu_agents' AND column_name = 'user_id') THEN
+          SELECT data_type INTO col_type
+          FROM information_schema.columns
+          WHERE table_name = 'gitu_agents' AND column_name = 'user_id';
+          IF col_type IS NOT NULL AND col_type <> 'uuid' THEN
+            ALTER TABLE gitu_agents ALTER COLUMN user_id TYPE UUID USING user_id::uuid;
+          END IF;
+        END IF;
+      END $$;
+    `);
   } finally {
     client.release();
   }

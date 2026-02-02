@@ -15,10 +15,10 @@ BEGIN
         gen_random_uuid(),
         NEW.id,
         'Process Autonomous Agents',
-        'agents.processQueue',
+        jsonb_build_object('type','agents.processQueue'),
         '* * * * *', -- Run every minute
         true,
-        'cron'
+        jsonb_build_object('type','cron')
     );
     RETURN NEW;
 END;
@@ -37,12 +37,16 @@ SELECT
     gen_random_uuid(),
     id,
     'Process Autonomous Agents',
-    'agents.processQueue',
+    jsonb_build_object('type','agents.processQueue'),
     '* * * * *',
     true,
-    'cron'
+    jsonb_build_object('type','cron')
 FROM users u
 WHERE NOT EXISTS (
     SELECT 1 FROM gitu_scheduled_tasks t 
-    WHERE t.user_id = u.id AND t.action = 'agents.processQueue'
+    WHERE t.user_id = u.id AND (
+      t.action = to_jsonb('agents.processQueue'::text)
+      OR t.action->>'type' = 'agents.processQueue'
+      OR t.action->>'action' = 'agents.processQueue'
+    )
 );

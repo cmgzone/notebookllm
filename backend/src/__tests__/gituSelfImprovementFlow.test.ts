@@ -19,7 +19,7 @@ function sha256(input: string) {
 }
 
 describe('Self-improvement mission flow', () => {
-  const testUserId = `test-user-improve-${Date.now()}`;
+  const testUserId = crypto.randomUUID();
   const testEmail = `test-improve-${Date.now()}@example.com`;
   const jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
   let userAuthToken: string;
@@ -30,7 +30,7 @@ describe('Self-improvement mission flow', () => {
     await pool.query(
       `CREATE TABLE IF NOT EXISTS gitu_permissions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id TEXT NOT NULL,
+        user_id UUID NOT NULL,
         resource TEXT NOT NULL,
         actions TEXT[] NOT NULL,
         scope JSONB DEFAULT '{}',
@@ -43,7 +43,7 @@ describe('Self-improvement mission flow', () => {
     await pool.query(
       `CREATE TABLE IF NOT EXISTS gitu_permission_requests (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id TEXT NOT NULL,
+        user_id UUID NOT NULL,
         resource TEXT NOT NULL,
         actions TEXT[] NOT NULL,
         scope JSONB DEFAULT '{}',

@@ -74,7 +74,10 @@ import { ensureGituSchema } from './config/gituSchema.js';
 dotenv.config();
 
 ensureGituSchema()
-    .then(() => console.log('✅ Gitu schema ensured'))
+    .then(() => {
+        console.log('✅ Gitu schema ensured');
+        gituScheduler.start();
+    })
     .catch(err => console.error('❌ Failed to ensure Gitu schema:', err));
 
 // Initialize Redis
@@ -98,7 +101,6 @@ registerLanguageTools();
 registerBrowserTools();
 registerPluginMCPTools();
 registerRuleMCPTools();
-gituScheduler.start();
 
 // Initialize WhatsApp
 whatsappAdapter.initialize({ printQRInTerminal: false }).then(() => {

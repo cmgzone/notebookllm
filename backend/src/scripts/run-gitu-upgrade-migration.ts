@@ -17,7 +17,9 @@ async function runMigration() {
     const migrationsDir = path.join(__dirname, '../../migrations');
     const files = [
       'update_gitu_platforms.sql',
+      '010_create_gitu_missions.sql',
       'add_gitu_agents.sql',
+      '015_fix_swarm_and_scheduler_schema.sql',
       'update_plugins_mcp.sql',
       'insert_agent_scheduler_task.sql'
     ];

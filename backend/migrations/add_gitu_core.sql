@@ -229,16 +229,22 @@ CREATE TABLE IF NOT EXISTS gitu_scheduled_tasks (
   description TEXT,
   trigger JSONB NOT NULL,
   action JSONB NOT NULL,
+  cron TEXT NOT NULL DEFAULT '* * * * *',
   enabled BOOLEAN DEFAULT true,
+  max_retries INTEGER NOT NULL DEFAULT 3,
+  retry_count INTEGER NOT NULL DEFAULT 0,
   last_run_at TIMESTAMPTZ,
+  last_run_status TEXT,
   next_run_at TIMESTAMPTZ,
   run_count INTEGER DEFAULT 0,
   failure_count INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_gitu_scheduled_tasks_user ON gitu_scheduled_tasks(user_id, enabled);
 CREATE INDEX IF NOT EXISTS idx_gitu_scheduled_tasks_next_run ON gitu_scheduled_tasks(next_run_at) WHERE enabled = true;
+CREATE INDEX IF NOT EXISTS idx_gitu_scheduled_tasks_cron ON gitu_scheduled_tasks(cron);
 
 -- ============================================================================
 -- TASK EXECUTION HISTORY

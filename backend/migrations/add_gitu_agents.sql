@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS gitu_agents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     parent_agent_id UUID REFERENCES gitu_agents(id) ON DELETE SET NULL,
     task TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending', -- pending, active, completed, failed, paused
