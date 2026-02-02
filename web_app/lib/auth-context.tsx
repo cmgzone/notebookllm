@@ -26,7 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             api.getCurrentUser()
                 .then(setUser)
                 .catch(() => {
-                    api.clearToken();
+                    api.clearTokens();
                 })
                 .finally(() => setIsLoading(false));
         } else {
