@@ -21,6 +21,7 @@ import {
     Mail,
     Smartphone,
     Terminal,
+    Database,
     Eye,
     EyeOff,
     Link as LinkIcon,
@@ -31,7 +32,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import api, { GituSettings, LinkedAccount, WhatsAppStatus, ShopifyStatus, AIModelOption } from "@/lib/api";
 
-type Tab = "overview" | "connections" | "settings";
+type Tab = "overview" | "connections" | "settings" | "memory" | "shell";
 
 export default function GituDashboardPage() {
     const { user, isLoading: authLoading, isAuthenticated } = useAuth();
@@ -141,7 +142,7 @@ export default function GituDashboardPage() {
                 </header>
 
                 <div className="flex gap-2 mb-8 border-b border-white/10 pb-4">
-                    {(["overview", "connections", "settings"] as Tab[]).map((tab) => (
+                    {(["overview", "connections", "settings", "memory", "shell"] as Tab[]).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -153,6 +154,8 @@ export default function GituDashboardPage() {
                             {tab === "overview" && <Globe size={16} />}
                             {tab === "connections" && <LinkIcon size={16} />}
                             {tab === "settings" && <Settings size={16} />}
+                            {tab === "memory" && <Database size={16} />}
+                            {tab === "shell" && <Terminal size={16} />}
                             {tab.charAt(0).toUpperCase() + tab.slice(1)}
                         </button>
                     ))}
@@ -198,6 +201,12 @@ export default function GituDashboardPage() {
                                     aiModels={aiModels}
                                     onRefresh={loadData}
                                 />
+                            )}
+                            {activeTab === "memory" && (
+                                <MemoryTab />
+                            )}
+                            {activeTab === "shell" && (
+                                <ShellTab />
                             )}
                         </motion.div>
                     )}
@@ -795,6 +804,541 @@ function KeyField({ label, name, value, isVisible, toggleVisible, onChange }: {
                     {isVisible ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
             </div>
+        </div>
+    );
+}
+
+function MemoryTab() {
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [query, setQuery] = useState("");
+    const [memories, setMemories] = useState<any[]>([]);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editContent, setEditContent] = useState("");
+    const [editCategory, setEditCategory] = useState("");
+    const [editTags, setEditTags] = useState("");
+
+    const load = async (opts?: { query?: string }) => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const list = await api.getGituMemories(opts?.query ? { query: opts.query, limit: 50 } : { limit: 50 });
+            setMemories(list as any[]);
+        } catch (e: any) {
+            setError(e.message || "Failed to load memories");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        load();
+    }, []);
+
+    const startEdit = (m: any) => {
+        setEditingId(m.id);
+        setEditContent(String(m.content || ""));
+        setEditCategory(String(m.category || ""));
+        setEditTags(Array.isArray(m.tags) ? m.tags.join(", ") : "");
+    };
+
+    const cancelEdit = () => {
+        setEditingId(null);
+        setEditContent("");
+        setEditCategory("");
+        setEditTags("");
+    };
+
+    const saveEdit = async () => {
+        if (!editingId) return;
+        try {
+            await api.correctGituMemory(editingId, {
+                content: editContent,
+                category: editCategory || undefined,
+                tags: editTags
+                    .split(",")
+                    .map((t) => t.trim())
+                    .filter(Boolean),
+            });
+            cancelEdit();
+            await load(query ? { query } : undefined);
+        } catch (e: any) {
+            alert(e.message || "Failed to save memory");
+        }
+    };
+
+    const confirmMemory = async (id: string) => {
+        try {
+            await api.confirmGituMemory(id);
+            await load(query ? { query } : undefined);
+        } catch (e: any) {
+            alert(e.message || "Failed to confirm memory");
+        }
+    };
+
+    const requestVerification = async (id: string) => {
+        try {
+            await api.requestGituMemoryVerification(id);
+            await load(query ? { query } : undefined);
+        } catch (e: any) {
+            alert(e.message || "Failed to request verification");
+        }
+    };
+
+    const deleteMemory = async (id: string) => {
+        if (!confirm("Delete this memory?")) return;
+        try {
+            await api.deleteGituMemory(id);
+            await load(query ? { query } : undefined);
+        } catch (e: any) {
+            alert(e.message || "Failed to delete memory");
+        }
+    };
+
+    return (
+        <div className="space-y-8">
+            <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold flex items-center gap-3">
+                    <Database size={24} className="text-blue-400" />
+                    Memory Management
+                </h2>
+                <button
+                    onClick={() => load(query ? { query } : undefined)}
+                    className="p-3 rounded-full bg-white/5 hover:bg-white/10 transition-all text-neutral-400 hover:text-white"
+                >
+                    <RefreshCw size={20} />
+                </button>
+            </div>
+
+            <div className="rounded-3xl border border-white/5 bg-neutral-900/50 p-6 backdrop-blur-sm space-y-4">
+                <div className="flex flex-col md:flex-row gap-3">
+                    <input
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Search memories..."
+                        className="flex-1 p-4 rounded-2xl bg-neutral-950 border border-white/5 focus:border-blue-500 outline-none transition-all text-sm"
+                    />
+                    <button
+                        onClick={() => load(query ? { query } : undefined)}
+                        className="px-6 py-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all"
+                    >
+                        Search
+                    </button>
+                </div>
+                {error && (
+                    <div className="text-sm text-red-400">{error}</div>
+                )}
+            </div>
+
+            {isLoading ? (
+                <div className="flex items-center justify-center py-16">
+                    <Loader2 className="animate-spin text-blue-500" size={28} />
+                </div>
+            ) : (
+                <div className="space-y-4">
+                    {memories.length === 0 ? (
+                        <div className="rounded-3xl border border-white/5 bg-neutral-900/50 p-10 text-neutral-400">
+                            No memories found.
+                        </div>
+                    ) : (
+                        memories.map((m) => (
+                            <div key={m.id} className="rounded-3xl border border-white/5 bg-neutral-900/50 p-6 backdrop-blur-sm">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="space-y-2 flex-1">
+                                        <div className="flex items-center gap-3">
+                                            <div className="text-xs font-bold uppercase tracking-widest text-neutral-500">
+                                                {m.category || "unknown"}
+                                            </div>
+                                            <div className={`text-xs px-2 py-1 rounded-full border ${m.verified ? "border-green-500/30 text-green-400 bg-green-500/10" : "border-yellow-500/30 text-yellow-400 bg-yellow-500/10"}`}>
+                                                {m.verified ? "Verified" : "Unverified"}
+                                            </div>
+                                            {m.verificationRequired && (
+                                                <div className="text-xs px-2 py-1 rounded-full border border-red-500/30 text-red-400 bg-red-500/10">
+                                                    Needs verification
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {editingId === m.id ? (
+                                            <div className="space-y-3">
+                                                <textarea
+                                                    value={editContent}
+                                                    onChange={(e) => setEditContent(e.target.value)}
+                                                    className="w-full min-h-[110px] p-4 rounded-2xl bg-neutral-950 border border-white/5 focus:border-blue-500 outline-none transition-all text-sm"
+                                                />
+                                                <div className="grid md:grid-cols-2 gap-3">
+                                                    <input
+                                                        value={editCategory}
+                                                        onChange={(e) => setEditCategory(e.target.value)}
+                                                        placeholder="Category (e.g. preference, fact)"
+                                                        className="p-4 rounded-2xl bg-neutral-950 border border-white/5 focus:border-blue-500 outline-none transition-all text-sm"
+                                                    />
+                                                    <input
+                                                        value={editTags}
+                                                        onChange={(e) => setEditTags(e.target.value)}
+                                                        placeholder="Tags (comma separated)"
+                                                        className="p-4 rounded-2xl bg-neutral-950 border border-white/5 focus:border-blue-500 outline-none transition-all text-sm"
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="text-sm text-white whitespace-pre-wrap">
+                                                {m.content}
+                                            </div>
+                                        )}
+
+                                        {Array.isArray(m.tags) && m.tags.length > 0 && (
+                                            <div className="flex flex-wrap gap-2 pt-2">
+                                                {m.tags.map((t: string) => (
+                                                    <span key={t} className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-neutral-300">
+                                                        {t}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="flex flex-col gap-2">
+                                        {editingId === m.id ? (
+                                            <>
+                                                <button
+                                                    onClick={saveEdit}
+                                                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all"
+                                                >
+                                                    Save
+                                                </button>
+                                                <button
+                                                    onClick={cancelEdit}
+                                                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-200 text-sm font-semibold transition-all"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    onClick={() => startEdit(m)}
+                                                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-200 text-sm font-semibold transition-all"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
+                                                    onClick={() => confirmMemory(m.id)}
+                                                    className="px-4 py-2 rounded-xl bg-green-600/20 hover:bg-green-600/30 text-green-300 text-sm font-semibold transition-all border border-green-500/20"
+                                                >
+                                                    Confirm
+                                                </button>
+                                                <button
+                                                    onClick={() => requestVerification(m.id)}
+                                                    className="px-4 py-2 rounded-xl bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-300 text-sm font-semibold transition-all border border-yellow-500/20"
+                                                >
+                                                    Request verify
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteMemory(m.id)}
+                                                    className="px-4 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-300 text-sm font-semibold transition-all border border-red-500/20"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ShellTab() {
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [permissions, setPermissions] = useState<any | null>(null);
+    const [command, setCommand] = useState("");
+    const [args, setArgs] = useState("");
+    const [cwd, setCwd] = useState("");
+    const [sandboxed, setSandboxed] = useState(true);
+    const [dryRun, setDryRun] = useState(false);
+    const [isExecuting, setIsExecuting] = useState(false);
+    const [lastResult, setLastResult] = useState<any | null>(null);
+    const [auditLogs, setAuditLogs] = useState<any[]>([]);
+    const [terminalToken, setTerminalToken] = useState<string | null>(null);
+    const [terminalTokenExpiresAt, setTerminalTokenExpiresAt] = useState<string | null>(null);
+    const [terminalDevices, setTerminalDevices] = useState<any[]>([]);
+
+    const load = async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const [perm, logs, devices] = await Promise.all([
+                api.getShellPermissions().catch(() => null),
+                api.getShellAuditLogs({ limit: 20 }).catch(() => []),
+                api.getTerminalDevices().catch(() => []),
+            ]);
+            setPermissions(perm);
+            setAuditLogs(logs);
+            setTerminalDevices(devices);
+        } catch (e: any) {
+            setError(e.message || "Failed to load shell info");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        load();
+    }, []);
+
+    const execute = async () => {
+        if (!command.trim()) return;
+        setIsExecuting(true);
+        setLastResult(null);
+        try {
+            const res = await api.executeShell({
+                command: command.trim(),
+                args: args.split(" ").map((a) => a.trim()).filter(Boolean),
+                cwd: cwd.trim() || undefined,
+                sandboxed,
+                dryRun,
+            });
+            setLastResult(res);
+            const logs = await api.getShellAuditLogs({ limit: 20 }).catch(() => []);
+            setAuditLogs(logs);
+        } catch (e: any) {
+            setLastResult({ success: false, error: e.message || "Execution failed" });
+        } finally {
+            setIsExecuting(false);
+        }
+    };
+
+    const generateTerminalToken = async () => {
+        try {
+            const data = await api.generateTerminalToken();
+            setTerminalToken(data.token);
+            setTerminalTokenExpiresAt(data.expiresAt);
+        } catch (e: any) {
+            alert(e.message || "Failed to generate token");
+        }
+    };
+
+    const unlinkDevice = async (deviceId: string) => {
+        if (!confirm("Unlink this device?")) return;
+        try {
+            await api.unlinkTerminalDevice(deviceId);
+            const devices = await api.getTerminalDevices().catch(() => []);
+            setTerminalDevices(devices);
+        } catch (e: any) {
+            alert(e.message || "Failed to unlink device");
+        }
+    };
+
+    return (
+        <div className="space-y-8">
+            <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold flex items-center gap-3">
+                    <Terminal size={24} className="text-blue-400" />
+                    Shell
+                </h2>
+                <button
+                    onClick={load}
+                    className="p-3 rounded-full bg-white/5 hover:bg-white/10 transition-all text-neutral-400 hover:text-white"
+                >
+                    <RefreshCw size={20} />
+                </button>
+            </div>
+
+            {error && (
+                <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-4 text-red-300 text-sm">
+                    {error}
+                </div>
+            )}
+
+            {isLoading ? (
+                <div className="flex items-center justify-center py-16">
+                    <Loader2 className="animate-spin text-blue-500" size={28} />
+                </div>
+            ) : (
+                <>
+                    <div className="rounded-3xl border border-white/5 bg-neutral-900/50 p-8 backdrop-blur-sm space-y-6">
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <div className="text-sm font-bold">Permissions</div>
+                                <div className="text-xs text-neutral-500">
+                                    {permissions?.active ? "Active" : "Not granted"}
+                                </div>
+                            </div>
+                            {permissions?.active ? (
+                                <div className="text-xs px-3 py-1.5 rounded-full border border-green-500/30 text-green-300 bg-green-500/10">
+                                    Enabled
+                                </div>
+                            ) : (
+                                <div className="text-xs px-3 py-1.5 rounded-full border border-yellow-500/30 text-yellow-300 bg-yellow-500/10">
+                                    Restricted
+                                </div>
+                            )}
+                        </div>
+
+                        {permissions?.active && (
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Allowed commands</div>
+                                    <div className="p-4 rounded-2xl bg-neutral-950 border border-white/5 text-sm text-neutral-200 font-mono whitespace-pre-wrap">
+                                        {(permissions.allowedCommands || []).join("\n") || "(none)"}
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Allowed paths</div>
+                                    <div className="p-4 rounded-2xl bg-neutral-950 border border-white/5 text-sm text-neutral-200 font-mono whitespace-pre-wrap">
+                                        {(permissions.allowedPaths || []).join("\n") || "(none)"}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="rounded-3xl border border-white/5 bg-neutral-900/50 p-8 backdrop-blur-sm space-y-6">
+                        <div className="text-sm font-bold">Execute Command</div>
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <input
+                                value={command}
+                                onChange={(e) => setCommand(e.target.value)}
+                                placeholder="Command (e.g. ls, python)"
+                                className="p-4 rounded-2xl bg-neutral-950 border border-white/5 focus:border-blue-500 outline-none transition-all text-sm"
+                            />
+                            <input
+                                value={args}
+                                onChange={(e) => setArgs(e.target.value)}
+                                placeholder="Args (space separated)"
+                                className="p-4 rounded-2xl bg-neutral-950 border border-white/5 focus:border-blue-500 outline-none transition-all text-sm"
+                            />
+                            <input
+                                value={cwd}
+                                onChange={(e) => setCwd(e.target.value)}
+                                placeholder="CWD (optional)"
+                                className="p-4 rounded-2xl bg-neutral-950 border border-white/5 focus:border-blue-500 outline-none transition-all text-sm md:col-span-2"
+                            />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <button
+                                onClick={() => setSandboxed(!sandboxed)}
+                                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all border ${sandboxed ? "border-blue-500/30 bg-blue-500/10 text-blue-200" : "border-white/10 bg-white/5 text-neutral-300"}`}
+                            >
+                                {sandboxed ? "Sandboxed" : "Unsandboxed"}
+                            </button>
+                            <button
+                                onClick={() => setDryRun(!dryRun)}
+                                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all border ${dryRun ? "border-purple-500/30 bg-purple-500/10 text-purple-200" : "border-white/10 bg-white/5 text-neutral-300"}`}
+                            >
+                                {dryRun ? "Dry run" : "Run"}
+                            </button>
+                            <button
+                                onClick={execute}
+                                disabled={isExecuting}
+                                className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-all disabled:opacity-50"
+                            >
+                                {isExecuting ? "Executing..." : "Execute"}
+                            </button>
+                        </div>
+
+                        {lastResult && (
+                            <div className="space-y-3 pt-2">
+                                <div className={`text-xs px-3 py-1.5 rounded-full border inline-flex ${lastResult.success ? "border-green-500/30 text-green-300 bg-green-500/10" : "border-red-500/30 text-red-300 bg-red-500/10"}`}>
+                                    {lastResult.success ? "Success" : "Failed"}
+                                </div>
+                                {lastResult.error && (
+                                    <div className="text-sm text-red-300">{lastResult.error}</div>
+                                )}
+                                {lastResult.stdout && (
+                                    <div className="space-y-1">
+                                        <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">stdout</div>
+                                        <pre className="p-4 rounded-2xl bg-neutral-950 border border-white/5 text-xs text-neutral-200 overflow-auto">{lastResult.stdout}</pre>
+                                    </div>
+                                )}
+                                {lastResult.stderr && (
+                                    <div className="space-y-1">
+                                        <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">stderr</div>
+                                        <pre className="p-4 rounded-2xl bg-neutral-950 border border-white/5 text-xs text-neutral-200 overflow-auto">{lastResult.stderr}</pre>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="grid lg:grid-cols-2 gap-8">
+                        <div className="rounded-3xl border border-white/5 bg-neutral-900/50 p-8 backdrop-blur-sm space-y-6">
+                            <div className="flex items-center justify-between">
+                                <div className="text-sm font-bold">Terminal Devices</div>
+                                <button
+                                    onClick={generateTerminalToken}
+                                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-200 text-sm font-semibold transition-all"
+                                >
+                                    Generate token
+                                </button>
+                            </div>
+                            {terminalToken && (
+                                <div className="p-4 rounded-2xl bg-neutral-950 border border-white/5 space-y-2">
+                                    <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Pairing token</div>
+                                    <div className="font-mono text-sm text-white break-all">{terminalToken}</div>
+                                    {terminalTokenExpiresAt && (
+                                        <div className="text-xs text-neutral-500">Expires: {new Date(terminalTokenExpiresAt).toLocaleString()}</div>
+                                    )}
+                                </div>
+                            )}
+                            <div className="space-y-3">
+                                {terminalDevices.length === 0 ? (
+                                    <div className="text-sm text-neutral-400">No linked devices.</div>
+                                ) : (
+                                    terminalDevices.map((d: any) => (
+                                        <div key={d.deviceId || d.id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5">
+                                            <div className="space-y-1">
+                                                <div className="text-sm font-bold">{d.deviceName || d.deviceId || d.id}</div>
+                                                {d.lastSeenAt && (
+                                                    <div className="text-xs text-neutral-500">Last seen: {new Date(d.lastSeenAt).toLocaleString()}</div>
+                                                )}
+                                            </div>
+                                            <button
+                                                onClick={() => unlinkDevice(d.deviceId || d.id)}
+                                                className="p-2 rounded-lg text-neutral-500 hover:text-red-300 hover:bg-red-500/10 transition-all"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="rounded-3xl border border-white/5 bg-neutral-900/50 p-8 backdrop-blur-sm space-y-6">
+                            <div className="text-sm font-bold">Recent Audit Logs</div>
+                            <div className="space-y-3">
+                                {auditLogs.length === 0 ? (
+                                    <div className="text-sm text-neutral-400">No logs.</div>
+                                ) : (
+                                    auditLogs.map((l: any) => (
+                                        <div key={l.id} className="p-4 rounded-2xl bg-neutral-950 border border-white/5 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">{l.mode}</div>
+                                                <div className={`text-xs px-2 py-1 rounded-full border ${l.success ? "border-green-500/30 text-green-300 bg-green-500/10" : "border-red-500/30 text-red-300 bg-red-500/10"}`}>
+                                                    {l.success ? "OK" : "ERR"}
+                                                </div>
+                                            </div>
+                                            <div className="font-mono text-xs text-neutral-200 whitespace-pre-wrap">
+                                                {l.command}{Array.isArray(l.args) && l.args.length ? ` ${l.args.join(" ")}` : ""}
+                                            </div>
+                                            {l.createdAt && (
+                                                <div className="text-[10px] text-neutral-500">{new Date(l.createdAt).toLocaleString()}</div>
+                                            )}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 }

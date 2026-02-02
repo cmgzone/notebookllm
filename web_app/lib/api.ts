@@ -225,6 +225,72 @@ export interface ShopifyStatus {
     scopes?: string[];
 }
 
+export interface GituMemory {
+    id: string;
+    userId: string;
+    category: string;
+    content: string;
+    source: string;
+    confidence: number;
+    verified: boolean;
+    lastConfirmedByUser?: string;
+    verificationRequired: boolean;
+    tags: string[];
+    createdAt: string;
+    lastAccessedAt: string;
+    accessCount: number;
+}
+
+export interface ShellPermissions {
+    active: boolean;
+    allowedCommands: string[];
+    allowedPaths: string[];
+    actions: string[];
+    allowUnsandboxed: boolean;
+    expiresAt?: string;
+}
+
+export interface ShellExecuteResult {
+    success: boolean;
+    mode: 'sandboxed' | 'unsandboxed' | 'dry_run';
+    command: string;
+    args: string[];
+    cwd: string | null;
+    exitCode: number | null;
+    stdout: string;
+    stderr: string;
+    timedOut: boolean;
+    durationMs: number;
+    stdoutTruncated: boolean;
+    stderrTruncated: boolean;
+    auditLogId?: string;
+    error?: string;
+}
+
+export interface ShellAuditLog {
+    id: string;
+    mode: string;
+    command: string;
+    args: string[] | null;
+    cwd: string | null;
+    success: boolean;
+    exit_code: number | null;
+    error_message: string | null;
+    duration_ms: number | null;
+    stdout_bytes: number | null;
+    stderr_bytes: number | null;
+    stdout_truncated: boolean | null;
+    stderr_truncated: boolean | null;
+    created_at: string;
+}
+
+export interface TerminalDevice {
+    deviceId: string;
+    deviceName?: string | null;
+    linkedAt?: string;
+    lastSeenAt?: string;
+}
+
 export interface Notebook {
     id: string;
     userId: string;
@@ -791,6 +857,104 @@ class ApiService {
         return this.fetch('/gitu/identity/set-primary', {
             method: 'POST',
             body: JSON.stringify({ platform, platformUserId }),
+        });
+    }
+
+    async getGituMemories(params: { query?: string; category?: string; verified?: boolean; tags?: string[]; limit?: number; offset?: number } = {}): Promise<GituMemory[]> {
+        const searchParams = new URLSearchParams();
+        if (params.query) searchParams.set('query', params.query);
+        if (params.category) searchParams.set('category', params.category);
+        if (typeof params.verified === 'boolean') searchParams.set('verified', params.verified ? 'true' : 'false');
+        if (params.tags) {
+            for (const t of params.tags) searchParams.append('tags', t);
+        }
+        if (typeof params.limit === 'number') searchParams.set('limit', String(params.limit));
+        if (typeof params.offset === 'number') searchParams.set('offset', String(params.offset));
+        const url = `/gitu/memories${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+        const data = await this.fetch<{ success: boolean; memories: GituMemory[] }>(url);
+        return data.memories || [];
+    }
+
+    async confirmGituMemory(id: string): Promise<GituMemory> {
+        const data = await this.fetch<{ success: boolean; memory: GituMemory }>(`/gitu/memories/${id}/confirm`, {
+            method: 'POST',
+        });
+        return data.memory;
+    }
+
+    async requestGituMemoryVerification(id: string): Promise<GituMemory> {
+        const data = await this.fetch<{ success: boolean; memory: GituMemory }>(`/gitu/memories/${id}/request-verification`, {
+            method: 'POST',
+        });
+        return data.memory;
+    }
+
+    async correctGituMemory(id: string, patch: { content?: string; category?: string; tags?: string[]; source?: string }): Promise<GituMemory> {
+        const data = await this.fetch<{ success: boolean; memory: GituMemory }>(`/gitu/memories/${id}/correct`, {
+            method: 'POST',
+            body: JSON.stringify(patch),
+        });
+        return data.memory;
+    }
+
+    async deleteGituMemory(id: string): Promise<{ success: boolean }> {
+        return this.fetch(`/gitu/memories/${id}`, {
+            method: 'DELETE',
+        });
+    }
+
+    async getShellPermissions(): Promise<ShellPermissions> {
+        return this.fetch('/gitu/shell/permissions');
+    }
+
+    async revokeShellPermissions(): Promise<{ success: boolean; revoked: number }> {
+        return this.fetch('/gitu/shell/permissions/revoke', {
+            method: 'POST',
+        });
+    }
+
+    async executeShell(request: { command: string; args?: string[]; cwd?: string; timeoutMs?: number; sandboxed?: boolean; dryRun?: boolean }): Promise<ShellExecuteResult> {
+        const data = await this.fetch<{ success: boolean; result: ShellExecuteResult }>('/gitu/shell/execute', {
+            method: 'POST',
+            body: JSON.stringify(request),
+        });
+        return data.result;
+    }
+
+    async getShellAuditLogs(params: { limit?: number; offset?: number; mode?: string; success?: boolean } = {}): Promise<Array<{ id: string; mode: string; command: string; args: string[]; cwd: string | null; success: boolean; createdAt: string }>> {
+        const sp = new URLSearchParams();
+        if (typeof params.limit === 'number') sp.set('limit', String(params.limit));
+        if (typeof params.offset === 'number') sp.set('offset', String(params.offset));
+        if (params.mode) sp.set('mode', params.mode);
+        if (typeof params.success === 'boolean') sp.set('success', params.success ? 'true' : 'false');
+        const url = `/gitu/shell/audit-logs${sp.toString() ? `?${sp.toString()}` : ''}`;
+        const data = await this.fetch<{ success: boolean; logs: ShellAuditLog[] }>(url);
+        return (data.logs || []).map((l) => ({
+            id: l.id,
+            mode: l.mode,
+            command: l.command,
+            args: l.args || [],
+            cwd: l.cwd ?? null,
+            success: Boolean(l.success),
+            createdAt: l.created_at,
+        }));
+    }
+
+    async generateTerminalToken(): Promise<{ token: string; expiresAt: string; expiresInSeconds: number }> {
+        return this.fetch('/gitu/terminal/generate-token', {
+            method: 'POST',
+        });
+    }
+
+    async getTerminalDevices(): Promise<TerminalDevice[]> {
+        const data = await this.fetch<{ success: boolean; devices: TerminalDevice[] }>('/gitu/terminal/devices');
+        return data.devices || [];
+    }
+
+    async unlinkTerminalDevice(deviceId: string): Promise<{ success: boolean }> {
+        return this.fetch('/gitu/terminal/unlink', {
+            method: 'POST',
+            body: JSON.stringify({ deviceId }),
         });
     }
 
