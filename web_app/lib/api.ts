@@ -387,6 +387,13 @@ class ApiService {
         this.clearTokens();
     }
 
+    async forgotPassword(email: string): Promise<{ success: boolean; message?: string }> {
+        return this.fetch('/auth/forgot-password', {
+            method: 'POST',
+            body: JSON.stringify({ email }),
+        });
+    }
+
     // Notebooks
     async getNotebooks(): Promise<Notebook[]> {
         const data = await this.fetch<{ notebooks: Notebook[] }>('/notebooks');
@@ -687,45 +694,87 @@ class ApiService {
 
     // Gitu Section
     async getGituSettings(): Promise<GituSettings> {
-        const data = await this.fetch<{ settings: GituSettings }>('/gitu/settings');
-        return data.settings;
+        const data = await this.fetch<{ enabled?: boolean; settings?: { modelPreferences?: GituSettings['modelPreferences'] } }>('/gitu/settings');
+        return {
+            enabled: data.enabled ?? false,
+            proactiveEnabled: true,
+            modelPreferences: data.settings?.modelPreferences ?? {
+                apiKeySource: 'platform',
+                defaultModel: 'gemini-2.0-flash',
+                taskSpecificModels: {},
+                personalKeys: {},
+            },
+            updatedAt: new Date().toISOString(),
+        };
     }
 
     async updateGituSettings(settings: Partial<GituSettings>): Promise<GituSettings> {
-        const data = await this.fetch<{ settings: GituSettings }>('/gitu/settings', {
-            method: 'PUT',
-            body: JSON.stringify(settings),
+        const payload: any = {};
+        if (typeof settings.enabled === 'boolean') payload.enabled = settings.enabled;
+        if (settings.modelPreferences) {
+            payload.settings = { modelPreferences: settings.modelPreferences };
+        }
+        const data = await this.fetch<{ enabled?: boolean; settings?: { modelPreferences?: GituSettings['modelPreferences'] } }>('/gitu/settings', {
+            method: 'POST',
+            body: JSON.stringify(payload),
         });
-        return data.settings;
+        return {
+            enabled: data.enabled ?? settings.enabled ?? false,
+            proactiveEnabled: true,
+            modelPreferences: data.settings?.modelPreferences ?? settings.modelPreferences ?? {
+                apiKeySource: 'platform',
+                defaultModel: 'gemini-2.0-flash',
+                taskSpecificModels: {},
+                personalKeys: {},
+            },
+            updatedAt: new Date().toISOString(),
+        };
     }
 
     async toggleGituEnabled(enabled: boolean): Promise<{ success: boolean }> {
-        return this.fetch('/gitu/toggle', {
+        await this.fetch('/gitu/settings', {
             method: 'POST',
             body: JSON.stringify({ enabled }),
         });
+        return { success: true };
+    }
+
+    private toLinkedAccount(row: any): LinkedAccount {
+        const platform = row?.platform as LinkedAccount['platform'];
+        return {
+            id: String(row?.id ?? ''),
+            platform,
+            platformUserId: String(row?.platformUserId ?? row?.platform_user_id ?? ''),
+            displayName: row?.displayName ?? row?.display_name ?? null,
+            verified: Boolean(row?.verified),
+            isPrimary: Boolean(row?.isPrimary ?? row?.is_primary),
+            status: String(row?.status ?? 'active'),
+            createdAt: String(row?.createdAt ?? row?.created_at ?? row?.linked_at ?? new Date().toISOString()),
+        };
     }
 
     async getLinkedAccounts(): Promise<LinkedAccount[]> {
-        const data = await this.fetch<{ accounts: LinkedAccount[] }>('/gitu/identities');
-        return data.accounts;
+        const data = await this.fetch<{ accounts: any[] }>('/gitu/identity/linked');
+        return (data.accounts || []).map((a) => this.toLinkedAccount(a));
     }
 
     async linkIdentity(platform: string, platformUserId: string): Promise<LinkedAccount> {
-        return this.fetch('/gitu/identities/link', {
+        const data = await this.fetch<{ account: any }>('/gitu/identity/link', {
+            method: 'POST',
+            body: JSON.stringify({ platform, platformUserId }),
+        });
+        return this.toLinkedAccount(data.account);
+    }
+
+    async unlinkIdentity(platform: string, platformUserId: string): Promise<{ success: boolean }> {
+        return this.fetch('/gitu/identity/unlink', {
             method: 'POST',
             body: JSON.stringify({ platform, platformUserId }),
         });
     }
 
-    async unlinkIdentity(platform: string, platformUserId: string): Promise<{ success: boolean }> {
-        return this.fetch(`/gitu/identities/${platform}/${encodeURIComponent(platformUserId)}`, {
-            method: 'DELETE',
-        });
-    }
-
     async setPrimaryIdentity(platform: string, platformUserId: string): Promise<{ success: boolean }> {
-        return this.fetch('/gitu/identities/primary', {
+        return this.fetch('/gitu/identity/set-primary', {
             method: 'POST',
             body: JSON.stringify({ platform, platformUserId }),
         });
