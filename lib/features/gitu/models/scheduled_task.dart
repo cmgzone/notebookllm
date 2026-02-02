@@ -34,10 +34,10 @@ class ScheduledTask {
       id: json['id'],
       userId: json['user_id'],
       name: json['name'],
-      action: json['action'],
+      action: _stringFromJson(json['action']),
       cron: json['cron'],
       enabled: json['enabled'] ?? true,
-      trigger: json['trigger'] ?? 'cron',
+      trigger: _stringFromJson(json['trigger'], defaultValue: 'cron'),
       maxRetries: json['max_retries'] ?? 3,
       retryCount: json['retry_count'] ?? 0,
       lastRunAt: json['last_run_at'] != null ? DateTime.parse(json['last_run_at']) : null,
@@ -64,6 +64,17 @@ class ScheduledTask {
       'updated_at': updatedAt?.toIso8601String(),
     };
   }
+}
+
+String _stringFromJson(dynamic value, {String defaultValue = ''}) {
+  if (value == null) return defaultValue;
+  if (value is String) return value;
+  if (value is Map) {
+    final dynamic type = value['type'];
+    if (type is String) return type;
+    return value.toString();
+  }
+  return value.toString();
 }
 
 class TaskExecution {

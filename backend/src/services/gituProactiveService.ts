@@ -529,16 +529,16 @@ class GituProactiveService {
             const frequentActionsResult = await pool.query(
                 `SELECT 
            CASE 
-             WHEN action LIKE '{%' THEN action::jsonb ->> 'type' 
-             ELSE action 
+             WHEN jsonb_typeof(action) = 'object' THEN action ->> 'type' 
+             ELSE action::text 
            END as action_type,
            COUNT(*) as count
          FROM gitu_scheduled_tasks
          WHERE user_id = $1 AND enabled = true
          GROUP BY 
            CASE 
-             WHEN action LIKE '{%' THEN action::jsonb ->> 'type' 
-             ELSE action 
+             WHEN jsonb_typeof(action) = 'object' THEN action ->> 'type' 
+             ELSE action::text 
            END
          ORDER BY count DESC
          LIMIT 3`,
