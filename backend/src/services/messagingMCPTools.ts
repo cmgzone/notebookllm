@@ -1,6 +1,7 @@
 import { gituMCPHub, MCPTool, MCPContext } from './gituMCPHub.js';
 import { whatsappAdapter } from '../adapters/whatsappAdapter.js';
 import { telegramAdapter } from '../adapters/telegramAdapter.js';
+import { gituMessageGateway } from './gituMessageGateway.js';
 import pool from '../config/database.js';
 
 /**
@@ -217,6 +218,117 @@ const searchContactsTool: MCPTool = {
 };
 
 /**
+ * Tool: List Messages
+ */
+const listMessagesTool: MCPTool = {
+    name: 'list_messages',
+    description: 'List recent message history from linked platforms (WhatsApp, Telegram).',
+    schema: {
+        type: 'object',
+        properties: {
+            platform: { 
+                type: 'string', 
+                enum: ['whatsapp', 'telegram', 'flutter'],
+                description: 'Optional: Filter by platform'
+            },
+            limit: { 
+                type: 'number', 
+                default: 20,
+                description: 'Number of messages to retrieve (max 100)'
+            }
+        }
+    },
+    handler: async (args: any, context: MCPContext) => {
+        const { platform, limit = 20 } = args;
+        const messages = await gituMessageGateway.getMessageHistory(context.userId, platform, Math.min(limit, 100));
+
+        return {
+            count: messages.length,
+            messages: messages.map(m => ({
+                id: m.id,
+                platform: m.platform,
+                sender: m.metadata?.pushName || m.platformUserId,
+                fromMe: m.metadata?.fromMe,
+                isNoteToSelf: m.metadata?.isNoteToSelf,
+                isGroup: m.metadata?.isGroup,
+                content: m.content.text || '[Media]',
+                timestamp: m.timestamp.toISOString()
+            }))
+        };
+    }
+};
+
+/**
+ * Tool: Post WhatsApp Status
+ */
+const postWhatsAppStatusTool: MCPTool = {
+    name: 'post_whatsapp_status',
+    description: 'Post a text or image update to your WhatsApp Status.',
+    schema: {
+        type: 'object',
+        properties: {
+            content: { type: 'string', description: 'Text content for the status' },
+            image: { type: 'string', description: 'Optional: Image Base64 string' },
+            caption: { type: 'string', description: 'Optional: Caption for the image' }
+        },
+        required: ['content']
+    },
+    handler: async (args: any, context: MCPContext) => {
+        const { content, image, caption } = args;
+        
+        // Verify user has WhatsApp linked
+        const myIdentity = await getLinkedIdentity(context.userId, 'whatsapp');
+        if (!myIdentity) {
+            throw new Error('No linked WhatsApp account found.');
+        }
+
+        await whatsappAdapter.sendStatus(image ? { image, caption: content } : { text: content });
+
+        return {
+            success: true,
+            message: 'Status update posted successfully.'
+        };
+    }
+};
+
+/**
+ * Tool: Manage WhatsApp Permissions
+ */
+const manageWhatsAppPermissionsTool: MCPTool = {
+    name: 'manage_whatsapp_permissions',
+    description: 'Allow or mute auto-replies for specific WhatsApp contacts or groups by Name, Phone Number, or JID.',
+    schema: {
+        type: 'object',
+        properties: {
+            target: { type: 'string', description: 'Name, Phone Number, or JID of the contact/group.' },
+            action: { type: 'string', enum: ['allow', 'mute'], description: 'Allow enables auto-replies, Mute disables them.' }
+        },
+        required: ['target', 'action']
+    },
+    handler: async (args: any, context: MCPContext) => {
+        const { target, action } = args;
+        
+        // Verify user has WhatsApp linked
+        const myIdentity = await getLinkedIdentity(context.userId, 'whatsapp');
+        if (!myIdentity) {
+            throw new Error('No linked WhatsApp account found.');
+        }
+
+        const allowed = action === 'allow';
+        
+        // Check if target looks like a JID
+        if (target.includes('@s.whatsapp.net') || target.includes('@g.us')) {
+             await whatsappAdapter.setAutoReply(target, allowed);
+             return { success: true, message: `Auto-reply ${allowed ? 'enabled' : 'disabled'} for ${target}.` };
+        }
+
+        // Use the smart query helper
+        const result = await whatsappAdapter.setPermissionByQuery(target, allowed);
+        return result;
+    }
+};
+
+/**
  * Register Messaging Tools
  */
 export function registerMessagingTools() {
@@ -224,5 +336,8 @@ export function registerMessagingTools() {
     gituMCPHub.registerTool(sendTelegramTool);
     gituMCPHub.registerTool(getMessagingProfileTool);
     gituMCPHub.registerTool(searchContactsTool);
-    console.log('[MessagingMCPTools] Registered messaging tools with image support and contact search');
+    gituMCPHub.registerTool(listMessagesTool);
+    gituMCPHub.registerTool(postWhatsAppStatusTool);
+    gituMCPHub.registerTool(manageWhatsAppPermissionsTool);
+    console.log('[MessagingMCPTools] Registered messaging tools with status, list, and permissions');
 }

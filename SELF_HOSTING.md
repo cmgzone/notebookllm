@@ -55,6 +55,12 @@ docker run --network host -it gitu-cli chat
 ```
 *Note: `--network host` is required on Linux to access `localhost:3000`. On Mac/Windows, use `host.docker.internal` as the API URL.*
 
+### Option C: Publish + Install from Your Own Registry
+
+If you want `npm install -g @cmgzone/gitu-cli` to install from your own server (for example `backend.taskiumnetwork.com`), you need an npm-compatible registry (Verdaccio is the lightweight option).
+
+See: [SELF_HOSTED_REGISTRY.md](file:///c:/Users/Admin/Documents/project/NOTBOOK%20LLM/gitu-cli/SELF_HOSTED_REGISTRY.md)
+
 ## 3. Connect CLI to Self-Hosted Backend
 
 1.  Run the initialization wizard:

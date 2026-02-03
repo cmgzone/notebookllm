@@ -1,6 +1,7 @@
 import { mcpLimitsService } from './mcpLimitsService.js';
 import { mcpUserSettingsService } from './mcpUserSettingsService.js';
 import { gituAgentOrchestrator } from './gituAgentOrchestrator.js';
+import { hydrateExternalMcpToolsForUser } from './externalMcpRegistry.js';
 
 export interface MCPToolParameter {
   type: string;
@@ -41,6 +42,9 @@ export interface MCPToolDefinition {
 
 class GituMCPHub {
   private tools: Map<string, MCPTool> = new Map();
+  private userTools: Map<string, Map<string, MCPTool>> = new Map();
+  private hydratedUsers: Set<string> = new Set();
+  private hydrationPromises: Map<string, Promise<void>> = new Map();
 
   constructor() {
     // Register built-in tools
@@ -78,19 +82,68 @@ class GituMCPHub {
     this.tools.set(tool.name, tool);
   }
 
+  registerUserTool(userId: string, tool: MCPTool) {
+    const map = this.userTools.get(userId) ?? new Map<string, MCPTool>();
+    map.set(tool.name, tool);
+    this.userTools.set(userId, map);
+  }
+
+  unregisterUserToolsByPrefix(userId: string, prefix: string) {
+    const map = this.userTools.get(userId);
+    if (!map) return;
+    for (const name of Array.from(map.keys())) {
+      if (name.startsWith(prefix)) {
+        map.delete(name);
+      }
+    }
+    if (map.size === 0) {
+      this.userTools.delete(userId);
+    }
+  }
+
+  private async hydrateUserTools(userId: string): Promise<void> {
+    if (this.hydratedUsers.has(userId)) return;
+    const existing = this.hydrationPromises.get(userId);
+    if (existing) {
+      await existing;
+      return;
+    }
+    const p = (async () => {
+      try {
+        await hydrateExternalMcpToolsForUser(userId, tool => this.registerUserTool(userId, tool));
+      } catch { }
+      this.hydratedUsers.add(userId);
+    })();
+    this.hydrationPromises.set(userId, p);
+    await p;
+    this.hydrationPromises.delete(userId);
+  }
+
   /**
    * List available tools for a user
    */
   async listTools(userId: string): Promise<MCPToolDefinition[]> {
     const definitions: MCPToolDefinition[] = [];
 
-    // In the future, we might filter tools based on user permissions or connected servers
+    await this.hydrateUserTools(userId);
+
     for (const tool of this.tools.values()) {
       definitions.push({
         name: tool.name,
         description: tool.description,
         inputSchema: tool.schema
       });
+    }
+
+    const userMap = this.userTools.get(userId);
+    if (userMap) {
+      for (const tool of userMap.values()) {
+        definitions.push({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.schema
+        });
+      }
     }
 
     return definitions;
@@ -100,7 +153,7 @@ class GituMCPHub {
    * Execute a tool
    */
   async executeTool(name: string, args: any, context: MCPContext): Promise<any> {
-    const tool = this.tools.get(name);
+    const tool = this.userTools.get(context.userId)?.get(name) ?? this.tools.get(name);
     if (!tool) {
       throw new Error(`Tool not found: ${name}`);
     }

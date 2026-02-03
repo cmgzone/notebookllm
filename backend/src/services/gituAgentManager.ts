@@ -71,6 +71,9 @@ export class GituAgentManager {
 
     await this.ensureAgentProcessingTask(userId);
 
+    // Trigger processing immediately (fire-and-forget)
+    this.processAgentQueue(userId).catch(e => console.error(`[AgentManager] Failed to trigger immediate processing for user ${userId}`, e));
+
     return this.mapRowToAgent(result.rows[0]);
   }
 
@@ -130,26 +133,33 @@ export class GituAgentManager {
 
     const agents = agentsResult.rows.map(this.mapRowToAgent);
 
-    for (const agent of agents) {
-      try {
-        // Mark as active if pending
-        if (agent.status === 'pending') {
-          await this.updateAgentStatus(agent.id, 'active');
-        }
+    // Process in parallel with error handling and timeout
+    const promises = agents.map(agent => this.processSingleAgentSafe(agent));
+    await Promise.allSettled(promises);
+  }
 
-        // Execute "Brain" step
-        await this.executeAgentStep(agent);
-
-      } catch (error: any) {
-        console.error(`Error processing agent ${agent.id}:`, error);
-        await this.updateAgentStatus(agent.id, 'failed', { error: error.message });
-
-        // Notify user of failure
-        await gituMessageGateway.notifyUser(
-          agent.userId,
-          `❌ **Agent Task Failed**\n\n*Task:* ${agent.task}\n\n*Error:* ${error.message}`
-        );
+  private async processSingleAgentSafe(agent: GituAgent): Promise<void> {
+    try {
+      // Mark as active if pending
+      if (agent.status === 'pending') {
+        await this.updateAgentStatus(agent.id, 'active');
       }
+
+      // Execute with timeout
+      await Promise.race([
+        this.executeAgentStep(agent),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Agent execution timed out (30s)')), 30000))
+      ]);
+
+    } catch (error: any) {
+      console.error(`Error processing agent ${agent.id}:`, error);
+      await this.updateAgentStatus(agent.id, 'failed', { error: error.message });
+
+      // Notify user of failure
+      await gituMessageGateway.notifyUser(
+        agent.userId,
+        `❌ **Agent Task Failed**\n\n*Task:* ${agent.task}\n\n*Error:* ${error.message}`
+      );
     }
   }
 

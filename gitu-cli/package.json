@@ -1,14 +1,26 @@
 {
-  "name": "gitu-cli",
-  "version": "1.0.0",
+  "name": "@cmgzone/gitu-cli",
+  "version": "1.0.3",
   "description": "Command-line interface for Gitu Universal Assistant",
   "main": "dist/cli.js",
   "bin": {
     "gitu": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "bundle": "esbuild src/cli.ts --bundle --platform=node --format=cjs --outfile=dist-bundle/gitu.cjs",
+    "package:bin:win": "npm run bundle && pkg dist-bundle/gitu.cjs --targets node18-win-x64 --output dist-bin/gitu-win-x64.exe",
+    "package:bin:linux": "npm run bundle && pkg dist-bundle/gitu.cjs --targets node18-linux-x64 --output dist-bin/gitu-linux-x64",
+    "package:bin:mac": "npm run bundle && pkg dist-bundle/gitu.cjs --targets node18-macos-x64 --output dist-bin/gitu-macos-x64",
+    "prepack": "npm run build",
     "dev": "tsx src/cli.ts"
   },
   "dependencies": {
@@ -31,6 +43,8 @@
     "@types/qrcode": "^1.5.5",
     "@types/qrcode-terminal": "^0.12.2",
     "@types/ws": "^8.18.1",
+    "esbuild": "^0.25.0",
+    "pkg": "^5.8.1",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   }

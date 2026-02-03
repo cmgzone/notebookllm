@@ -84,6 +84,44 @@ Switch between different AI models directly from the CLI.
 - `gitu auth refresh`: Manually refresh your access token.
 - `gitu auth logout`: Unlink the current terminal.
 
+### Onboarding (Recommended)
+
+Run an interactive wizard to link your device, configure Remote Terminal, and request permissions:
+```bash
+gitu onboard
+```
+
+### WhatsApp / Telegram
+
+WhatsApp (backend-managed, QR scan):
+```bash
+gitu whatsapp connect
+gitu whatsapp link-current
+```
+
+Telegram (link your Telegram user id):
+```bash
+gitu telegram status
+gitu telegram link <telegramUserId>
+```
+
+### Permissions
+
+List current permissions:
+```bash
+gitu permissions list
+```
+
+List permission requests:
+```bash
+gitu permissions requests --status pending
+```
+
+Request shell execution permission (example):
+```bash
+gitu permissions request --resource shell --actions execute --allowed-commands "git ,npm " --reason "Run tasks" --allow-unsandboxed
+```
+
 ### Chat Slash Commands (Standalone `gitu chat`)
 
 Inside `gitu chat`, you can use these slash commands:

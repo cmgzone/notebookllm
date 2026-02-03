@@ -5,7 +5,91 @@ Command-line interface for **Gitu**, your Universal AI Assistant.
 ## Installation
 
 ```bash
-npm install -g @notebookllm/gitu-cli
+npm install -g @cmgzone/gitu-cli
+```
+
+### Windows One-Liner Install
+
+```powershell
+irm https://raw.githubusercontent.com/cmgzone/gitucli/HEAD/scripts/install-cli.ps1 | iex
+```
+
+### Cross-Platform PowerShell One-Liner
+
+```bash
+pwsh -NoProfile -Command "irm https://raw.githubusercontent.com/cmgzone/gitucli/HEAD/scripts/install-cli.ps1 | iex"
+```
+
+### macOS / Linux One-Liner Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/cmgzone/gitucli/HEAD/scripts/install-cli.sh | bash
+```
+
+### Install From GitHub Release
+
+If you publish `@cmgzone/gitu-cli` as a GitHub Release asset (`cmgzone-gitu-cli-<version>.tgz`), users can install it with:
+
+```bash
+npm install -g https://github.com/cmgzone/gitucli/releases/download/v1.2.3/cmgzone-gitu-cli-1.2.3.tgz
+```
+
+### Install From GitHub Packages (npm.pkg.github.com)
+
+Create or update your user `.npmrc`:
+
+```text
+@cmgzone:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN
+```
+
+Then install:
+
+```bash
+npm install -g @cmgzone/gitu-cli
+```
+
+### Install From Your Own Registry (Self-Hosted)
+
+If you run an npm-compatible registry on your own server (example: `backend.taskiumnetwork.com`), configure your user `.npmrc`:
+
+```text
+@cmgzone:registry=https://backend.taskiumnetwork.com/
+```
+
+Then install:
+
+```bash
+npm install -g @cmgzone/gitu-cli
+```
+
+Setup guide: [SELF_HOSTED_REGISTRY.md](file:///c:/Users/Admin/Documents/project/NOTBOOK%20LLM/gitu-cli/SELF_HOSTED_REGISTRY.md)
+
+### Direct Download From Your Server (No npm registry)
+
+If you want users to download/install directly from your server (standalone binaries or a `.tgz`), see:
+
+- [SELF_HOSTED_DOWNLOADS.md](file:///c:/Users/Admin/Documents/project/NOTBOOK%20LLM/gitu-cli/SELF_HOSTED_DOWNLOADS.md)
+
+### Standalone Binaries (No Node.js required)
+
+You can download standalone executables for Windows, macOS, and Linux from the [Releases](https://github.com/cmgzone/gitucli/releases) page.
+
+**Windows:**
+Download `gitu-win-x64.exe`, rename it to `gitu.exe` (optional), and run it from your terminal. Add it to your PATH for global access.
+
+**macOS:**
+Download `gitu-macos-x64`.
+```bash
+chmod +x gitu-macos-x64
+mv gitu-macos-x64 /usr/local/bin/gitu
+```
+
+**Linux:**
+Download `gitu-linux-x64`.
+```bash
+chmod +x gitu-linux-x64
+mv gitu-linux-x64 /usr/local/bin/gitu
 ```
 
 ## Getting Started
@@ -14,6 +98,12 @@ npm install -g @notebookllm/gitu-cli
    Run the interactive setup wizard to connect to your Gitu backend.
    ```bash
    gitu init
+   ```
+
+2. **Onboarding (Recommended)**
+   Link your device, configure Remote Terminal, and request permissions:
+   ```bash
+   gitu onboard
    ```
 
 2. **Verify Connection**
@@ -82,6 +172,32 @@ Watch mission status:
 gitu mission watch <mission-id>
 ```
 
+## Permissions
+
+List permissions:
+```bash
+gitu permissions list
+```
+
+Request shell execution permission (example):
+```bash
+gitu permissions request --resource shell --actions execute --allowed-commands "git ,npm " --reason "Run tasks" --allow-unsandboxed
+```
+
+## WhatsApp / Telegram Linking (Backend-Managed)
+
+WhatsApp:
+```bash
+gitu whatsapp connect
+gitu whatsapp link-current
+```
+
+Telegram:
+```bash
+gitu telegram status
+gitu telegram link <telegramUserId>
+```
+
 Notes:
 - The agent can only run shell/file actions if the backend permissions allow them.
 - If Remote Terminal is enabled, some commands may run on your local computer (with local confirmation by default).
@@ -126,3 +242,16 @@ npm install
 # Run locally
 npm run dev -- <command>
 ```
+
+## GitHub Release Publishing (Maintainer)
+
+This repo includes a GitHub Actions workflow that creates a release when you push a tag like:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+It uploads:
+- `cmgzone-gitu-cli-<version>.tgz` (installable with npm)
+- `SHA256SUMS.txt`

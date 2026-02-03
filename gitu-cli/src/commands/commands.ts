@@ -5,6 +5,7 @@ export class CommandsCommand {
     console.log(chalk.bold('\nGitu CLI Commands\n'));
     console.log(chalk.cyan('Main:'));
     console.log(chalk.gray('  gitu init'));
+    console.log(chalk.gray('  gitu onboard'));
     console.log(chalk.gray('  gitu auth <pairing-token>'));
     console.log(chalk.gray('  gitu chat'));
     console.log(chalk.gray('  gitu run "<shell command>"'));
@@ -12,6 +13,7 @@ export class CommandsCommand {
     console.log(chalk.gray('  gitu notebook query <notebook-id> "<question>"'));
     console.log(chalk.gray('  gitu agent list|spawn|watch'));
     console.log(chalk.gray('  gitu config show'));
+    console.log(chalk.gray('  gitu permissions list|request|approve|revoke'));
     console.log(chalk.gray(''));
     console.log(chalk.cyan('Chat slash commands (inside: gitu chat):'));
     console.log(chalk.gray('  /help'));

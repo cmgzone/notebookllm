@@ -33,6 +33,7 @@
   "description": "Complete backend API for Notebook LLM Flutter app with all features",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@modelcontextprotocol/sdk": "^1.0.1",
     "@octokit/rest": "^21.1.1",
     "@types/node-telegram-bot-api": "^0.64.13",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",

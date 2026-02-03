@@ -49,8 +49,8 @@ class GituScheduler {
     if (this.interval) return;
     this.interval = setInterval(() => {
       this.tick().catch((err) => console.error('[GituScheduler] Tick failed:', err));
-    }, 60_000);
-    console.log('🕒 GituScheduler started (tick every 60s)');
+    }, 10_000);
+    console.log('🕒 GituScheduler started (tick every 10s)');
   }
 
   stop() {

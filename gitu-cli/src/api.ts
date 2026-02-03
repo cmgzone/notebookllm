@@ -112,6 +112,64 @@ export class ApiClient {
     return this.post('gitu/shell/execute', { command });
   }
 
+  // Permissions
+  async listPermissions(resource?: string) {
+    return this.get('gitu/permissions', resource ? { resource } : undefined);
+  }
+
+  async listPermissionRequests(status?: 'pending' | 'approved' | 'denied') {
+    return this.get('gitu/permissions/requests', status ? { status } : undefined);
+  }
+
+  async requestPermission(input: {
+    resource: string;
+    actions: string[];
+    scope?: any;
+    reason: string;
+    expiresAt?: string;
+    expiresInDays?: number;
+  }) {
+    return this.post('gitu/permissions/requests', input);
+  }
+
+  async approvePermissionRequest(requestId: string, input?: { expiresAt?: string; expiresInDays?: number }) {
+    return this.post(`gitu/permissions/requests/${requestId}/approve`, input || {});
+  }
+
+  async denyPermissionRequest(requestId: string) {
+    return this.post(`gitu/permissions/requests/${requestId}/deny`, {});
+  }
+
+  async revokePermission(permissionId: string) {
+    return this.post(`gitu/permissions/${permissionId}/revoke`, {});
+  }
+
+  // WhatsApp linking
+  async whatsappStatus() {
+    return this.get('gitu/whatsapp/status');
+  }
+
+  async whatsappConnect() {
+    return this.post('gitu/whatsapp/connect', {});
+  }
+
+  async whatsappDisconnect() {
+    return this.post('gitu/whatsapp/disconnect', {});
+  }
+
+  async whatsappLinkCurrent() {
+    return this.post('gitu/whatsapp/link-current', {});
+  }
+
+  // Telegram linking
+  async telegramStatus() {
+    return this.get('gitu/telegram/status');
+  }
+
+  async telegramLink(telegramUserId: string, displayName?: string) {
+    return this.post('gitu/telegram/link', { telegramUserId, displayName });
+  }
+
   // Missions (Swarm)
   async startMission(objective: string) {
     return this.post('gitu/mission', { objective });

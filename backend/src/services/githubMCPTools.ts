@@ -6,7 +6,7 @@ import { githubService } from './githubService.js';
  */
 const listReposTool: MCPTool = {
     name: 'github_list_repos',
-    description: 'List GitHub repositories for the connected user.',
+    description: 'List GitHub repositories for the connected user. Use this tool instead of shell commands like `git` or `gh` CLI.',
     schema: {
         type: 'object',
         properties: {
@@ -26,7 +26,7 @@ const listReposTool: MCPTool = {
  */
 const getRepoTreeTool: MCPTool = {
     name: 'github_get_tree',
-    description: 'Get the file tree of a GitHub repository.',
+    description: 'Get the file tree of a GitHub repository. Use this tool instead of shell commands.',
     schema: {
         type: 'object',
         properties: {
@@ -47,7 +47,7 @@ const getRepoTreeTool: MCPTool = {
  */
 const readFileTool: MCPTool = {
     name: 'github_read_file',
-    description: 'Read the content of a file from a GitHub repository.',
+    description: 'Read the content of a file from a GitHub repository. Use this tool instead of shell commands.',
     schema: {
         type: 'object',
         properties: {
@@ -69,7 +69,7 @@ const readFileTool: MCPTool = {
  */
 const searchCodeTool: MCPTool = {
     name: 'github_search_code',
-    description: 'Search for code in GitHub repositories.',
+    description: 'Search for code in GitHub repositories. Use this tool instead of shell commands.',
     schema: {
         type: 'object',
         properties: {

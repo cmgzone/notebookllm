@@ -464,11 +464,35 @@ class WhatsAppAdapter {
 
         // Check for Note to Self or direct user messages
         const isNoteToSelf = this.isSelfChat(remoteJid);
+        const isGroup = remoteJid.endsWith('@g.us');
 
-        // If it's not a note to self and not a direct message from a user, we might want to ignore it
-        // But for now, let's process everything that looks like a user message
+        this.logger.info(`Received message from ${remoteJid}: ${text} (fromMe: ${msg.key.fromMe}, Note to Self: ${isNoteToSelf})`);
 
-        this.logger.info(`Received message from ${remoteJid}: ${text} (fromMe: ${msg.key.fromMe}, Connected: ${this.connectedAccountJid || this.connectedAccountLid}, Note to Self: ${isNoteToSelf})`);
+        // ================== PERMISSION COMMANDS ==================
+        if (text.toLowerCase().startsWith('/gitu allow')) {
+             const query = text.substring(11).trim();
+             if (!query) {
+                 // Current chat
+                 await this.setAutoReply(remoteJid, true);
+                 await this.sendMessage(remoteJid, '✅ *Auto-Reply Enabled*\nI will now reply to messages in this chat.');
+             } else {
+                 // Specific contact
+                 const result = await this.setPermissionByQuery(query, true);
+                 await this.sendMessage(remoteJid, result.message);
+             }
+             return;
+        }
+        if (text.toLowerCase().startsWith('/gitu mute')) {
+             const query = text.substring(10).trim();
+             if (!query) {
+                 await this.setAutoReply(remoteJid, false);
+                 await this.sendMessage(remoteJid, '🔇 *Auto-Reply Disabled*\nI will only reply when mentioned or commanded.');
+             } else {
+                 const result = await this.setPermissionByQuery(query, false);
+                 await this.sendMessage(remoteJid, result.message);
+             }
+             return;
+        }
 
         // Debug command: Ping
         if (text.toLowerCase() === 'ping' && isNoteToSelf) {
@@ -478,28 +502,31 @@ class WhatsAppAdapter {
         }
 
         try {
-            // Attempt to get user ID, with auto-linking check if needed
+            // Attempt to get user ID - ALWAYS map to the connected account owner
             let userId: string;
-            const targetJid = isNoteToSelf && this.connectedAccountJid ? this.connectedAccountJid : remoteJid;
+            
+            // We must identify the Gitu User who owns this WhatsApp session
+            const ownerJid = this.connectedAccountJid;
+            
+            if (!ownerJid) {
+                // If we don't know who is connected, we can't attribute the message
+                this.logger.warn(`Received message from ${remoteJid} but connectedAccountJid is null. Ignoring.`);
+                return;
+            }
+
             try {
-                // If fromMe is true, we should look up the user based on the CONNECTED account JID, not necessarily the remoteJid
-                // (remoteJid in Note to Self is usually the user's own JID, but let's be safe)
-                userId = await this.getUserIdFromJid(targetJid);
+                userId = await this.getUserIdFromJid(ownerJid);
             } catch (error) {
-                // If it's a note to self, we might be able to auto-link if we have a pending session
-                if (isNoteToSelf && this.connectedAccountJid) {
-                    // Try to match against connected account JID variations
-                    userId = await this.getUserIdFromJid(this.connectedAccountJid);
-                } else {
-                    throw error;
-                }
+                // If the OWNER is not linked, we can't do anything
+                 this.logger.warn(`Connected account ${ownerJid} is not linked to a Gitu user.`);
+                 return;
             }
 
             let gatewayMessageId: string | undefined;
             try {
                 const normalized = await gituMessageGateway.processMessage({
                     platform: 'whatsapp',
-                    platformUserId: targetJid,
+                    platformUserId: remoteJid, // The sender (Contact or Group)
                     content: { message: msg.message, media: mediaBuffer },
                     timestamp: new Date(),
                     metadata: {
@@ -508,6 +535,7 @@ class WhatsAppAdapter {
                         pushName: msg.pushName,
                         fromMe: msg.key.fromMe,
                         isNoteToSelf,
+                        isGroup
                     },
                 });
                 gatewayMessageId = normalized.id;
@@ -560,7 +588,11 @@ class WhatsAppAdapter {
 
             // ================== SWARM HANDLING ==================
             if (text.startsWith('/swarm')) {
-                const replyJid = isNoteToSelf && this.connectedAccountJid ? this.connectedAccountJid : remoteJid;
+                // ... (Swarm handling code remains same, but we need to ensure replyJid is correct)
+                const replyJid = remoteJid; 
+                // Note: Original code had: isNoteToSelf && this.connectedAccountJid ? this.connectedAccountJid : remoteJid;
+                // Since we now allow groups, we should always reply to the remoteJid (the chat context)
+                
                 const parts = text.split(' ');
                 const command = parts[1]; // status or task
                 const args = parts.slice(1).join(' ');
@@ -598,6 +630,35 @@ class WhatsAppAdapter {
             }
             // ======================================================
 
+            // ================== AI REPLY LOGIC ==================
+            
+            // Check Permissions
+            const isAllowed = contactsStore[remoteJid]?.auto_reply === true;
+            const isMention = text.toLowerCase().includes('gitu') || text.toLowerCase().includes('@bot');
+            const isCommand = text.startsWith('/');
+            
+            // Determine if we should reply
+            let shouldReply = false;
+            
+            if (isNoteToSelf) {
+                shouldReply = true;
+            } else if (isAllowed) {
+                shouldReply = true;
+            } else if (isMention || isCommand) {
+                shouldReply = true;
+            }
+
+            // Don't reply to self-sent messages unless it's a Note to Self
+            // (e.g. User says something in a group on their phone - we shouldn't reply unless mentioned)
+            if (msg.key.fromMe && !isNoteToSelf) {
+                 shouldReply = false;
+            }
+
+            if (!shouldReply) {
+                // We processed it into history (Gateway), but we won't trigger the AI response.
+                return; 
+            }
+
             // Route to AI
             try {
                 // Ensure session exists
@@ -628,7 +689,9 @@ class WhatsAppAdapter {
                         sessionId: session.id,
                         isNoteToSelf,
                         messageId: msg.key.id,
-                        pushName: msg.pushName
+                        pushName: msg.pushName,
+                        isGroup,
+                        remoteJid
                     } as any
                 );
 
@@ -655,23 +718,8 @@ class WhatsAppAdapter {
             }
 
         } catch (authError) {
-            // This catch block handles User ID lookup failures (Auth errors)
-            const isSpam = !isNoteToSelf;
-
-            if (isSpam) {
-                // Low-level debug log for spam to avoid clutter
-                this.logger.debug(`Ignored unlinked message from ${remoteJid}`);
-            } else {
-                // Genuine user setup issue - Log Warning and Notify
-                this.logger.warn(`Message from unlinked Note-to-Self account ${remoteJid}: ${authError instanceof Error ? authError.message : authError}`);
-
-                if (isNoteToSelf) {
-                    await this.sendMessage(remoteJid,
-                        '⚠️ Account not linked properly.\n' +
-                        'Please open the Gitu App > Settings > Link WhatsApp and click "Link Current Session".'
-                    );
-                }
-            }
+             // Should not happen now with connectedAccountJid logic
+             this.logger.error({ err: authError }, 'Unexpected auth error in WhatsApp adapter');
         }
     }
 
@@ -699,9 +747,81 @@ class WhatsAppAdapter {
     }
 
     /**
+     * Search for contacts and set auto-reply permission.
+     */
+    async setPermissionByQuery(query: string, allowed: boolean): Promise<{ success: boolean; message: string }> {
+        const contacts = await this.searchContacts(query);
+        
+        if (contacts.length === 0) {
+            return { success: false, message: `No contacts found matching "${query}".` };
+        }
+
+        // If exact match or single result, use it
+        if (contacts.length === 1) {
+            const contact = contacts[0];
+            await this.setAutoReply(contact.id, allowed);
+            return { success: true, message: `Auto-reply ${allowed ? 'enabled' : 'disabled'} for ${contact.name} (${contact.id.split('@')[0]}).` };
+        }
+
+        // If multiple, try to find exact name match
+        const exactMatch = contacts.find(c => c.name.toLowerCase() === query.toLowerCase());
+        if (exactMatch) {
+            await this.setAutoReply(exactMatch.id, allowed);
+            return { success: true, message: `Auto-reply ${allowed ? 'enabled' : 'disabled'} for ${exactMatch.name} (${exactMatch.id.split('@')[0]}).` };
+        }
+
+        return { 
+            success: false, 
+            message: `Multiple contacts found for "${query}":\n${contacts.map(c => `- ${c.name} (${c.id.split('@')[0]})`).join('\n')}\nPlease be more specific.` 
+        };
+    }
+
+    /**
+     * Set auto-reply permission for a contact/group.
+     */
+    async setAutoReply(jid: string, allowed: boolean): Promise<void> {
+        if (!contactsStore[jid]) {
+            contactsStore[jid] = { id: jid };
+        }
+        contactsStore[jid].auto_reply = allowed;
+        // Persist immediately to be safe
+        try {
+            const dir = path.dirname(CONTACTS_FILE);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(CONTACTS_FILE, JSON.stringify(contactsStore, null, 2), 'utf-8');
+        } catch (err) {
+            this.logger.error({ err }, 'Failed to save contacts store');
+        }
+    }
+
+    /**
+     * Send a status update (broadcast).
+     */
+    async sendStatus(content: string | { text?: string; image?: string; caption?: string; video?: string }): Promise<void> {
+        if (!this.sock) throw new Error('Socket not initialized');
+        const statusJid = 'status@broadcast';
+
+        if (typeof content === 'string') {
+            await this.sock.sendMessage(statusJid, { text: content, backgroundColor: '#315558', font: 3 } as any); // 3 = SERIF
+        } else if (content.image) {
+            let image: any = content.image;
+            if (typeof image === 'string' && image.startsWith('data:image')) {
+                image = Buffer.from(image.split(',')[1], 'base64');
+            } else if (typeof image === 'string' && !image.startsWith('http')) {
+                image = Buffer.from(image, 'base64');
+            } else if (typeof image === 'string' && image.startsWith('http')) {
+                image = { url: image };
+            }
+            await this.sock.sendMessage(statusJid, { image, caption: content.caption || content.text });
+        } else if (content.text) {
+             await this.sock.sendMessage(statusJid, { text: content.text, backgroundColor: '#315558', font: 3 } as any);
+        }
+    }
+
+    /**
      * Send a message to a JID.
      */
-    async sendMessage(jid: string, content: string | { text?: string; image?: string; caption?: string }): Promise<void> {
+    async sendMessage(jid: string, content: string | { text?: string; image?: string; caption?: string; audio?: { url: string } | Buffer; ptt?: boolean }): Promise<void> {
         if (!this.sock) throw new Error('Socket not initialized');
 
         const trackSentMsg = (msg: proto.IWebMessageInfo | undefined) => {

@@ -11,6 +11,8 @@ interface RemoteConnection {
     userId: string;
     deviceId: string;
     deviceName: string;
+    isHandshakeComplete: boolean;
+    capabilities: string[];
     pendingRequests: Map<string, {
         resolve: (result: { result: ShellExecuteResult; deviceId: string; deviceName: string }) => void,
         reject: (error: any) => void,
@@ -77,6 +79,8 @@ class GituRemoteTerminalService {
             userId: decoded.userId,
             deviceId: decoded.deviceId,
             deviceName,
+            isHandshakeComplete: false,
+            capabilities: [],
             pendingRequests: new Map()
         };
 
@@ -85,9 +89,18 @@ class GituRemoteTerminalService {
         }
         this.connections.get(decoded.userId)!.push(connection);
 
-        console.log(`[RemoteTerminal] User ${decoded.userId} connected from ${deviceName} (${decoded.deviceId})`);
+        console.log(`[RemoteTerminal] User ${decoded.userId} connected from ${deviceName} (${decoded.deviceId}) - Waiting for handshake`);
 
-        ws.on('message', (data) => this.handleMessage(connection, data));
+        // SaaS Safety: Disconnect if handshake not received in 5 seconds
+        const handshakeTimeout = setTimeout(() => {
+            if (!connection.isHandshakeComplete) {
+                console.warn(`[RemoteTerminal] Handshake timeout for ${decoded.deviceId}`);
+                ws.close(4005, 'Handshake timeout');
+                this.handleDisconnect(connection);
+            }
+        }, 5000);
+
+        ws.on('message', (data) => this.handleMessage(connection, data, handshakeTimeout));
         ws.on('close', () => this.handleDisconnect(connection));
         ws.on('error', () => this.handleDisconnect(connection));
     }
@@ -111,9 +124,40 @@ class GituRemoteTerminalService {
         connection.pendingRequests.clear();
     }
 
-    private handleMessage(connection: RemoteConnection, data: any): void {
+    private handleMessage(connection: RemoteConnection, data: any, handshakeTimeout?: NodeJS.Timeout): void {
         try {
             const message = JSON.parse(data.toString());
+
+            // Handle Handshake
+            if (message.type === 'connect') {
+                if (connection.isHandshakeComplete) return; // Already connected
+
+                const capabilities = Array.isArray(message.payload?.capabilities) 
+                    ? message.payload.capabilities 
+                    : [];
+                
+                connection.capabilities = capabilities;
+                connection.isHandshakeComplete = true;
+                
+                if (handshakeTimeout) clearTimeout(handshakeTimeout);
+
+                // Send Acknowledgement
+                connection.ws.send(JSON.stringify({
+                    type: 'hello-ok',
+                    payload: {
+                        serverVersion: '2.0.0',
+                        protocol: 1
+                    }
+                }));
+
+                console.log(`[RemoteTerminal] Handshake complete for ${connection.deviceId}. Caps: ${capabilities.join(', ')}`);
+                return;
+            }
+
+            if (!connection.isHandshakeComplete) {
+                // Ignore other messages until handshake
+                return;
+            }
 
             if (message.type === 'execute_result' && message.id) {
                 const pending = connection.pendingRequests.get(message.id);

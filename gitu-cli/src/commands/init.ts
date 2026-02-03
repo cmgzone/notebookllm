@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import inquirer from 'inquirer';
 import { ApiClient } from '../api.js';
 import { ConfigManager } from '../config.js';
+import { AuthCommand } from './auth.js';
 
 export class InitCommand {
   static async start(api: ApiClient, config: ConfigManager) {
@@ -11,7 +12,7 @@ export class InitCommand {
       {
         type: 'input',
         name: 'token',
-        message: 'Enter your API Token (starts with nllm_) or skip to use "gitu auth":',
+        message: 'Enter your API Token (starts with nllm_) or pairing token (GITU-...) or leave blank:',
         filter: (val: string) => val.trim(),
         validate: (input: string) => true // Allow empty if they want to use 'auth' later
       },
@@ -46,6 +47,12 @@ export class InitCommand {
       }
 
       if (answers.token) {
+        if (String(answers.token).toUpperCase().startsWith('GITU-')) {
+          (api as any).reinitialize();
+          await AuthCommand.link(api, config, answers.token);
+          return;
+        }
+
         config.set('apiToken', answers.token);
         // Re-initialize API client with new config
         (api as any).reinitialize();
@@ -67,7 +74,14 @@ export class InitCommand {
     } catch (error: any) {
       console.log(chalk.red('Failed!'));
       console.error(chalk.red(`Error: ${error.message}`));
-      console.log(chalk.yellow('Please check your token and try again.'));
+      if (error?.response?.status === 401) {
+        console.log(chalk.yellow('Authentication failed.'));
+        console.log(chalk.gray('If you used a pairing token, run:'));
+        console.log(chalk.cyan('  gitu auth GITU-XXXX-YYYY'));
+        console.log(chalk.gray('If you used an API token, ensure it starts with nllm_.'));
+        return;
+      }
+      console.log(chalk.yellow('Please check your settings and try again.'));
     }
   }
 }

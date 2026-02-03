@@ -437,6 +437,40 @@ router.get('/permissions', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.post('/permissions', async (req: AuthRequest, res: Response) => {
+  try {
+    const { resource, actions, scope, expiresAt, expiresInDays } = req.body as any;
+    if (!resource || typeof resource !== 'string') return res.status(400).json({ error: 'resource is required' });
+    if (!Array.isArray(actions) || actions.some((a: any) => typeof a !== 'string')) {
+      return res.status(400).json({ error: 'actions must be an array of strings' });
+    }
+    if (actions.length === 0) return res.status(400).json({ error: 'actions must not be empty' });
+
+    let parsedExpiresAt: Date | undefined;
+    if (typeof expiresAt === 'string') {
+      const d = new Date(expiresAt);
+      if (!Number.isNaN(d.getTime())) parsedExpiresAt = d;
+    } else if (typeof expiresInDays === 'number' && Number.isFinite(expiresInDays) && expiresInDays > 0) {
+      parsedExpiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
+    } else {
+      parsedExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    }
+
+    const permission = await gituPermissionManager.grantPermission(req.userId!, {
+      resource,
+      actions,
+      scope,
+      expiresAt: parsedExpiresAt,
+    });
+
+    res.status(201).json({ success: true, permission });
+  } catch (error: any) {
+    const msg = String(error?.message || '');
+    const status = msg.toLowerCase().includes('invalid resource') || msg.toLowerCase().includes('invalid action') ? 400 : 500;
+    res.status(status).json({ error: 'Failed to grant permission', message: msg });
+  }
+});
+
 router.post('/permissions/:id/revoke', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;

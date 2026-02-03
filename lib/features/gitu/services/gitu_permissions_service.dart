@@ -22,6 +22,23 @@ class GituPermissionsService {
     return items.map(GituPermission.fromJson).toList();
   }
 
+  Future<GituPermission> grantPermission({
+    required String resource,
+    required List<String> actions,
+    Map<String, dynamic>? scope,
+    int? expiresInDays,
+  }) async {
+    final apiService = _ref.read(apiServiceProvider);
+    final body = <String, dynamic>{
+      'resource': resource,
+      'actions': actions,
+      if (scope != null) 'scope': scope,
+      if (expiresInDays != null) 'expiresInDays': expiresInDays,
+    };
+    final response = await apiService.post<Map<String, dynamic>>('/gitu/permissions', body);
+    return GituPermission.fromJson((response['permission'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{});
+  }
+
   Future<void> revokePermission(String permissionId) async {
     final apiService = _ref.read(apiServiceProvider);
     await apiService.post<Map<String, dynamic>>('/gitu/permissions/$permissionId/revoke', {});
@@ -50,4 +67,3 @@ class GituPermissionsService {
     await apiService.post<Map<String, dynamic>>('/gitu/permissions/requests/$requestId/deny', {});
   }
 }
-

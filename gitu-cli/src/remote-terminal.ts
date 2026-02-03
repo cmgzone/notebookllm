@@ -13,6 +13,8 @@ export class RemoteTerminalClient {
     private approvalCache = new Map<string, number>();
     private confirmationQueue: Promise<void> = Promise.resolve();
 
+    private isConnected = false;
+
     constructor(config: ConfigManager) {
         this.config = config;
     }
@@ -32,24 +34,39 @@ export class RemoteTerminalClient {
             this.config.set('deviceId', deviceId);
         }
 
+        const deviceName = 'Gitu CLI (' + process.platform + ')';
+
         // Convert http/https to ws/wss
         const wsUrl = apiUrl.replace(/^http/, 'ws').replace(/\/api\/$/, '/ws/remote-terminal');
 
         const url = new URL(wsUrl);
         url.searchParams.append('token', token);
         url.searchParams.append('deviceId', deviceId);
-        url.searchParams.append('deviceName', 'Gitu CLI (' + process.platform + ')');
+        url.searchParams.append('deviceName', deviceName);
 
         this.ws = new WebSocket(url.toString());
 
         this.ws.on('open', () => {
             this.reconnectAttempts = 0;
-            // console.log(chalk.gray('[Remote Terminal] Connected to Gitu cloud'));
+            // Send Handshake
+            this.send({
+                type: 'connect',
+                payload: {
+                    version: '1.0.0', // Should come from package.json in real app
+                    capabilities: ['shell.execute'],
+                    metadata: {
+                        platform: process.platform,
+                        arch: process.arch,
+                        nodeVersion: process.version
+                    }
+                }
+            });
         });
 
         this.ws.on('message', (data) => this.handleMessage(data));
 
         this.ws.on('close', () => {
+            this.isConnected = false;
             if (this.reconnectAttempts < this.maxReconnectAttempts) {
                 this.reconnectAttempts++;
                 setTimeout(() => this.connect(), 1000 * this.reconnectAttempts);
@@ -64,6 +81,12 @@ export class RemoteTerminalClient {
     private async handleMessage(data: any) {
         try {
             const message = JSON.parse(data.toString());
+
+            if (message.type === 'hello-ok') {
+                this.isConnected = true;
+                // console.log(chalk.green('[Remote Terminal] Handshake successful'));
+                return;
+            }
 
             if (message.type === 'execute') {
                 const { id, payload } = message;

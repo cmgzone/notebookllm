@@ -57,6 +57,9 @@ import { registerBrowserTools } from './services/browserMCPTools.js';
 import { registerPluginMCPTools } from './services/pluginMCPTools.js';
 import { registerRuleMCPTools } from './services/ruleMCPTools.js';
 import { registerGitHubTools } from './services/githubMCPTools.js';
+import { registerAgentTools } from './services/agentMCPTools.js';
+import { registerExternalMcpTools } from './services/externalMCPTools.js';
+import { registerVoiceTools } from './services/voiceMCPTools.js';
 import { whatsappAdapter } from './adapters/whatsappAdapter.js';
 import { whatsappHealthMonitor } from './services/whatsappHealthMonitor.js';
 import { telegramAdapter } from './adapters/telegramAdapter.js';
@@ -104,6 +107,9 @@ registerLanguageTools();
 registerBrowserTools();
 registerPluginMCPTools();
 registerRuleMCPTools();
+registerVoiceTools();
+registerAgentTools();
+registerExternalMcpTools();
 
 // Initialize WhatsApp
 whatsappAdapter.initialize({ printQRInTerminal: false }).then(() => {

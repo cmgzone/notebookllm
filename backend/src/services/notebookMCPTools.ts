@@ -124,12 +124,14 @@ const listSourcesTool: MCPTool = {
     properties: {
       notebookName: { type: 'string', description: 'The name of the notebook to find sources from' },
       notebookId: { type: 'string', description: 'The specific ID of the notebook (if known)' },
+      notebook_id: { type: 'string', description: 'Alias of notebookId (snake_case)' },
       limit: { type: 'number', default: 20 }
     }
   },
   handler: async (args: any, context: MCPContext) => {
-    const { notebookName, notebookId, limit = 20 } = args;
-    let targetNotebookId = notebookId;
+    const { notebookName, limit = 20 } = args;
+    const providedNotebookId = args.notebookId || args.notebook_id;
+    let targetNotebookId = providedNotebookId;
 
     // Resolve notebook ID from name if necessary
     if (!targetNotebookId && notebookName) {

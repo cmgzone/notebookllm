@@ -2,6 +2,7 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { createRequire } from 'module';
 import { ConfigManager } from './config.js';
 import { ApiClient } from './api.js';
 import { QRCommand } from './commands/qr.js';
@@ -19,20 +20,120 @@ import { AuthCommand } from './commands/auth.js';
 import { CommandsCommand } from './commands/commands.js';
 import { MissionCommand } from './commands/mission.js';
 import { CodeCommand } from './commands/code.js';
+import { OnboardCommand } from './commands/onboard.js';
+import { PermissionsCommand } from './commands/permissions.js';
+import { WhatsAppCommand } from './commands/whatsapp.js';
+import { TelegramCommand } from './commands/telegram.js';
 
 const program = new Command();
 const config = new ConfigManager();
 const api = new ApiClient(config);
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { version?: string };
 
 program
   .name('gitu')
   .description('Gitu Universal Assistant CLI')
-  .version('1.0.0');
+  .version(pkg.version ?? '0.0.0');
 
 program
   .command('init')
   .description('Initialize Gitu CLI configuration')
   .action(() => InitCommand.start(api, config));
+
+program
+  .command('onboard')
+  .description('Interactive onboarding: link device, remote terminal, permissions')
+  .action(() => OnboardCommand.start(api, config));
+
+const permsCmd = program
+  .command('permissions')
+  .description('Manage backend permissions (shell/files/etc)');
+
+permsCmd
+  .command('list')
+  .description('List current permissions')
+  .option('--resource <resource>', 'Filter by resource, e.g. shell/files')
+  .option('--json', 'Output as JSON')
+  .action((options) => PermissionsCommand.list(api, options));
+
+permsCmd
+  .command('requests')
+  .description('List permission requests')
+  .option('--status <status>', 'pending|approved|denied')
+  .option('--json', 'Output as JSON')
+  .action((options) => PermissionsCommand.requests(api, options));
+
+permsCmd
+  .command('request')
+  .description('Request a permission')
+  .requiredOption('--resource <resource>', 'Resource name, e.g. shell/files')
+  .requiredOption('--actions <actions>', 'Comma-separated actions, e.g. execute,read,write')
+  .requiredOption('--reason <reason>', 'Reason for request')
+  .option('--allowed-paths <paths>', 'Comma-separated allowed paths (files)')
+  .option('--allowed-commands <cmds>', 'Comma-separated allowed command prefixes (shell)')
+  .option('--allow-unsandboxed', 'Allow unsandboxed shell execution')
+  .option('--expires-in-days <days>', 'Expiry in days', '30')
+  .option('--json', 'Output as JSON')
+  .action((options) => PermissionsCommand.request(api, options));
+
+permsCmd
+  .command('approve <requestId>')
+  .description('Approve a permission request')
+  .option('--expires-in-days <days>', 'Expiry in days', '30')
+  .option('--json', 'Output as JSON')
+  .action((requestId, options) => PermissionsCommand.approve(api, requestId, options));
+
+permsCmd
+  .command('revoke <permissionId>')
+  .description('Revoke a permission')
+  .option('--json', 'Output as JSON')
+  .action((permissionId, options) => PermissionsCommand.revoke(api, permissionId, options));
+
+const whatsappCmd = program
+  .command('whatsapp')
+  .description('Connect and link WhatsApp (backend-managed)');
+
+whatsappCmd
+  .command('status')
+  .description('Show WhatsApp adapter status and QR if available')
+  .option('--json', 'Output as JSON')
+  .action((options) => WhatsAppCommand.status(api, options));
+
+whatsappCmd
+  .command('connect')
+  .description('Start WhatsApp connection and print QR')
+  .option('--json', 'Output as JSON')
+  .action((options) => WhatsAppCommand.connect(api, options));
+
+whatsappCmd
+  .command('disconnect')
+  .description('Disconnect WhatsApp adapter')
+  .option('--json', 'Output as JSON')
+  .action((options) => WhatsAppCommand.disconnect(api, options));
+
+whatsappCmd
+  .command('link-current')
+  .description('Link the currently connected WhatsApp account to this user')
+  .option('--json', 'Output as JSON')
+  .action((options) => WhatsAppCommand.linkCurrent(api, options));
+
+const telegramCmd = program
+  .command('telegram')
+  .description('Link Telegram user id to your account');
+
+telegramCmd
+  .command('status')
+  .description('Show Telegram adapter status and link state')
+  .option('--json', 'Output as JSON')
+  .action((options) => TelegramCommand.status(api, options));
+
+telegramCmd
+  .command('link <telegramUserId>')
+  .description('Link your Telegram user id (get it by sending /id to the bot)')
+  .option('--name <displayName>', 'Display name', 'Telegram')
+  .option('--json', 'Output as JSON')
+  .action((telegramUserId, options) => TelegramCommand.link(api, telegramUserId, options));
 
 program
   .command('commands')
@@ -285,22 +386,24 @@ program
 // Error handling
 program.exitOverride();
 
-try {
-  await program.parseAsync(process.argv);
-} catch (error: any) {
-  if (error.code === 'commander.help') {
-    process.exit(0);
+const handleCliError = (error: any) => {
+  const commanderExitCodes = new Set(['commander.help', 'commander.helpDisplayed', 'commander.version']);
+  if (commanderExitCodes.has(error?.code)) {
+    process.exitCode = 0;
+    return;
   }
 
-  console.error(chalk.red('Error:'), error.message);
+  console.error(chalk.red('Error:'), error?.message || String(error));
 
-  if (error.response?.status === 401) {
+  if (error?.response?.status === 401) {
     console.error(chalk.yellow('\nAuthentication failed. Please check your API token:'));
     console.error(chalk.cyan('  gitu config set-token YOUR_TOKEN'));
-  } else if (error.code === 'ECONNREFUSED') {
+  } else if (error?.code === 'ECONNREFUSED') {
     console.error(chalk.yellow('\nCannot connect to backend. Please check your API URL:'));
     console.error(chalk.cyan('  gitu config set-url https://your-backend.com'));
   }
 
   process.exit(1);
-}
+};
+
+program.parseAsync(process.argv).catch(handleCliError);

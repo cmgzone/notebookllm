@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -110,9 +112,11 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
   }
 
   Future<void> _approveRequest(GituPermissionRequest request) async {
+    final expiresInDays = await _pickExpiryDays();
+    if (expiresInDays == null) return;
     setState(() => _loading = true);
     try {
-      final granted = await ref.read(gituPermissionsServiceProvider).approveRequest(request.id);
+      final granted = await ref.read(gituPermissionsServiceProvider).approveRequest(request.id, expiresInDays: expiresInDays);
       if (!mounted) return;
       await Future.wait([_reloadRequests(), _reloadPermissions()]);
       _showInfo('Approved ${granted.resource} permission');
@@ -125,6 +129,19 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
   }
 
   Future<void> _denyRequest(GituPermissionRequest request) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Deny request?'),
+        content: Text('This will deny the request for "${request.permission.resource}".'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Deny')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
     setState(() => _loading = true);
     try {
       await ref.read(gituPermissionsServiceProvider).denyRequest(request.id);
@@ -137,6 +154,277 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<int?> _pickExpiryDays() async {
+    return showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Permission duration'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text('7 days'),
+              onTap: () => Navigator.pop(context, 7),
+            ),
+            ListTile(
+              title: const Text('30 days'),
+              onTap: () => Navigator.pop(context, 30),
+            ),
+            ListTile(
+              title: const Text('90 days'),
+              onTap: () => Navigator.pop(context, 90),
+            ),
+            ListTile(
+              title: const Text('365 days'),
+              onTap: () => Navigator.pop(context, 365),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ],
+      ),
+    );
+  }
+
+  List<String> _parseList(String raw) {
+    return raw
+        .split(RegExp(r'[,\n]'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
+  Future<void> _openManualGrant() async {
+    final resources = const ['gmail', 'shopify', 'files', 'notebooks', 'vps', 'shell', 'github', 'calendar', 'slack', 'custom'];
+    String resource = 'shell';
+    final actions = <String>{'execute'};
+    int expiresInDays = 30;
+
+    final allowedPathsCtrl = TextEditingController();
+    final allowedCommandsCtrl = TextEditingController();
+    final notebookIdsCtrl = TextEditingController();
+    final emailLabelsCtrl = TextEditingController();
+    final vpsConfigIdsCtrl = TextEditingController();
+    final customScopeCtrl = TextEditingController();
+
+    Future<void> submit(StateSetter setSheetState) async {
+      if (_loading) return;
+      if (actions.isEmpty) {
+        _showError('Select at least one action');
+        return;
+      }
+      setState(() => _loading = true);
+      setSheetState(() {});
+      try {
+        final scope = <String, dynamic>{};
+        final allowedPaths = _parseList(allowedPathsCtrl.text);
+        final allowedCommands = _parseList(allowedCommandsCtrl.text);
+        final notebookIds = _parseList(notebookIdsCtrl.text);
+        final emailLabels = _parseList(emailLabelsCtrl.text);
+        final vpsConfigIds = _parseList(vpsConfigIdsCtrl.text);
+        final customScopeRaw = customScopeCtrl.text.trim();
+
+        if (allowedPaths.isNotEmpty) scope['allowedPaths'] = allowedPaths;
+        if (allowedCommands.isNotEmpty) scope['allowedCommands'] = allowedCommands;
+        if (notebookIds.isNotEmpty) scope['notebookIds'] = notebookIds;
+        if (emailLabels.isNotEmpty) scope['emailLabels'] = emailLabels;
+        if (vpsConfigIds.isNotEmpty) scope['vpsConfigIds'] = vpsConfigIds;
+
+        if (customScopeRaw.isNotEmpty) {
+          final parsed = jsonDecode(customScopeRaw);
+          if (parsed is! Map) throw Exception('customScope must be a JSON object');
+          scope['customScope'] = parsed;
+        }
+
+        final granted = await ref.read(gituPermissionsServiceProvider).grantPermission(
+              resource: resource,
+              actions: actions.toList()..sort(),
+              scope: scope.isEmpty ? null : scope,
+              expiresInDays: expiresInDays,
+            );
+
+        if (!mounted) return;
+        await _reloadPermissions();
+        _showInfo('Granted ${granted.resource} permission');
+        if (mounted) Navigator.pop(context);
+      } catch (e) {
+        if (!mounted) return;
+        _showError('Failed to grant permission: $e');
+      } finally {
+        if (mounted) setState(() => _loading = false);
+        setSheetState(() {});
+      }
+    }
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Grant Permission', style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: resource,
+                      decoration: const InputDecoration(labelText: 'Resource', border: OutlineInputBorder(), isDense: true),
+                      items: resources.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                      onChanged: _loading
+                          ? null
+                          : (val) {
+                              if (val == null) return;
+                              setSheetState(() => resource = val);
+                            },
+                    ),
+                    const SizedBox(height: 12),
+                    _buildActionsPicker(actions, setSheetState),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      value: expiresInDays,
+                      decoration: const InputDecoration(labelText: 'Expires in', border: OutlineInputBorder(), isDense: true),
+                      items: const [
+                        DropdownMenuItem(value: 7, child: Text('7 days')),
+                        DropdownMenuItem(value: 30, child: Text('30 days')),
+                        DropdownMenuItem(value: 90, child: Text('90 days')),
+                        DropdownMenuItem(value: 365, child: Text('365 days')),
+                      ],
+                      onChanged: _loading ? null : (val) => setSheetState(() => expiresInDays = val ?? 30),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Scope (optional)', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: allowedPathsCtrl,
+                      enabled: !_loading,
+                      decoration: const InputDecoration(
+                        labelText: 'Allowed paths (comma or newline)',
+                        border: OutlineInputBorder(),
+                      ),
+                      minLines: 1,
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: allowedCommandsCtrl,
+                      enabled: !_loading,
+                      decoration: const InputDecoration(
+                        labelText: 'Allowed commands (comma or newline)',
+                        border: OutlineInputBorder(),
+                      ),
+                      minLines: 1,
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: notebookIdsCtrl,
+                      enabled: !_loading,
+                      decoration: const InputDecoration(
+                        labelText: 'Notebook IDs (comma or newline)',
+                        border: OutlineInputBorder(),
+                      ),
+                      minLines: 1,
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: emailLabelsCtrl,
+                      enabled: !_loading,
+                      decoration: const InputDecoration(
+                        labelText: 'Email labels (comma or newline)',
+                        border: OutlineInputBorder(),
+                      ),
+                      minLines: 1,
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: vpsConfigIdsCtrl,
+                      enabled: !_loading,
+                      decoration: const InputDecoration(
+                        labelText: 'VPS config IDs (comma or newline)',
+                        border: OutlineInputBorder(),
+                      ),
+                      minLines: 1,
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: customScopeCtrl,
+                      enabled: !_loading,
+                      decoration: const InputDecoration(
+                        labelText: 'Custom scope JSON (object)',
+                        border: OutlineInputBorder(),
+                      ),
+                      minLines: 1,
+                      maxLines: 4,
+                    ),
+                    const SizedBox(height: 12),
+                    if (_loading) const LinearProgressIndicator(),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: _loading ? null : () => submit(setSheetState),
+                      child: const Text('Grant'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildActionsPicker(Set<String> actions, StateSetter setSheetState) {
+    Widget checkbox(String action) {
+      return CheckboxListTile(
+        value: actions.contains(action),
+        onChanged: _loading
+            ? null
+            : (val) {
+                setSheetState(() {
+                  if (val == true) {
+                    actions.add(action);
+                  } else {
+                    actions.remove(action);
+                  }
+                });
+              },
+        title: Text(action),
+        dense: true,
+        controlAffinity: ListTileControlAffinity.leading,
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Actions', style: Theme.of(context).textTheme.titleMedium),
+            checkbox('read'),
+            checkbox('write'),
+            checkbox('execute'),
+            checkbox('delete'),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showError(String message) {
@@ -164,6 +452,11 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
           title: const Text('Permissions', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
+            IconButton(
+              onPressed: _loading ? null : _openManualGrant,
+              icon: const Icon(LucideIcons.plus, color: Colors.white),
+              tooltip: 'Grant permission',
+            ),
             IconButton(
               onPressed: _loading ? null : _loadAll,
               icon: const Icon(LucideIcons.refreshCw, color: Colors.white),

@@ -29,6 +29,7 @@ export interface TelegramMessage {
   caption?: string; // Caption for photo/document
   photo?: Buffer;
   document?: { data: Buffer; filename: string };
+  audio?: { url: string } | Buffer | string;
   data?: Buffer;
   filename?: string;
   replyMarkup?: TelegramBot.InlineKeyboardMarkup;
@@ -828,6 +829,19 @@ _Click buttons below to change settings:_
           reply_markup: message.replyMarkup,
         }, {
           filename: message.document.filename,
+        });
+      }
+
+      // Send audio/voice
+      if (message.audio) {
+        // If it has a URL property, use that, otherwise use the value directly
+        const audioSource = (typeof message.audio === 'object' && 'url' in message.audio) 
+          ? message.audio.url 
+          : message.audio;
+          
+        await this.bot.sendVoice(chatId, audioSource, {
+          caption: message.caption,
+          reply_markup: message.replyMarkup,
         });
       }
     } catch (error) {
