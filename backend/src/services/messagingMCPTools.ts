@@ -222,7 +222,7 @@ const searchContactsTool: MCPTool = {
  */
 const listMessagesTool: MCPTool = {
     name: 'list_messages',
-    description: 'List recent message history from linked platforms (WhatsApp, Telegram).',
+    description: 'Read/Check recent WhatsApp or Telegram messages. Use this when the user asks to "check my messages" or "read my messages".',
     schema: {
         type: 'object',
         properties: {

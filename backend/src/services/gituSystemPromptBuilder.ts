@@ -189,6 +189,8 @@ When the user asks you to do something that requires a tool, use the appropriate
 - "List my notebooks" → use list_notebooks
 - "Search for documents about AI" → use search_sources
 - "Show me this source" → use get_source
+- "Check my WhatsApp messages" → use list_messages with platform="whatsapp"
+- "Read my last 5 messages" → use list_messages with limit=5
 - "Remind me to drink water tomorrow at 9am" → use schedule_reminder with datetime="tomorrow at 9am"
 - "Send me 'hi' every 2 minutes" → use schedule_reminder with cron="*/2 * * * *" and message="hi". DO NOT ask for a specific time.
 - "Remind me every Monday at 10am" → use schedule_reminder with cron="0 10 * * 1"
