@@ -70,9 +70,8 @@ class MurfService {
      */
     getCommonVoices() {
         return [
-            { id: 'en-US-terra', name: 'Terra', gender: 'Female', language: 'English (US)' },
-            { id: 'en-US-ryan', name: 'Ryan', gender: 'Male', language: 'English (US)' },
             { id: 'en-US-natalie', name: 'Natalie', gender: 'Female', language: 'English (US)' },
+            { id: 'en-US-ryan', name: 'Ryan', gender: 'Male', language: 'English (US)' },
             { id: 'en-UK-gabriel', name: 'Gabriel', gender: 'Male', language: 'English (UK)' },
         ];
     }

@@ -57,7 +57,7 @@ const sendVoiceNoteTool: MCPTool = {
             text: { type: 'string', description: 'The text to speak.' },
             platform: { type: 'string', enum: ['whatsapp', 'telegram'], description: 'Platform to send to.' },
             recipient: { type: 'string', description: 'Recipient (name, number, or "self").', default: 'self' },
-            voiceId: { type: 'string', description: 'Optional: Voice ID (e.g. en-US-terra, en-US-ryan).' }
+            voiceId: { type: 'string', description: 'Optional: Voice ID (e.g. en-US-natalie, en-US-ryan).' }
         },
         required: ['text', 'platform']
     },
