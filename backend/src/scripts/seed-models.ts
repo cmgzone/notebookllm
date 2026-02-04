@@ -12,6 +12,7 @@ async function seedModels() {
                 ('Gemini 2.0 Flash', 'gemini-2.0-flash', 'gemini', 'Latest fast model for quick tasks', 1000000, true, false),
                 ('Gemini 2.5 Flash', 'gemini-2.5-flash', 'gemini', 'Advanced flash model with improved capabilities', 1000000, true, false),
                 ('Gemini 2.5 Pro', 'gemini-2.5-pro', 'gemini', 'Most capable Gemini model for complex tasks', 2000000, true, true),
+                ('Gemini 2.0 Flash Lite (Free)', 'google/gemini-2.0-flash-lite-preview-02-05:free', 'openrouter', 'Fast and free Google model via OpenRouter', 1000000, true, false),
                 ('Amazon Nova Lite', 'amazon/nova-2-lite-v1:free', 'openrouter', 'Free Amazon Nova model', 128000, true, false),
                 ('Llama 3.3 70B', 'meta-llama/llama-3.3-70b-instruct', 'openrouter', 'Powerful open-source model', 128000, true, false),
                 ('Claude 3.5 Sonnet', 'anthropic/claude-3.5-sonnet', 'openrouter', 'Excellent for analysis and writing', 200000, true, true),

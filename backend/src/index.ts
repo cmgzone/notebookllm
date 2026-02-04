@@ -73,6 +73,7 @@ import { planningWebSocketService } from './services/planningWebSocketService.js
 import { gituQRAuthWebSocketService } from './services/gituQRAuthWebSocketService.js';
 import { connectRedis, disconnectRedis } from './config/redis.js';
 import { gituScheduler } from './services/gituScheduler.js';
+import { gituTaskScheduler } from './services/gituTaskScheduler.js';
 import { ensureGituSchema } from './config/gituSchema.js';
 
 // Load environment variables
@@ -82,6 +83,8 @@ ensureGituSchema()
     .then(() => {
         console.log('✅ Gitu schema ensured');
         gituScheduler.start();
+        gituTaskScheduler.start();
+        console.log('✅ Gitu Task Scheduler started');
     })
     .catch(err => console.error('❌ Failed to ensure Gitu schema:', err));
 

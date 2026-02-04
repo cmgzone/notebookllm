@@ -596,18 +596,46 @@ class GituAIRouter {
       }
     }
 
-    // For rate limits or unavailability, try a different provider
-    const alternativeProviders = ['gemini', 'openrouter'] as const;
+    // For rate limits or unavailability, try a different provider or model
+    const allModels = Object.values(models);
+
+    // 1. Try same provider, different model (especially for OpenRouter)
+    if (primaryModel.provider === 'openrouter') {
+        const sameProviderCandidates = allModels.filter(m => 
+            m.provider === 'openrouter' && 
+            m.modelId !== primaryModel.modelId
+        );
+        
+        // Sort by cost similarity
+        sameProviderCandidates.sort((a, b) => 
+            Math.abs(a.costPer1kTokens - primaryModel.costPer1kTokens) - 
+            Math.abs(b.costPer1kTokens - primaryModel.costPer1kTokens)
+        );
+
+        if (sameProviderCandidates.length > 0) {
+            return sameProviderCandidates[0];
+        }
+    }
+
+    // 2. Try different provider
+    const alternativeProviders = ['gemini', 'openrouter', 'anthropic', 'openai'] as const;
     const currentProvider = primaryModel.provider;
 
     for (const provider of alternativeProviders) {
       if (provider !== currentProvider) {
         // Find a model from this provider
-        const alternativeModel = Object.values(models).find(m => m.provider === provider);
+        const alternativeModel = allModels.find(m => m.provider === provider);
         if (alternativeModel) {
           return alternativeModel;
         }
       }
+    }
+    
+    // 3. Last resort: Native Gemini if available (and not already tried)
+    if (currentProvider !== 'gemini' && process.env.GEMINI_API_KEY) {
+        // Try to find Gemini in DB first
+        const geminiModel = allModels.find(m => m.provider === 'gemini');
+        if (geminiModel) return geminiModel;
     }
 
     return null;

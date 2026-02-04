@@ -421,7 +421,7 @@ Create an always-available, context-aware AI assistant that users can interact w
 
 ## Out of Scope (Phase 1)
 
-- Native mobile apps (use Flutter app instead)
+- notebookllm mobile apps (use notebookllm app flutter and  web app)
 - Video calls with Gitu
 - AR/VR interfaces
 - Blockchain integration
@@ -462,7 +462,7 @@ Create an always-available, context-aware AI assistant that users can interact w
 
 ## Timeline Estimate
 
-- **Phase 1 (Months 1-2)**: Core infrastructure, Flutter app integration, basic messaging
+- **Phase 1 (Months 1-2)**: Core infrastructure, notebookll app integration, basic messaging
 - **Phase 2 (Months 3-4)**: WhatsApp (Baileys), Telegram, session management, memory system
 - **Phase 3 (Months 5-6)**: Integrations (Gmail, Shopify, Notebooks), API key management
 - **Phase 4 (Months 7-8)**: Autonomous features, plugins, advanced permissions, rules

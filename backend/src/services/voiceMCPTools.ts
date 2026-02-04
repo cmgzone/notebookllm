@@ -123,10 +123,30 @@ const sendVoiceNoteTool: MCPTool = {
 };
 
 /**
+ * Tool: List Voice Models
+ */
+const listVoiceModelsTool: MCPTool = {
+    name: 'list_voice_models',
+    description: 'List available voice models for text-to-speech generation.',
+    schema: {
+        type: 'object',
+        properties: {},
+    },
+    handler: async (args: any, context: MCPContext) => {
+        const voices = await murfService.getVoiceModels();
+        return {
+            count: voices.length,
+            voices: voices.slice(0, 50) // Limit to avoid context overflow
+        };
+    }
+};
+
+/**
  * Register Voice Tools
  */
 export function registerVoiceTools() {
     gituMCPHub.registerTool(transcribeAudioTool);
     gituMCPHub.registerTool(sendVoiceNoteTool);
+    gituMCPHub.registerTool(listVoiceModelsTool);
     console.log('[VoiceMCPTools] Registered transcription and voice note tools');
 }

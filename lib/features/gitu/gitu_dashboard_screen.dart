@@ -13,11 +13,11 @@ class GituDashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: const Row(
           children: [
             Icon(LucideIcons.sparkles, size: 20),
-            const SizedBox(width: 8),
-            const Text('Gitu AI Dashboard'),
+            SizedBox(width: 8),
+            Text('Gitu AI Dashboard'),
           ],
         ),
         actions: [

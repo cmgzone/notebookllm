@@ -13,7 +13,8 @@ class GituPermissionsScreen extends ConsumerStatefulWidget {
   const GituPermissionsScreen({super.key});
 
   @override
-  ConsumerState<GituPermissionsScreen> createState() => _GituPermissionsScreenState();
+  ConsumerState<GituPermissionsScreen> createState() =>
+      _GituPermissionsScreenState();
 }
 
 class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
@@ -88,10 +89,15 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Revoke permission?'),
-        content: Text('This will revoke access to "${permission.resource}" for the selected scope.'),
+        content: Text(
+            'This will revoke access to "${permission.resource}" for the selected scope.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Revoke')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Revoke')),
         ],
       ),
     );
@@ -99,7 +105,9 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
 
     setState(() => _loading = true);
     try {
-      await ref.read(gituPermissionsServiceProvider).revokePermission(permission.id);
+      await ref
+          .read(gituPermissionsServiceProvider)
+          .revokePermission(permission.id);
       if (!mounted) return;
       await _reloadPermissions();
       _showInfo('Permission revoked');
@@ -116,7 +124,9 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
     if (expiresInDays == null) return;
     setState(() => _loading = true);
     try {
-      final granted = await ref.read(gituPermissionsServiceProvider).approveRequest(request.id, expiresInDays: expiresInDays);
+      final granted = await ref
+          .read(gituPermissionsServiceProvider)
+          .approveRequest(request.id, expiresInDays: expiresInDays);
       if (!mounted) return;
       await Future.wait([_reloadRequests(), _reloadPermissions()]);
       _showInfo('Approved ${granted.resource} permission');
@@ -133,10 +143,15 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Deny request?'),
-        content: Text('This will deny the request for "${request.permission.resource}".'),
+        content: Text(
+            'This will deny the request for "${request.permission.resource}".'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Deny')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Deny')),
         ],
       ),
     );
@@ -183,7 +198,9 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
         ],
       ),
     );
@@ -198,7 +215,18 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
   }
 
   Future<void> _openManualGrant() async {
-    final resources = const ['gmail', 'shopify', 'files', 'notebooks', 'vps', 'shell', 'github', 'calendar', 'slack', 'custom'];
+    const resources = [
+      'gmail',
+      'shopify',
+      'files',
+      'notebooks',
+      'vps',
+      'shell',
+      'github',
+      'calendar',
+      'slack',
+      'custom'
+    ];
     String resource = 'shell';
     final actions = <String>{'execute'};
     int expiresInDays = 30;
@@ -227,24 +255,37 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
         final vpsConfigIds = _parseList(vpsConfigIdsCtrl.text);
         final customScopeRaw = customScopeCtrl.text.trim();
 
-        if (allowedPaths.isNotEmpty) scope['allowedPaths'] = allowedPaths;
-        if (allowedCommands.isNotEmpty) scope['allowedCommands'] = allowedCommands;
-        if (notebookIds.isNotEmpty) scope['notebookIds'] = notebookIds;
-        if (emailLabels.isNotEmpty) scope['emailLabels'] = emailLabels;
-        if (vpsConfigIds.isNotEmpty) scope['vpsConfigIds'] = vpsConfigIds;
+        if (allowedPaths.isNotEmpty) {
+          scope['allowedPaths'] = allowedPaths;
+        }
+        if (allowedCommands.isNotEmpty) {
+          scope['allowedCommands'] = allowedCommands;
+        }
+        if (notebookIds.isNotEmpty) {
+          scope['notebookIds'] = notebookIds;
+        }
+        if (emailLabels.isNotEmpty) {
+          scope['emailLabels'] = emailLabels;
+        }
+        if (vpsConfigIds.isNotEmpty) {
+          scope['vpsConfigIds'] = vpsConfigIds;
+        }
 
         if (customScopeRaw.isNotEmpty) {
           final parsed = jsonDecode(customScopeRaw);
-          if (parsed is! Map) throw Exception('customScope must be a JSON object');
+          if (parsed is! Map) {
+            throw Exception('customScope must be a JSON object');
+          }
           scope['customScope'] = parsed;
         }
 
-        final granted = await ref.read(gituPermissionsServiceProvider).grantPermission(
-              resource: resource,
-              actions: actions.toList()..sort(),
-              scope: scope.isEmpty ? null : scope,
-              expiresInDays: expiresInDays,
-            );
+        final granted =
+            await ref.read(gituPermissionsServiceProvider).grantPermission(
+                  resource: resource,
+                  actions: actions.toList()..sort(),
+                  scope: scope.isEmpty ? null : scope,
+                  expiresInDays: expiresInDays,
+                );
 
         if (!mounted) return;
         await _reloadPermissions();
@@ -277,12 +318,19 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Grant Permission', style: Theme.of(context).textTheme.titleLarge),
+                    Text('Grant Permission',
+                        style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: resource,
-                      decoration: const InputDecoration(labelText: 'Resource', border: OutlineInputBorder(), isDense: true),
-                      items: resources.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                      initialValue: resource,
+                      decoration: const InputDecoration(
+                          labelText: 'Resource',
+                          border: OutlineInputBorder(),
+                          isDense: true),
+                      items: resources
+                          .map(
+                              (r) => DropdownMenuItem(value: r, child: Text(r)))
+                          .toList(),
                       onChanged: _loading
                           ? null
                           : (val) {
@@ -294,18 +342,25 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
                     _buildActionsPicker(actions, setSheetState),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<int>(
-                      value: expiresInDays,
-                      decoration: const InputDecoration(labelText: 'Expires in', border: OutlineInputBorder(), isDense: true),
+                      initialValue: expiresInDays,
+                      decoration: const InputDecoration(
+                          labelText: 'Expires in',
+                          border: OutlineInputBorder(),
+                          isDense: true),
                       items: const [
                         DropdownMenuItem(value: 7, child: Text('7 days')),
                         DropdownMenuItem(value: 30, child: Text('30 days')),
                         DropdownMenuItem(value: 90, child: Text('90 days')),
                         DropdownMenuItem(value: 365, child: Text('365 days')),
                       ],
-                      onChanged: _loading ? null : (val) => setSheetState(() => expiresInDays = val ?? 30),
+                      onChanged: _loading
+                          ? null
+                          : (val) =>
+                              setSheetState(() => expiresInDays = val ?? 30),
                     ),
                     const SizedBox(height: 16),
-                    Text('Scope (optional)', style: Theme.of(context).textTheme.titleMedium),
+                    Text('Scope (optional)',
+                        style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
                     TextField(
                       controller: allowedPathsCtrl,
@@ -428,19 +483,32 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red));
   }
 
   void _showInfo(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
-    final resources = _permissions.map((p) => p.resource).where((r) => r.trim().isNotEmpty).toSet().toList()..sort();
+    final resources = _permissions
+        .map((p) => p.resource)
+        .where((r) => r.trim().isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
     final visiblePermissions = _permissions.where((p) {
-      if (!_includeRevoked && p.revokedAt != null) return false;
-      if (_resourceFilter != null && _resourceFilter!.isNotEmpty && p.resource != _resourceFilter) return false;
+      if (!_includeRevoked && p.revokedAt != null) {
+        return false;
+      }
+      if (_resourceFilter != null &&
+          _resourceFilter!.isNotEmpty &&
+          p.resource != _resourceFilter) {
+        return false;
+      }
       return true;
     }).toList();
 
@@ -448,8 +516,12 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          flexibleSpace: Container(decoration: const BoxDecoration(gradient: AppTheme.premiumGradient)),
-          title: const Text('Permissions', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          flexibleSpace: Container(
+              decoration:
+                  const BoxDecoration(gradient: AppTheme.premiumGradient)),
+          title: const Text('Permissions',
+              style:
+                  TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
             IconButton(
@@ -482,7 +554,10 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
                   if (_loading) const LinearProgressIndicator(),
                   const SizedBox(height: 12),
                   if (visiblePermissions.isEmpty && !_loading)
-                    const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('No permissions found')))
+                    const Center(
+                        child: Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text('No permissions found')))
                   else
                     ...visiblePermissions.map(_buildPermissionCard),
                 ],
@@ -498,7 +573,10 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
                   if (_loading) const LinearProgressIndicator(),
                   const SizedBox(height: 12),
                   if (_requests.isEmpty && !_loading)
-                    const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('No requests found')))
+                    const Center(
+                        child: Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text('No requests found')))
                   else
                     ..._requests.map(_buildRequestCard),
                 ],
@@ -528,8 +606,10 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
                       isDense: true,
                     ),
                     items: [
-                      const DropdownMenuItem<String?>(value: null, child: Text('All')),
-                      ...resources.map((r) => DropdownMenuItem<String?>(value: r, child: Text(r))),
+                      const DropdownMenuItem<String?>(
+                          value: null, child: Text('All')),
+                      ...resources.map((r) =>
+                          DropdownMenuItem<String?>(value: r, child: Text(r))),
                     ],
                     onChanged: _loading
                         ? null
@@ -545,7 +625,9 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Include revoked'),
                     value: _includeRevoked,
-                    onChanged: _loading ? null : (val) => setState(() => _includeRevoked = val),
+                    onChanged: _loading
+                        ? null
+                        : (val) => setState(() => _includeRevoked = val),
                   ),
                 ),
               ],
@@ -587,14 +669,19 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
 
   Widget _buildPermissionCard(GituPermission permission) {
     final df = DateFormat('y-MM-dd HH:mm');
-    final expiresLabel = permission.expiresAt != null ? df.format(permission.expiresAt!.toLocal()) : 'Never';
-    final grantedLabel = permission.grantedAt != null ? df.format(permission.grantedAt!.toLocal()) : '-';
+    final expiresLabel = permission.expiresAt != null
+        ? df.format(permission.expiresAt!.toLocal())
+        : 'Never';
+    final grantedLabel = permission.grantedAt != null
+        ? df.format(permission.grantedAt!.toLocal())
+        : '-';
     final scopeSummary = _formatScope(permission.scope);
     final active = permission.isActive;
 
     return Card(
       child: ListTile(
-        leading: Icon(active ? LucideIcons.shieldCheck : LucideIcons.shieldOff, color: active ? Colors.green : Colors.grey),
+        leading: Icon(active ? LucideIcons.shieldCheck : LucideIcons.shieldOff,
+            color: active ? Colors.green : Colors.grey),
         title: Text(permission.resource),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -604,7 +691,8 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
             if (scopeSummary.isNotEmpty) Text('Scope: $scopeSummary'),
             Text('Granted: $grantedLabel'),
             Text('Expires: $expiresLabel'),
-            if (permission.revokedAt != null) Text('Revoked: ${df.format(permission.revokedAt!.toLocal())}'),
+            if (permission.revokedAt != null)
+              Text('Revoked: ${df.format(permission.revokedAt!.toLocal())}'),
           ],
         ),
         trailing: permission.revokedAt == null
@@ -622,8 +710,11 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
   Widget _buildRequestCard(GituPermissionRequest req) {
     final df = DateFormat('y-MM-dd HH:mm');
     final scopeSummary = _formatScope(req.permission.scope);
-    final requestedLabel = req.requestedAt != null ? df.format(req.requestedAt!.toLocal()) : '-';
-    final expiresLabel = req.permission.expiresAt != null ? df.format(req.permission.expiresAt!.toLocal()) : 'Never';
+    final requestedLabel =
+        req.requestedAt != null ? df.format(req.requestedAt!.toLocal()) : '-';
+    final expiresLabel = req.permission.expiresAt != null
+        ? df.format(req.permission.expiresAt!.toLocal())
+        : 'Never';
 
     return Card(
       child: Padding(
@@ -633,7 +724,8 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
           children: [
             Row(
               children: [
-                Icon(req.isPending ? LucideIcons.clock : LucideIcons.badgeCheck, color: req.isPending ? Colors.orange : Colors.green),
+                Icon(req.isPending ? LucideIcons.clock : LucideIcons.badgeCheck,
+                    color: req.isPending ? Colors.orange : Colors.green),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -649,7 +741,8 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
             Text('Reason: ${req.reason}'),
             Text('Requested: $requestedLabel'),
             Text('Expires: $expiresLabel'),
-            if (req.respondedAt != null) Text('Responded: ${df.format(req.respondedAt!.toLocal())}'),
+            if (req.respondedAt != null)
+              Text('Responded: ${df.format(req.respondedAt!.toLocal())}'),
             const SizedBox(height: 12),
             if (req.isPending)
               Row(
@@ -676,7 +769,9 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
   }
 
   String _formatScope(Map<String, dynamic>? scope) {
-    if (scope == null || scope.isEmpty) return '';
+    if (scope == null || scope.isEmpty) {
+      return '';
+    }
     final parts = <String>[];
     final allowedPaths = scope['allowedPaths'];
     final emailLabels = scope['emailLabels'];
@@ -689,7 +784,9 @@ class _GituPermissionsScreenState extends ConsumerState<GituPermissionsScreen> {
     if (emailLabels is List) parts.add('labels=${emailLabels.length}');
     if (notebookIds is List) parts.add('notebooks=${notebookIds.length}');
     if (vpsConfigIds is List) parts.add('vps=${vpsConfigIds.length}');
-    if (allowedCommands is List) parts.add('commands=${allowedCommands.length}');
+    if (allowedCommands is List) {
+      parts.add('commands=${allowedCommands.length}');
+    }
     if (customScope is Map) parts.add('custom=${customScope.length}');
     return parts.join(', ');
   }

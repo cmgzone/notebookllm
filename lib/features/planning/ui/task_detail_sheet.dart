@@ -23,11 +23,36 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isLoading = false;
+  PlanTask? _latestTask;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _latestTask = widget.task;
+    // Refresh task data when sheet opens to get latest outputs and history
+    _refreshTaskData();
+  }
+  
+  Future<void> _refreshTaskData() async {
+    try {
+      final planId = ref.read(planningProvider).currentPlan?.id;
+      if (planId != null) {
+        await ref.read(planningProvider.notifier).loadPlan(planId);
+        // Update latest task from the refreshed plan
+        final refreshedPlan = ref.read(planningProvider).currentPlan;
+        if (refreshedPlan != null && mounted) {
+          setState(() {
+            _latestTask = refreshedPlan.tasks.firstWhere(
+              (t) => t.id == widget.task.id,
+              orElse: () => widget.task,
+            );
+          });
+        }
+      }
+    } catch (e) {
+      // Silently fail, use original task
+    }
   }
 
   @override
@@ -40,7 +65,7 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet>
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final task = widget.task;
+    final task = _latestTask ?? widget.task;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
@@ -142,7 +167,7 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet>
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(LucideIcons.bot, size: 16),
+                        const Icon(LucideIcons.cpu, size: 16),
                         const SizedBox(width: 6),
                         Text('Outputs (${task.agentOutputs.length})'),
                       ],
@@ -175,18 +200,21 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet>
       switch (action) {
         case 'start':
           await ref.read(planningProvider.notifier).startTask(widget.task.id);
+          await _refreshTaskData();
           break;
         case 'pause':
           await _showPauseDialog();
           break;
         case 'resume':
           await ref.read(planningProvider.notifier).resumeTask(widget.task.id);
+          await _refreshTaskData();
           break;
         case 'block':
           await _showBlockDialog();
           break;
         case 'unblock':
           await ref.read(planningProvider.notifier).resumeTask(widget.task.id);
+          await _refreshTaskData();
           break;
         case 'complete':
           await _completeTask();
@@ -247,6 +275,7 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet>
                 ? null
                 : reasonController.text.trim(),
           );
+      await _refreshTaskData();
     }
   }
 
@@ -312,6 +341,7 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet>
             widget.task.id,
             reason: reasonController.text.trim(),
           );
+      await _refreshTaskData();
     }
   }
 
@@ -319,6 +349,9 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet>
     final result = await ref.read(planningProvider.notifier).completeTask(
           widget.task.id,
         );
+    
+    // Refresh to get completion outputs
+    await _refreshTaskData();
 
     if (result != null &&
         result.allSubTasksCompleted &&

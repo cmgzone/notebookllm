@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../../core/ai/ai_provider.dart';
+import '../../../core/search/serper_service.dart';
+import '../../../core/services/time_context_service.dart';
 import '../../subscription/services/credit_manager.dart';
 import '../models/plan_task.dart';
 import '../planning_provider.dart';
@@ -27,7 +29,10 @@ class _PlanningAIScreenState extends ConsumerState<PlanningAIScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<_PlanningMessage> _messages = [];
   bool _isLoading = false;
+  bool _isSearching = false;
+  bool _webSearchEnabled = true;
   _PlanningMode _currentMode = _PlanningMode.brainstorm;
+  List<SerperSearchResult> _lastSearchResults = [];
 
   @override
   void initState() {
@@ -45,13 +50,25 @@ class _PlanningAIScreenState extends ConsumerState<PlanningAIScreen> {
   }
 
   String _getWelcomeMessage() {
+    final timeService = ref.read(timeContextServiceProvider);
+    final timeInfo = timeService.getShortTimeContext();
+    
     return '''👋 **Welcome to Planning Mode AI!**
+
+📅 $timeInfo
 
 I'm here to help you brainstorm, organize ideas, and create structured plans. Here's what I can do:
 
 🧠 **Brainstorm** - Explore and refine your ideas
+🔍 **Research** - Search the web for latest info, dependencies, best practices
 📋 **Generate Requirements** - Create EARS-pattern requirements
+📐 **Design** - Create design notes and architectural decisions
 ✅ **Create Tasks** - Break down requirements into actionable tasks
+
+🌐 **Web Search is ${_webSearchEnabled ? 'ENABLED' : 'DISABLED'}** - I can search for:
+- Latest package versions and dependencies
+- Best practices and documentation
+- Technology comparisons and recommendations
 
 **How to get started:**
 1. Tell me about your project idea or goal
@@ -136,6 +153,10 @@ What would you like to work on today?''';
     final aiNotifier = ref.read(aiProvider.notifier);
     final planState = ref.read(planningProvider);
     final currentPlan = planState.currentPlan;
+    final timeService = ref.read(timeContextServiceProvider);
+
+    // Get time context to reduce hallucinations
+    final timeContext = timeService.getTimeContext();
 
     // Build context from current plan if available
     String planContext = '';
@@ -152,6 +173,12 @@ ${currentPlan.tasks.map((t) => '- ${t.title} [${t.status.name}]').join('\n')}
 ''';
     }
 
+    // Perform web search if enabled and in research mode or if query seems to need current info
+    String webSearchContext = '';
+    if (_webSearchEnabled && _shouldSearchWeb(userInput)) {
+      webSearchContext = await _performWebSearch(userInput);
+    }
+
     // Build conversation history
     final history = _messages
         .where((m) => !m.isError)
@@ -164,7 +191,10 @@ ${currentPlan.tasks.map((t) => '- ${t.title} [${t.status.name}]').join('\n')}
     String systemPrompt;
     switch (_currentMode) {
       case _PlanningMode.brainstorm:
-        systemPrompt = _getBrainstormPrompt(planContext);
+        systemPrompt = _getBrainstormPrompt(planContext, timeContext, webSearchContext);
+        break;
+      case _PlanningMode.research:
+        systemPrompt = _getResearchPrompt(planContext, timeContext, webSearchContext);
         break;
       case _PlanningMode.requirements:
         systemPrompt = _getRequirementsPrompt(planContext);
@@ -195,8 +225,84 @@ User Input: $userInput''',
         'I apologize, I couldn\'t generate a response.';
   }
 
-  String _getBrainstormPrompt(String planContext) {
+  /// Check if the query should trigger a web search
+  bool _shouldSearchWeb(String query) {
+    final lowerQuery = query.toLowerCase();
+    
+    // Keywords that suggest need for current information
+    final searchTriggers = [
+      'latest', 'current', 'newest', 'version', 'update',
+      'best practice', 'recommend', 'compare', 'vs',
+      'dependency', 'dependencies', 'package', 'library',
+      'how to', 'tutorial', 'documentation', 'docs',
+      'api', 'sdk', 'framework', 'tool',
+      '2024', '2025', '2026', 'today', 'now',
+      'search', 'find', 'look up', 'research',
+    ];
+    
+    // Always search in research mode
+    if (_currentMode == _PlanningMode.research) return true;
+    
+    // Check for trigger keywords
+    return searchTriggers.any((trigger) => lowerQuery.contains(trigger));
+  }
+
+  /// Perform web search and format results for AI context
+  Future<String> _performWebSearch(String query) async {
+    setState(() => _isSearching = true);
+    
+    try {
+      final serperService = ref.read(serperServiceProvider);
+      
+      // Enhance query for better results
+      String searchQuery = query;
+      if (!query.toLowerCase().contains('2024') && 
+          !query.toLowerCase().contains('2025') &&
+          !query.toLowerCase().contains('2026')) {
+        searchQuery = '$query ${DateTime.now().year}';
+      }
+      
+      final results = await serperService.search(searchQuery, num: 5);
+      _lastSearchResults = results;
+      
+      if (results.isEmpty) {
+        return '';
+      }
+      
+      // Format results for AI context
+      final buffer = StringBuffer();
+      buffer.writeln('\n**🔍 Web Search Results (Live Data):**');
+      buffer.writeln('Search query: "$searchQuery"\n');
+      
+      for (int i = 0; i < results.length && i < 5; i++) {
+        final result = results[i];
+        buffer.writeln('${i + 1}. **${result.title}**');
+        buffer.writeln('   ${result.snippet}');
+        buffer.writeln('   Source: ${result.link}');
+        if (result.date != null) {
+          buffer.writeln('   Date: ${result.date}');
+        }
+        buffer.writeln();
+      }
+      
+      buffer.writeln('---');
+      buffer.writeln('*Use this information to provide accurate, up-to-date recommendations.*\n');
+      
+      return buffer.toString();
+    } catch (e) {
+      debugPrint('[PlanningAI] Web search error: $e');
+      return '\n*Web search failed: ${e.toString()}*\n';
+    } finally {
+      if (mounted) {
+        setState(() => _isSearching = false);
+      }
+    }
+  }
+
+  String _getBrainstormPrompt(String planContext, String timeContext, String webSearchContext) {
     return '''You are a Planning AI assistant helping users brainstorm and refine project ideas.
+
+$timeContext
 
 **Your Role (Requirements 2.1):**
 - Engage in conversation to understand the user's goals
@@ -204,6 +310,9 @@ User Input: $userInput''',
 - Help break down complex ideas into manageable pieces
 - Suggest related considerations they might have missed
 - Be encouraging and collaborative
+- Use current date/time context to provide accurate timeline estimates
+
+$webSearchContext
 
 **Context:**
 $planContext
@@ -214,9 +323,46 @@ $planContext
 - Ask follow-up questions to deepen understanding
 - Suggest when the user might be ready to move to requirements generation
 - Use emojis sparingly for warmth
+- If web search results are provided, use them to give accurate, up-to-date information
+- Always mention the current date when discussing timelines or deadlines
 
 **Response Format:**
 Provide a helpful, conversational response that advances the planning process.''';
+  }
+
+  String _getResearchPrompt(String planContext, String timeContext, String webSearchContext) {
+    return '''You are a Planning AI assistant with web research capabilities, helping users find up-to-date information for their projects.
+
+$timeContext
+
+**Your Role:**
+- Search and analyze current information from the web
+- Provide accurate, up-to-date recommendations for:
+  • Package versions and dependencies
+  • Best practices and design patterns
+  • Technology comparisons
+  • Documentation and tutorials
+- Help users make informed decisions based on current data
+- Reduce hallucinations by using real search results
+
+$webSearchContext
+
+**Context:**
+$planContext
+
+**Guidelines:**
+- ALWAYS cite sources when providing information from web search
+- Clearly distinguish between facts from search results and your own analysis
+- If search results are outdated or conflicting, mention this
+- Recommend checking official documentation for critical decisions
+- Provide version numbers and dates when discussing packages/tools
+- Be explicit about what information comes from search vs. your training data
+
+**Response Format:**
+1. Summarize key findings from web search
+2. Provide your analysis and recommendations
+3. List sources for verification
+4. Suggest next steps or follow-up research if needed''';
   }
 
   String _getRequirementsPrompt(String planContext) {
@@ -1225,6 +1371,12 @@ Generate design notes that provide clear technical guidance for implementation.'
                     'Explore and refine ideas',
                   ),
                   _buildModeMenuItem(
+                    _PlanningMode.research,
+                    LucideIcons.search,
+                    'Research',
+                    'Search web for latest info',
+                  ),
+                  _buildModeMenuItem(
                     _PlanningMode.requirements,
                     LucideIcons.fileText,
                     'Requirements',
@@ -1243,6 +1395,27 @@ Generate design notes that provide clear technical guidance for implementation.'
                     'Create actionable tasks',
                   ),
                 ],
+              ),
+              // Web search toggle
+              IconButton(
+                icon: Icon(
+                  _webSearchEnabled ? LucideIcons.globe : LucideIcons.globe2,
+                  color: _webSearchEnabled ? Colors.white : Colors.white54,
+                ),
+                onPressed: () {
+                  setState(() => _webSearchEnabled = !_webSearchEnabled);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        _webSearchEnabled 
+                          ? '🌐 Web search enabled' 
+                          : '🔒 Web search disabled',
+                      ),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                tooltip: _webSearchEnabled ? 'Disable Web Search' : 'Enable Web Search',
               ),
               IconButton(
                 icon: const Icon(Icons.refresh, color: Colors.white),
@@ -1269,6 +1442,43 @@ Generate design notes that provide clear technical guidance for implementation.'
           SliverFillRemaining(
             child: Column(
               children: [
+                // Search indicator
+                if (_isSearching)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '🔍 Searching the web...',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontSize: 12,
+                          ),
+                        ),
+                        if (_lastSearchResults.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            '(${_lastSearchResults.length} results)',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 Expanded(
                   child: ListView.builder(
                     controller: _scrollController,
@@ -1367,6 +1577,7 @@ Generate design notes that provide clear technical guidance for implementation.'
 
 enum _PlanningMode {
   brainstorm,
+  research,
   requirements,
   design,
   tasks,
@@ -1433,6 +1644,13 @@ class _ModeIndicator extends StatelessWidget {
               label: 'Brainstorm',
               isSelected: currentMode == _PlanningMode.brainstorm,
               onTap: () => onModeChanged(_PlanningMode.brainstorm),
+            ),
+            const SizedBox(width: 8),
+            _ModeChip(
+              icon: LucideIcons.search,
+              label: 'Research',
+              isSelected: currentMode == _PlanningMode.research,
+              onTap: () => onModeChanged(_PlanningMode.research),
             ),
             const SizedBox(width: 8),
             _ModeChip(
@@ -1869,6 +2087,8 @@ class _ChatInputArea extends StatelessWidget {
     switch (currentMode) {
       case _PlanningMode.brainstorm:
         return 'Describe your project idea...';
+      case _PlanningMode.research:
+        return 'Search for latest versions, best practices...';
       case _PlanningMode.requirements:
         return 'What features do you need?';
       case _PlanningMode.design:

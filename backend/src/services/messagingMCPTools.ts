@@ -54,7 +54,7 @@ const getMessagingProfileTool: MCPTool = {
  */
 const sendWhatsAppTool: MCPTool = {
     name: 'send_whatsapp',
-    description: 'Send a WhatsApp message (text or image) to a specific phone number or your linked account.',
+    description: 'Send a WhatsApp message (text, image, video, or document) to a specific phone number or your linked account.',
     schema: {
         type: 'object',
         properties: {
@@ -63,12 +63,16 @@ const sendWhatsAppTool: MCPTool = {
                 type: 'string',
                 description: 'Target phone number (e.g. "15550001234") or "self".'
             },
-            image: { type: 'string', description: 'Optional: Image URL or Base64 string (starts with data:image...)' }
+            image: { type: 'string', description: 'Optional: Image URL or Base64 string' },
+            video: { type: 'string', description: 'Optional: Video URL or Base64 string' },
+            document: { type: 'string', description: 'Optional: Document URL or Base64 string' },
+            fileName: { type: 'string', description: 'Optional: File name for the document' },
+            mimetype: { type: 'string', description: 'Optional: Mime type for the document' }
         },
         required: ['message', 'recipient']
     },
     handler: async (args: any, context: MCPContext) => {
-        const { message, recipient, image } = args;
+        const { message, recipient, image, video, document, fileName, mimetype } = args;
 
         try {
             const myIdentity = await getLinkedIdentity(context.userId, 'whatsapp');
@@ -91,6 +95,10 @@ const sendWhatsAppTool: MCPTool = {
             await whatsappAdapter.sendMessage(targetJid, {
                 text: message,
                 image: image,
+                video: video,
+                document: document,
+                fileName: fileName,
+                mimetype: mimetype,
                 caption: message
             });
 
@@ -186,11 +194,11 @@ const sendTelegramTool: MCPTool = {
  */
 const searchContactsTool: MCPTool = {
     name: 'search_contacts',
-    description: 'Search for WhatsApp contacts by name or phone number.',
+    description: 'Search for WhatsApp contacts by name or phone number. Use "*" or "all" to list all available contacts.',
     schema: {
         type: 'object',
         properties: {
-            query: { type: 'string', description: 'Name or partial number to search for' }
+            query: { type: 'string', description: 'Name, partial number, or "*" to list all.' }
         },
         required: ['query']
     },

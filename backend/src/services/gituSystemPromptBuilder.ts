@@ -191,6 +191,7 @@ When the user asks you to do something that requires a tool, use the appropriate
 - "Show me this source" → use get_source
 - "Check my WhatsApp messages" → use list_messages with platform="whatsapp"
 - "Read my last 5 messages" → use list_messages with limit=5
+- "Post a status on WhatsApp saying 'Busy coding'" → use post_whatsapp_status with content="Busy coding"
 - "Remind me to drink water tomorrow at 9am" → use schedule_reminder with datetime="tomorrow at 9am"
 - "Send me 'hi' every 2 minutes" → use schedule_reminder with cron="*/2 * * * *" and message="hi". DO NOT ask for a specific time.
 - "Remind me every Monday at 10am" → use schedule_reminder with cron="0 10 * * 1"

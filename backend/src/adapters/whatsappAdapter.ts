@@ -6,27 +6,27 @@
  * Task: 2.1.1 Baileys Setup
  */
 
-import makeWASocket, {
+import {
     DisconnectReason,
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
+    makeWASocket,
     WASocket,
-    BaileysEventMap,
     downloadMediaMessage,
     proto,
-    WAMessage
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
+import os from 'node:os';
 import path from 'path';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
-import { fileURLToPath } from 'url';
 import { gituMessageGateway, IncomingMessage, RawMessage } from '../services/gituMessageGateway.js';
 import { gituSessionService } from '../services/gituSessionService.js';
 import { gituAIRouter } from '../services/gituAIRouter.js';
 import pool from '../config/database.js';
+import { deepgramService } from '../services/deepgramService.js';
 
 import { gituAgentManager } from '../services/gituAgentManager.js';
 import { gituAgentOrchestrator } from '../services/gituAgentOrchestrator.js';
@@ -38,20 +38,67 @@ import { gituToolExecutionService } from '../services/gituToolExecutionService.j
 export interface WhatsAppAdapterConfig {
     authDir?: string;
     printQRInTerminal?: boolean;
+    contactsStorePath?: string;
+    sendWelcomeToSelf?: boolean;
 }
 
 // ==================== STORE SETUP ====================
-const ADAPTER_DIR = path.dirname(fileURLToPath(import.meta.url));
-const CONTACTS_FILE = path.resolve(ADAPTER_DIR, '..', '..', '..', 'whatsapp_contacts.json');
 let contactsStore: Record<string, any> = {};
+let contactsStorePath: string | null = null;
+let contactsPersistTimer: NodeJS.Timeout | null = null;
 
-try {
-    if (fs.existsSync(CONTACTS_FILE)) {
-        const raw = fs.readFileSync(CONTACTS_FILE, 'utf-8');
-        contactsStore = JSON.parse(raw || '{}');
+const shouldPersistContactsStore = !(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID);
+
+function resolveDefaultAuthDir(): string {
+    // Use project-local directory to avoid permission issues in some environments (e.g. Coolify, restricted Windows users)
+    return path.join(process.cwd(), '.gitu', 'credentials', 'whatsapp');
+}
+
+function resolveContactsStorePath(authDir: string, configuredPath?: string): string {
+    const fromEnv = process.env.GITU_WHATSAPP_CONTACTS_STORE_PATH;
+    const picked = (configuredPath && configuredPath.trim().length > 0 ? configuredPath : undefined) ?? fromEnv;
+    if (picked && picked.trim().length > 0) {
+        return path.resolve(picked);
     }
-} catch (err) {
-    console.error('Failed to read WhatsApp contacts store file:', err);
+    return path.join(authDir, 'contacts-store.json');
+}
+
+async function loadContactsStore(filePath: string): Promise<void> {
+    try {
+        if (!fs.existsSync(filePath)) {
+            contactsStore = {};
+            return;
+        }
+        const raw = await fsPromises.readFile(filePath, 'utf-8');
+        contactsStore = JSON.parse(raw || '{}');
+    } catch {
+        contactsStore = {};
+    }
+}
+
+async function persistContactsStore(force: boolean): Promise<void> {
+    if (!shouldPersistContactsStore && !force) return;
+    if (!contactsStorePath) return;
+    const filePath = contactsStorePath;
+    const dir = path.dirname(filePath);
+    await fsPromises.mkdir(dir, { recursive: true });
+
+    const tmpPath = `${filePath}.${Date.now()}.tmp`;
+    const payload = JSON.stringify(contactsStore, null, 2);
+    await fsPromises.writeFile(tmpPath, payload, 'utf-8');
+    try {
+        await fsPromises.rm(filePath, { force: true });
+    } catch {}
+    await fsPromises.rename(tmpPath, filePath);
+}
+
+function schedulePersistContacts(): void {
+    if (!shouldPersistContactsStore) return;
+    if (contactsPersistTimer) return;
+    contactsPersistTimer = setTimeout(() => {
+        contactsPersistTimer = null;
+        void persistContactsStore(false).catch(() => {});
+    }, 1_000);
 }
 
 const upsertContacts = (contacts: any[] | undefined) => {
@@ -61,6 +108,7 @@ const upsertContacts = (contacts: any[] | undefined) => {
         if (!id || typeof id !== 'string') continue;
         contactsStore[id] = { ...(contactsStore[id] || {}), ...contact };
     }
+    schedulePersistContacts();
 };
 
 const upsertChats = (chats: any[] | undefined) => {
@@ -75,22 +123,72 @@ const upsertChats = (chats: any[] | undefined) => {
             ...(typeof name === 'string' && name.trim().length > 0 ? { name } : {}),
         };
     }
+    schedulePersistContacts();
 };
 
-const shouldPersistContactsStore = !(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID);
+let credsSaveQueue: Promise<void> = Promise.resolve();
+function enqueueSaveCreds(
+    authDir: string,
+    saveCreds: () => Promise<void> | void,
+    logger: pino.Logger,
+): void {
+    credsSaveQueue = credsSaveQueue
+        .then(() => safeSaveCreds(authDir, saveCreds, logger))
+        .catch((err) => {
+            logger.warn({ err }, 'WhatsApp creds save queue error');
+        });
+}
 
-if (shouldPersistContactsStore) {
-    setInterval(() => {
-        try {
-            const dir = path.dirname(CONTACTS_FILE);
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true });
+function readCredsJsonRaw(filePath: string): string | null {
+    try {
+        if (!fs.existsSync(filePath)) return null;
+        const stats = fs.statSync(filePath);
+        if (!stats.isFile() || stats.size <= 1) return null;
+        return fs.readFileSync(filePath, 'utf-8');
+    } catch {
+        return null;
+    }
+}
+
+async function safeSaveCreds(
+    authDir: string,
+    saveCreds: () => Promise<void> | void,
+    logger: pino.Logger,
+): Promise<void> {
+    try {
+        await fsPromises.mkdir(authDir, { recursive: true });
+    } catch {}
+
+    try {
+        const credsPath = path.join(authDir, 'creds.json');
+        const backupPath = path.join(authDir, 'creds.json.bak');
+        const raw = readCredsJsonRaw(credsPath);
+        if (raw) {
+            try {
+                JSON.parse(raw);
+                fs.copyFileSync(credsPath, backupPath);
+            } catch {
+                // keep existing backup
             }
-            fs.writeFileSync(CONTACTS_FILE, JSON.stringify(contactsStore, null, 2), 'utf-8');
-        } catch (err) {
-            console.error('Failed to save WhatsApp contacts store file:', err);
         }
-    }, 10_000);
+    } catch {
+        // ignore backup failures
+    }
+
+    try {
+        await Promise.resolve(saveCreds());
+    } catch (err) {
+        logger.warn({ err }, 'failed saving WhatsApp creds');
+    }
+}
+
+function formatTextForWhatsApp(text: string): string {
+    let out = text;
+    out = out.replace(/\*\*(.+?)\*\*/g, '*$1*');
+    out = out.replace(/__(.+?)__/g, '*$1*');
+    out = out.replace(/(?<!\*)\*(?!\*)([^*\n]+?)(?<!\*)\*(?!\*)/g, '_$1_');
+    out = out.replace(/~~(.+?)~~/g, '~$1~');
+    return out;
 }
 
 // ==================== ADAPTER CLASS ====================
@@ -108,6 +206,7 @@ class WhatsAppAdapter {
     private sentMessageIds = new Set<string>();
     private reconnectTimer: NodeJS.Timeout | null = null;
     private reconnectAttempts = 0;
+    private welcomeSent = false;
 
     /**
      * Initialize the WhatsApp Adapter.
@@ -121,9 +220,18 @@ class WhatsAppAdapter {
         }
 
         this.config = {
-            authDir: config.authDir || process.env.GITU_WHATSAPP_AUTH_DIR || path.join(process.cwd(), 'auth_info_baileys'),
+            authDir: config.authDir || process.env.GITU_WHATSAPP_AUTH_DIR || resolveDefaultAuthDir(),
             printQRInTerminal: config.printQRInTerminal !== false, // Default true
+            contactsStorePath: config.contactsStorePath || process.env.GITU_WHATSAPP_CONTACTS_STORE_PATH,
+            sendWelcomeToSelf: config.sendWelcomeToSelf ?? process.env.GITU_WHATSAPP_SEND_WELCOME_TO_SELF === 'true',
         };
+
+        try {
+            await fsPromises.mkdir(this.config.authDir!, { recursive: true });
+        } catch {}
+
+        contactsStorePath = resolveContactsStorePath(this.config.authDir!, this.config.contactsStorePath);
+        await loadContactsStore(contactsStorePath);
 
         await this.connectToWhatsApp();
 
@@ -193,6 +301,7 @@ class WhatsAppAdapter {
         this.connectedAccountJid = null;
         this.connectedAccountLid = null;
         this.connectedAccountName = null;
+        this.welcomeSent = false;
 
         const { state, saveCreds } = await useMultiFileAuthState(this.config.authDir!);
         const { version, isLatest } = await fetchLatestBaileysVersion();
@@ -300,11 +409,14 @@ class WhatsAppAdapter {
                 this.connectedAccountLid = typeof lid === 'string' ? this.normalizeLid(lid) : null;
                 this.connectedAccountName = typeof name === 'string' ? name : null;
 
-                // Attempt to send welcome message to self if linked
-                if (this.connectedAccountJid) {
+                if (this.config?.sendWelcomeToSelf && this.connectedAccountJid && !this.welcomeSent) {
                     try {
-                        const userId = await this.getUserIdFromJid(this.connectedAccountJid);
-                        await this.sendMessage(this.connectedAccountJid, '🟢 *Gitu is Online*\n\nI am ready to assist you! Send me a message here (Note to Self) to start chatting.');
+                        await this.getUserIdFromJid(this.connectedAccountJid);
+                        await this.sendMessage(
+                            this.connectedAccountJid,
+                            '*Gitu is Online*\n\nSend a message here (Note to Self) to start chatting.',
+                        );
+                        this.welcomeSent = true;
                     } catch (e) {
                         // Not linked yet, silent fail
                     }
@@ -313,7 +425,7 @@ class WhatsAppAdapter {
         });
 
         // Handle creds update
-        this.sock.ev.on('creds.update', saveCreds);
+        this.sock.ev.on('creds.update', () => enqueueSaveCreds(this.config!.authDir!, saveCreds, this.logger));
 
         // Handle messages
         this.sock.ev.on('messages.upsert', async (upsert) => {
@@ -395,7 +507,7 @@ class WhatsAppAdapter {
         if (!msg.key) return;
         const remoteJid = msg.key.remoteJid;
 
-        // Normalize message to satisfy Baileys WAMessage typing
+        // Normalize message to satisfy Baileys message typing
         const toWAMessage = (m: proto.IWebMessageInfo): any => {
             const normalizedRemoteJid = m.key?.remoteJid || remoteJid || '';
             const normalizedId =
@@ -448,7 +560,17 @@ class WhatsAppAdapter {
                     'buffer',
                     {}
                 ) as Buffer;
-                if (!text) text = '[Audio]';
+                
+                // Transcribe Voice Note
+                try {
+                    this.logger.info('Transcribing voice note...');
+                    const transcription = await deepgramService.transcribeAudio(mediaBuffer);
+                    text = transcription.text;
+                    this.logger.info(`Transcription: "${text}"`);
+                } catch (err: any) {
+                    this.logger.error({ err }, 'Transcription failed');
+                    text = '[Audio]';
+                }
             } else if (msg.message?.documentMessage) {
                 mediaType = 'document';
                 mediaBuffer = await downloadMediaMessage(
@@ -636,6 +758,7 @@ class WhatsAppAdapter {
             const isAllowed = contactsStore[remoteJid]?.auto_reply === true;
             const isMention = text.toLowerCase().includes('gitu') || text.toLowerCase().includes('@bot');
             const isCommand = text.startsWith('/');
+            const autoReplyAll = process.env.GITU_WHATSAPP_AUTO_REPLY_ALL === 'true';
             
             // Determine if we should reply
             let shouldReply = false;
@@ -646,6 +769,9 @@ class WhatsAppAdapter {
                 shouldReply = true;
             } else if (isMention || isCommand) {
                 shouldReply = true;
+            } else if (autoReplyAll) {
+                // WARNING: This will reply to EVERYONE
+                shouldReply = true;
             }
 
             // Don't reply to self-sent messages unless it's a Note to Self
@@ -655,6 +781,10 @@ class WhatsAppAdapter {
             }
 
             if (!shouldReply) {
+                // Log access attempt for unknown users
+                if (!isNoteToSelf && !isAllowed && !isMention && !isCommand) {
+                    this.logger.warn({ from: remoteJid, text }, 'Blocked access from unauthorized user (Auto-reply disabled)');
+                }
                 // We processed it into history (Gateway), but we won't trigger the AI response.
                 return; 
             }
@@ -784,11 +914,8 @@ class WhatsAppAdapter {
             contactsStore[jid] = { id: jid };
         }
         contactsStore[jid].auto_reply = allowed;
-        // Persist immediately to be safe
         try {
-            const dir = path.dirname(CONTACTS_FILE);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(CONTACTS_FILE, JSON.stringify(contactsStore, null, 2), 'utf-8');
+            await persistContactsStore(true);
         } catch (err) {
             this.logger.error({ err }, 'Failed to save contacts store');
         }
@@ -821,7 +948,17 @@ class WhatsAppAdapter {
     /**
      * Send a message to a JID.
      */
-    async sendMessage(jid: string, content: string | { text?: string; image?: string; caption?: string; audio?: { url: string } | Buffer; ptt?: boolean }): Promise<void> {
+    async sendMessage(jid: string, content: string | { 
+        text?: string; 
+        image?: string; 
+        video?: string; 
+        document?: string; 
+        fileName?: string;
+        mimetype?: string;
+        caption?: string; 
+        audio?: { url: string } | Buffer; 
+        ptt?: boolean 
+    }): Promise<void> {
         if (!this.sock) throw new Error('Socket not initialized');
 
         const trackSentMsg = (msg: proto.IWebMessageInfo | undefined) => {
@@ -834,13 +971,7 @@ class WhatsAppAdapter {
         };
 
         if (typeof content === 'string') {
-            // Format text (Markdown -> WhatsApp)
-            let formattedText = content
-                .replace(/\*\*(.*?)\*\*/g, '*$1*') // Bold
-                .replace(/\*(.*?)\*/g, '_$1_')     // Italic
-                .replace(/~~(.*?)~~/g, '~$1~');    // Strikethrough
-
-            const sent = await this.sock.sendMessage(jid, { text: formattedText });
+            const sent = await this.sock.sendMessage(jid, { text: formatTextForWhatsApp(content) });
             trackSentMsg(sent);
         } else if (content.image) {
             // Handle Image
@@ -863,6 +994,51 @@ class WhatsAppAdapter {
                 caption: content.caption || content.text
             });
             trackSentMsg(sent);
+        } else if (content.video) {
+            // Handle Video
+            let video: any = content.video;
+
+            if (typeof video === 'string' && video.startsWith('data:video')) {
+                const base64Data = video.split(',')[1];
+                video = Buffer.from(base64Data, 'base64');
+            } else if (typeof video === 'string' && !video.startsWith('http')) {
+                video = Buffer.from(video, 'base64');
+            } else if (typeof video === 'string' && video.startsWith('http')) {
+                video = { url: video };
+            }
+
+            const sent = await this.sock.sendMessage(jid, {
+                video: video,
+                caption: content.caption || content.text,
+                gifPlayback: false
+            });
+            trackSentMsg(sent);
+        } else if (content.document) {
+            // Handle Document
+            let document: any = content.document;
+
+            if (typeof document === 'string' && document.startsWith('data:')) {
+                const base64Data = document.split(',')[1];
+                document = Buffer.from(base64Data, 'base64');
+            } else if (typeof document === 'string' && !document.startsWith('http')) {
+                document = Buffer.from(document, 'base64');
+            } else if (typeof document === 'string' && document.startsWith('http')) {
+                document = { url: document };
+            }
+
+            const sent = await this.sock.sendMessage(jid, {
+                document: document,
+                mimetype: content.mimetype || 'application/octet-stream',
+                fileName: content.fileName || 'document.pdf',
+                caption: content.caption || content.text
+            });
+            trackSentMsg(sent);
+        } else if (content.audio) {
+            const sent = await this.sock.sendMessage(jid, {
+                audio: content.audio as any,
+                ptt: !!content.ptt,
+            } as any);
+            trackSentMsg(sent);
         } else if (content.text) {
             await this.sendMessage(jid, content.text);
         }
@@ -875,6 +1051,7 @@ class WhatsAppAdapter {
         const q = query.trim().toLowerCase();
         const qDigits = query.replace(/\D/g, '');
         const results: Array<{ id: string; name: string; notify?: string }> = [];
+        const returnAll = q === '*' || q === 'all';
 
         if (q.length === 0 && qDigits.length === 0) return [];
 
@@ -890,7 +1067,7 @@ class WhatsAppAdapter {
             const matchesId = q.length > 0 && idBare.toLowerCase().includes(q);
             const matchesDigits = qDigits.length > 0 && idDigits.includes(qDigits);
 
-            if (matchesName || matchesId || matchesDigits) {
+            if (returnAll || matchesName || matchesId || matchesDigits) {
                 results.push({
                     id: id,
                     name: name || 'Unknown',
@@ -900,7 +1077,7 @@ class WhatsAppAdapter {
         }
         
         // Limit results
-        return results.slice(0, 10);
+        return results.slice(0, 20);
     }
 
     /**
@@ -971,6 +1148,10 @@ class WhatsAppAdapter {
      * Disconnect the adapter.
      */
     async disconnect(): Promise<void> {
+        if (contactsPersistTimer) {
+            clearTimeout(contactsPersistTimer);
+            contactsPersistTimer = null;
+        }
         if (this.sock) {
             this.sock.end(undefined);
             this.sock = null;

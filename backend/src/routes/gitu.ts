@@ -40,6 +40,8 @@ import {
   analyzeSentiment,
 } from '../services/gituGmailAI.js';
 import { gituAIRouter } from '../services/gituAIRouter.js';
+import { gituTaskScheduler } from '../services/gituTaskScheduler.js';
+import { gituTaskParser } from '../services/gituTaskParser.js';
 import { generateEmbedding } from '../services/aiService.js';
 import { gituMissionControl } from '../services/gituMissionControl.js';
 import { gituSelfImprovementService } from '../services/gituSelfImprovementService.js';
@@ -1094,6 +1096,62 @@ router.get('/tasks/:id/executions', async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('List executions error:', error);
     res.status(500).json({ error: 'Failed to list executions', message: error.message });
+  }
+});
+
+/**
+ * POST /tasks/parse
+ * Parse natural language into a scheduled task
+ * 
+ * Examples:
+ * - "remind me tomorrow at 3pm to call John"
+ * - "every Monday at 9am send me a summary"
+ * - "every 30 minutes remind me to drink water"
+ */
+router.post('/tasks/parse', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { text } = req.body;
+
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ 
+        error: 'text is required',
+        examples: gituTaskParser.getExamples()
+      });
+    }
+
+    // Parse the natural language
+    const parseResult = gituTaskParser.parse(text, req.userId!);
+
+    if (!parseResult.success) {
+      return res.status(400).json({
+        error: parseResult.error || 'Could not parse task',
+        confidence: parseResult.confidence,
+        examples: gituTaskParser.getExamples()
+      });
+    }
+
+    // Create the task using gituTaskScheduler
+    const task = await gituTaskScheduler.createTask(
+      req.userId!,
+      parseResult.task!.name,
+      parseResult.task!.trigger,
+      parseResult.task!.action,
+      parseResult.task!.description
+    );
+
+    res.json({
+      success: true,
+      task,
+      parsed: parseResult.task,
+      confidence: parseResult.confidence,
+      originalText: text
+    });
+  } catch (error: any) {
+    console.error('Parse task error:', error);
+    res.status(500).json({ 
+      error: 'Failed to parse and create task', 
+      message: error.message 
+    });
   }
 });
 

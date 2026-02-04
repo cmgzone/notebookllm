@@ -68,6 +68,30 @@ class MurfService {
      * Note: Full list implementation would require another endpoint.
      * This is a helper for common voices.
      */
+    async getVoiceModels(): Promise<Array<{ id: string; name: string; language: string; gender: string }>> {
+        if (!this.apiKey) return this.getCommonVoices();
+
+        try {
+            const response = await axios.get('https://api.murf.ai/v1/speech/voices', {
+                headers: { 'api-key': this.apiKey },
+            });
+            return response.data.map((v: any) => ({
+                id: v.voiceId,
+                name: v.displayName,
+                language: v.language,
+                gender: v.gender,
+            }));
+        } catch (error: any) {
+            console.error('[MurfService] Failed to fetch voices:', error.message);
+            return this.getCommonVoices();
+        }
+    }
+
+    /**
+     * List available voices (cached or fetched)
+     * Note: Full list implementation would require another endpoint.
+     * This is a helper for common voices.
+     */
     getCommonVoices() {
         return [
             { id: 'en-US-natalie', name: 'Natalie', gender: 'Female', language: 'English (US)' },

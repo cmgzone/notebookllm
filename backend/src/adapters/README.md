@@ -145,6 +145,24 @@ app.post('/api/telegram/webhook', (req, res) => {
 - All messages are logged for audit trail
 - Platform-specific user IDs are mapped to NotebookLLM user IDs
 
+### Permission Model (Gitu vs OpenClaw)
+
+**Gitu (this repo)**
+- Identity gate: requires an active row in `gitu_linked_accounts` for `platform='telegram'` and `status='active'`.
+- Verification gate (for protected features): some commands require `verified=true` and/or explicit permissions via `gituPermissionManager` (example: `/notebooks`).
+- Group gate: by default only processes group messages that mention the bot / reply to the bot / contain mention entities; override with `GITU_TELEGRAM_GROUP_MODE=all`.
+
+Implementation reference: [telegramAdapter.ts](file:///c:/Users/Admin/Documents/project/NOTBOOK%20LLM/backend/src/adapters/telegramAdapter.ts)
+
+**OpenClaw**
+- DM gate: `dmPolicy` defaults to `pairing` (deny-by-default); unknown users get a pairing code and are blocked until approved.
+- Allowlist gate: `allowFrom` supports Telegram user IDs and usernames (supports `tg:` / `telegram:` prefixes) and can merge with a persisted allow-from store.
+- Group gate: `channels.telegram.groups` creates an allowlist of accepted groups and supports `requireMention` plus per-topic overrides.
+- Command gate: control commands can be blocked unless the sender is authorized by the allowlist.
+
+Docs: [openclow Telegram channel](file:///c:/Users/Admin/Documents/project/openclow/docs/channels/telegram.md)  
+Implementation: [bot-message-context.ts](file:///c:/Users/Admin/Documents/project/openclow/src/telegram/bot-message-context.ts) and [bot-access.ts](file:///c:/Users/Admin/Documents/project/openclow/src/telegram/bot-access.ts)
+
 ### Troubleshooting
 
 **Bot not responding:**
@@ -171,6 +189,64 @@ app.post('/api/telegram/webhook', (req, res) => {
 - [ ] Payment integration
 - [ ] Game integration
 - [ ] Sticker support
+
+## WhatsApp Adapter
+
+The WhatsApp adapter enables Gitu to communicate via WhatsApp Web using Baileys.
+
+### Setup
+
+1. **Link WhatsApp session owner**
+   - The WhatsApp account that runs the session must exist in `gitu_linked_accounts` as `platform='whatsapp'` and `status='active'`.
+   - The adapter attributes all inbound chats (DMs/groups) to the *session owner* (the connected WhatsApp account).
+
+2. **Configure Environment**
+   Add to `backend/.env` as needed:
+   ```env
+   GITU_WHATSAPP_AUTH_DIR=/absolute/path/to/whatsapp-auth
+   GITU_WHATSAPP_CONTACTS_STORE_PATH=/absolute/path/to/contacts-store.json
+   GITU_WHATSAPP_SEND_WELCOME_TO_SELF=false
+   ```
+
+### Testing
+
+```bash
+cd backend
+tsx src/scripts/test-whatsapp-adapter.ts
+```
+
+### Permission Model (Gitu)
+
+Gitu WhatsApp replies are controlled per chat (remoteJid) using a local `auto_reply` flag:
+
+- **Always replies** to "Note to Self" (messages to your own WhatsApp account).
+- **Replies** to a chat if `auto_reply` for that chat is enabled.
+- **Replies** if the message includes a mention trigger (`gitu` / `@bot`) or starts with `/` (command).
+- **Does not reply** to messages you sent from your phone (`fromMe`) unless it is Note to Self.
+
+Commands:
+- `/gitu allow` enables auto-reply for the current chat
+- `/gitu mute` disables auto-reply for the current chat
+- `/gitu allow <query>` and `/gitu mute <query>` update auto-reply by searching the local contacts store
+
+Implementation reference: [whatsappAdapter.ts](file:///c:/Users/Admin/Documents/project/NOTBOOK%20LLM/backend/src/adapters/whatsappAdapter.ts)
+
+### Permission Model (OpenClaw)
+
+OpenClaw uses a stricter inbound access-control layer:
+
+- **DM policy** (`pairing` default): unknown senders do not reach the model until approved (pairing code flow).
+- **Allowlist**: `allowFrom` (plus a persisted allow-from store) controls who can DM.
+- **Group policy**: `open|allowlist|disabled` controls group inbound acceptance.
+- **Self-chat mode**: the linked number is implicitly trusted and treated specially.
+
+Implementation reference: [access-control.ts](file:///c:/Users/Admin/Documents/project/openclow/src/web/inbound/access-control.ts) and docs: [whatsapp.md](file:///c:/Users/Admin/Documents/project/openclow/docs/channels/whatsapp.md)
+
+### Key Differences (Why it matters)
+
+- OpenClaw defaults to **deny-by-default** for DMs (`pairing`), Gitu defaults to **reply-on-mention/command** unless muted.
+- OpenClaw approvals are **channel-level** (pairing/allowFrom), Gitu approvals are **chat-level** (`auto_reply` per remoteJid).
+- OpenClaw can prevent “first contact” spam by design; Gitu can respond to an unapproved DM if the sender uses `/...` or mentions `gitu`.
 
 ## Other Adapters
 

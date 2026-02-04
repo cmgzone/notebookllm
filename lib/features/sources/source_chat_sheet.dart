@@ -8,11 +8,13 @@ import 'dart:ui';
 
 import 'source_conversation_provider.dart';
 import 'source.dart';
+import '../chat/github_action_detector.dart';
+import '../github/github_issue_dialog.dart';
 
 /// A bottom sheet widget for viewing and sending messages in a source conversation
 /// with a third-party coding agent.
 ///
-/// Requirements: 3.1, 3.2, 3.3
+/// Requirements: 3.1, 3.2, 3.3, 4.2, 4.4, 4.5
 class SourceChatSheet extends ConsumerStatefulWidget {
   const SourceChatSheet({
     super.key,
@@ -52,19 +54,48 @@ class _SourceChatSheetState extends ConsumerState<SourceChatSheet> {
     }
   }
 
+  /// Build GitHub context for the message (Requirements: 4.2)
+  Map<String, dynamic>? _buildGitHubContext() {
+    if (!widget.source.isGitHubSource) return null;
+
+    return {
+      'owner': widget.source.githubOwner,
+      'repo': widget.source.githubRepo,
+      'path': widget.source.githubPath,
+      'branch': widget.source.githubBranch,
+      'currentContent': widget.source.content,
+      'language': widget.source.language,
+    };
+  }
+
   Future<void> _sendMessage() async {
     final message = _messageController.text.trim();
     if (message.isEmpty) return;
 
     _messageController.clear();
 
+    // Include GitHub context for GitHub sources (Requirements: 4.2)
+    final githubContext = _buildGitHubContext();
+
     final success = await ref
         .read(sourceConversationProvider(widget.source.id).notifier)
-        .sendMessage(message);
+        .sendMessage(message, githubContext: githubContext);
 
     if (success) {
       _scrollToBottom();
     }
+  }
+
+  /// Handle creating an issue from agent suggestion (Requirements: 4.5)
+  void _handleCreateIssue(IssueSuggestion suggestion) {
+    showGitHubIssueDialog(
+      context,
+      ref,
+      title: suggestion.title,
+      body: suggestion.body,
+      owner: widget.source.githubOwner,
+      repo: widget.source.githubRepo,
+    );
   }
 
   @override
@@ -75,28 +106,21 @@ class _SourceChatSheetState extends ConsumerState<SourceChatSheet> {
         ref.watch(sourceConversationProvider(widget.source.id));
 
     return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
+          height: MediaQuery.of(context).size.height * 0.85,
           decoration: BoxDecoration(
             color: scheme.surface.withValues(alpha: 0.95),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 20,
-                offset: const Offset(0, -4),
-              ),
-            ],
-          ),
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.85,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            border: Border.all(
+              color: scheme.outline.withValues(alpha: 0.1),
+            ),
           ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              // Handle bar
+              // Drag handle
               Center(
                 child: Container(
                   margin: const EdgeInsets.only(top: 12),
@@ -320,6 +344,8 @@ class _SourceChatSheetState extends ConsumerState<SourceChatSheet> {
         return _MessageBubble(
           message: message,
           agentName: widget.agentName,
+          isGitHubSource: widget.source.isGitHubSource,
+          onCreateIssue: _handleCreateIssue,
         ).animate().fadeIn(
               duration: 200.ms,
               delay: Duration(milliseconds: index * 50),
@@ -422,21 +448,30 @@ class _SourceChatSheetState extends ConsumerState<SourceChatSheet> {
 }
 
 /// Message bubble widget for displaying individual messages
-/// Requirements: 3.3
+/// Requirements: 3.3, 4.5
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
     this.agentName,
+    this.onCreateIssue,
+    this.isGitHubSource = false,
   });
 
   final SourceMessage message;
   final String? agentName;
+  final void Function(IssueSuggestion)? onCreateIssue;
+  final bool isGitHubSource;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final isUser = message.isUser;
+
+    // Detect issue suggestions in agent messages (Requirements: 4.5)
+    final issueSuggestion = !isUser
+        ? GitHubActionDetector.detectIssueSuggestion(message.content)
+        : null;
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -538,6 +573,16 @@ class _MessageBubble extends StatelessWidget {
                   ),
                 ),
               ),
+
+            // Create Issue action button for agent suggestions (Requirements: 4.5)
+            if (issueSuggestion != null && isGitHubSource && onCreateIssue != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _IssueActionButton(
+                  suggestion: issueSuggestion,
+                  onTap: () => onCreateIssue!(issueSuggestion),
+                ),
+              ),
           ],
         ),
       ),
@@ -617,6 +662,77 @@ class _MessageBubble extends StatelessWidget {
     } else {
       return '${time.day}/${time.month}';
     }
+  }
+}
+
+/// Action button for creating GitHub issues from agent suggestions
+/// Requirements: 4.5
+class _IssueActionButton extends StatelessWidget {
+  const _IssueActionButton({
+    required this.suggestion,
+    required this.onTap,
+  });
+
+  final IssueSuggestion suggestion;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.green.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.green.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                LucideIcons.gitPullRequestDraft,
+                size: 14,
+                color: Colors.green.shade700,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Create Issue',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.green.shade700,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              if (suggestion.isExplicit) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Suggested',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: Colors.green.shade800,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
