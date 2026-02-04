@@ -12,6 +12,8 @@ export class RemoteTerminalClient {
     private maxReconnectAttempts = 5;
     private approvalCache = new Map<string, number>();
     private confirmationQueue: Promise<void> = Promise.resolve();
+    private heartbeatTimer: NodeJS.Timeout | null = null;
+    private lastPongAt: number = 0;
 
     private isConnected = false;
 
@@ -61,12 +63,14 @@ export class RemoteTerminalClient {
                     }
                 }
             });
+            this.startHeartbeat();
         });
 
         this.ws.on('message', (data) => this.handleMessage(data));
 
         this.ws.on('close', () => {
             this.isConnected = false;
+            this.stopHeartbeat();
             if (this.reconnectAttempts < this.maxReconnectAttempts) {
                 this.reconnectAttempts++;
                 setTimeout(() => this.connect(), 1000 * this.reconnectAttempts);
@@ -84,7 +88,13 @@ export class RemoteTerminalClient {
 
             if (message.type === 'hello-ok') {
                 this.isConnected = true;
+                this.lastPongAt = Date.now();
                 // console.log(chalk.green('[Remote Terminal] Handshake successful'));
+                return;
+            }
+
+            if (message.type === 'pong') {
+                this.lastPongAt = Date.now();
                 return;
             }
 
@@ -256,10 +266,36 @@ export class RemoteTerminalClient {
         }
     }
 
+    private startHeartbeat() {
+        if (this.heartbeatTimer) return;
+        this.lastPongAt = Date.now();
+        this.heartbeatTimer = setInterval(() => {
+            if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+            const now = Date.now();
+            if (now - this.lastPongAt > 60_000) {
+                try {
+                    this.ws.close();
+                } catch {}
+                return;
+            }
+
+            this.send({ type: 'ping', payload: { ts: now } });
+        }, 20_000);
+    }
+
+    private stopHeartbeat() {
+        if (this.heartbeatTimer) {
+            clearInterval(this.heartbeatTimer);
+            this.heartbeatTimer = null;
+        }
+    }
+
     disconnect() {
         if (this.ws) {
             this.ws.removeAllListeners();
             this.ws.close();
         }
+        this.stopHeartbeat();
     }
 }

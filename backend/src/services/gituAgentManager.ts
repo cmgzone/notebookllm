@@ -183,7 +183,6 @@ export class GituAgentManager {
 
     const rawContent = response.content;
     const envelope = this.tryParseAgentEnvelope(rawContent);
-    const content = envelope?.message ?? rawContent;
     let toolOutput = '';
 
     const toolCall = envelope?.toolCall || this.tryParseLegacyToolCall(rawContent);
@@ -200,9 +199,22 @@ export class GituAgentManager {
       }
     }
 
+    const legacyStatus = this.detectLegacyCompletionStatus(rawContent);
+    const previousNonEnvelopeCount = typeof (agent.memory as any)?.nonEnvelopeCount === 'number'
+      ? (agent.memory as any).nonEnvelopeCount
+      : 0;
+    const nonEnvelopeCount = envelope ? 0 : previousNonEnvelopeCount + 1;
+    const forcedCompletion = !envelope && !legacyStatus && !toolCall && nonEnvelopeCount >= 2;
+
+    const baseContent = envelope?.message ?? rawContent;
+    const finalContent = forcedCompletion
+      ? `${baseContent}\n\n[Auto-completed: missing JSON envelope]`
+      : baseContent;
+    const content = finalContent;
+
     const newHistory = [...history, {
       role: 'assistant',
-      content: content + toolOutput,
+      content: finalContent + toolOutput,
       timestamp: new Date().toISOString()
     }];
 
@@ -211,14 +223,17 @@ export class GituAgentManager {
       newHistory.splice(0, newHistory.length - 20);
     }
 
-    const newMemory = { ...agent.memory, history: newHistory };
+    const newMemory = { ...agent.memory, history: newHistory, nonEnvelopeCount };
 
-    const legacyStatus = this.detectLegacyCompletionStatus(rawContent);
     const completionStatus = envelope?.status === 'done'
       ? 'done'
       : envelope?.status === 'failed'
         ? 'failed'
-        : legacyStatus;
+        : legacyStatus
+          ? legacyStatus
+          : forcedCompletion
+            ? 'done'
+            : null;
 
     if (completionStatus === 'done') {
       await this.updateAgentStatus(agent.id, 'completed', { output: content + toolOutput });
@@ -273,6 +288,17 @@ export class GituAgentManager {
           console.error(`[AgentManager] Failed to store evaluation for agent ${agent.id}`, e);
         }
       }
+
+      // Notify Orchestrator if this agent is part of a swarm mission
+      if (agent.memory.missionId) {
+        try {
+          // Dynamic import to avoid circular dependency
+          const { gituAgentOrchestrator } = await import('./gituAgentOrchestrator.js');
+          await gituAgentOrchestrator.handleTaskCompletion(agent.memory.missionId, agent.id);
+        } catch (e) {
+          console.error(`[AgentManager] Failed to notify orchestrator for agent ${agent.id}`, e);
+        }
+      }
     } else {
       // Keep active
       await pool.query(
@@ -283,16 +309,19 @@ export class GituAgentManager {
   }
 
   private tryParseAgentEnvelope(content: string): { status: 'continue' | 'done' | 'failed'; message: string; toolCall?: { tool: string; args: any } } | null {
-    const blockMatch = content.match(/```json\s*\n?([\s\S]*?)\n?```/i);
-    const jsonCandidate = (blockMatch?.[1] || '').trim();
+    const jsonCandidate = this.extractEnvelopeJson(content);
     if (!jsonCandidate) return null;
     try {
       const parsed = JSON.parse(jsonCandidate);
-      const status = parsed?.status;
-      const message = typeof parsed?.message === 'string' ? parsed.message : '';
+      const status = typeof parsed?.status === 'string' ? parsed.status.toLowerCase() : '';
+      const message = typeof parsed?.message === 'string'
+        ? parsed.message
+        : typeof parsed?.content === 'string'
+          ? parsed.content
+          : '';
       if (status !== 'continue' && status !== 'done' && status !== 'failed') return null;
       if (!message) return null;
-      const toolCall = parsed?.toolCall;
+      const toolCall = parsed?.toolCall || parsed?.tool_call;
       if (toolCall && typeof toolCall?.tool === 'string' && toolCall?.args && typeof toolCall?.args === 'object') {
         return { status, message, toolCall: { tool: toolCall.tool, args: toolCall.args } };
       }
@@ -300,6 +329,18 @@ export class GituAgentManager {
     } catch {
       return null;
     }
+  }
+
+  private extractEnvelopeJson(content: string): string | null {
+    const fencedMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
+    const fencedCandidate = (fencedMatch?.[1] || '').trim();
+    if (fencedCandidate) return fencedCandidate;
+
+    const inlineMatch = content.match(/\{[\s\S]*\}/);
+    const inlineCandidate = (inlineMatch?.[0] || '').trim();
+    if (inlineCandidate) return inlineCandidate;
+
+    return null;
   }
 
   private tryParseLegacyToolCall(content: string): { tool: string; args: any } | null {
@@ -321,8 +362,8 @@ export class GituAgentManager {
   }
 
   private detectLegacyCompletionStatus(content: string): 'done' | 'failed' | null {
-    if (/^\s*DONE\b/m.test(content)) return 'done';
-    if (/^\s*FAILED\b/m.test(content)) return 'failed';
+    if (/^\s*(DONE|COMPLETED|FINISHED|FINAL)\b/m.test(content)) return 'done';
+    if (/^\s*(FAILED|ERROR|FAILURE)\b/m.test(content)) return 'failed';
     return null;
   }
 

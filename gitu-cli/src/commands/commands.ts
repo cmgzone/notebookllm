@@ -1,12 +1,17 @@
 import chalk from 'chalk';
 
+import { printBrand } from '../ui/brand.js';
+
 export class CommandsCommand {
   static show() {
+    printBrand();
     console.log(chalk.bold('\nGitu CLI Commands\n'));
     console.log(chalk.cyan('Main:'));
     console.log(chalk.gray('  gitu init'));
     console.log(chalk.gray('  gitu onboard'));
     console.log(chalk.gray('  gitu auth <pairing-token>'));
+    console.log(chalk.gray('  gitu status'));
+    console.log(chalk.gray('  gitu remote-terminal start|daemon|stop|autostart on|off'));
     console.log(chalk.gray('  gitu chat'));
     console.log(chalk.gray('  gitu run "<shell command>"'));
     console.log(chalk.gray('  gitu notebook list'));

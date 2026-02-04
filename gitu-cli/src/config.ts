@@ -12,6 +12,8 @@ export interface GituConfig {
   remoteTerminalRequireConfirm?: boolean;
   remoteTerminalAllowedCommands?: string[];
   remoteTerminalApprovalTtlSeconds?: number;
+  remoteTerminalDaemonPid?: number;
+  remoteTerminalStartupPath?: string;
 }
 
 export class ConfigManager {

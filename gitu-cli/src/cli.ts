@@ -24,6 +24,9 @@ import { OnboardCommand } from './commands/onboard.js';
 import { PermissionsCommand } from './commands/permissions.js';
 import { WhatsAppCommand } from './commands/whatsapp.js';
 import { TelegramCommand } from './commands/telegram.js';
+import { StatusCommand } from './commands/status.js';
+import { RemoteTerminalCommand } from './commands/remoteTerminal.js';
+import { renderBrand } from './ui/brand.js';
 
 const program = new Command();
 const config = new ConfigManager();
@@ -31,10 +34,24 @@ const api = new ApiClient(config);
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version?: string };
 
+program.hook('preAction', async (_thisCommand, actionCommand) => {
+  const cmdName = actionCommand?.name?.();
+  const parentName = actionCommand?.parent?.name?.();
+
+  if (parentName === 'remote-terminal' || cmdName === 'remote-terminal') return;
+  if (parentName === 'config' && cmdName === 'remote-terminal') return;
+
+  try {
+    RemoteTerminalCommand.ensureDaemonRunning(config, { silent: true });
+  } catch {}
+});
+
 program
   .name('gitu')
   .description('Gitu Universal Assistant CLI')
   .version(pkg.version ?? '0.0.0');
+
+program.addHelpText('beforeAll', renderBrand());
 
 program
   .command('init')
@@ -181,6 +198,12 @@ missionCmd
   .option('--json', 'Output as JSON')
   .action((missionId, options) => MissionCommand.stop(api, missionId, options));
 
+missionCmd
+  .command('synthesize <missionId>')
+  .description('Synthesize final report for a mission')
+  .option('--json', 'Output as JSON')
+  .action((missionId, options) => MissionCommand.synthesize(api, missionId, options));
+
 program
   .command('auth [token]')
   .description('Authenticate CLI with a pairing token from the app')
@@ -322,6 +345,36 @@ program
   .description('Check system health and connection')
   .option('--json', 'Output as JSON')
   .action((options) => HealthCommand.check(api, options));
+
+program
+  .command('status')
+  .description('Show CLI and remote terminal status')
+  .option('--json', 'Output as JSON')
+  .action((options) => StatusCommand.show(api, config, options));
+
+const remoteTerminalCmd = program
+  .command('remote-terminal')
+  .description('Manage local remote terminal connection');
+
+remoteTerminalCmd
+  .command('start')
+  .description('Run remote terminal in foreground')
+  .action(() => RemoteTerminalCommand.start(config));
+
+remoteTerminalCmd
+  .command('daemon')
+  .description('Run remote terminal in background')
+  .action(() => RemoteTerminalCommand.daemon(config));
+
+remoteTerminalCmd
+  .command('stop')
+  .description('Stop background remote terminal')
+  .action(() => RemoteTerminalCommand.stop(config));
+
+remoteTerminalCmd
+  .command('autostart <mode>')
+  .description('Enable or disable autostart on login (on/off)')
+  .action((mode) => RemoteTerminalCommand.autostart(config, mode));
 
 // Agent commands
 const agentCmd = program

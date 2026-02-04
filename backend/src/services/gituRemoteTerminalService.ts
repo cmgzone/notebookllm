@@ -159,6 +159,11 @@ class GituRemoteTerminalService {
                 return;
             }
 
+            if (message.type === 'ping') {
+                connection.ws.send(JSON.stringify({ type: 'pong', payload: { ts: Date.now() } }));
+                return;
+            }
+
             if (message.type === 'execute_result' && message.id) {
                 const pending = connection.pendingRequests.get(message.id);
                 if (pending) {
@@ -205,6 +210,18 @@ class GituRemoteTerminalService {
      */
     hasConnection(userId: string): boolean {
         return this.connections.has(userId) && this.connections.get(userId)!.length > 0;
+    }
+
+    getConnectionSummary(userId: string): { connected: boolean; devices: Array<{ deviceId: string; deviceName: string; capabilities: string[] }> } {
+        const userConns = this.connections.get(userId) || [];
+        return {
+            connected: userConns.length > 0,
+            devices: userConns.map(conn => ({
+                deviceId: conn.deviceId,
+                deviceName: conn.deviceName,
+                capabilities: Array.isArray(conn.capabilities) ? conn.capabilities : [],
+            })),
+        };
     }
 
     /**

@@ -14,6 +14,7 @@ import { gituMemoryService } from './gituMemoryService.js';
 import { gituMCPHub } from './gituMCPHub.js';
 import { gituPluginSystem } from './gituPluginSystem.js';
 import { gituRuleEngine } from './gituRuleEngine.js';
+import { gituRemoteTerminalService } from './gituRemoteTerminalService.js';
 import pool from '../config/database.js';
 import { SOUL_DOCUMENT } from '../config/soul.js';
 
@@ -48,6 +49,7 @@ class GituSystemPromptBuilder {
             includeTools ? this.getUserPlugins(userId) : Promise.resolve([]),
             includeTools ? this.getActiveRules(userId) : Promise.resolve([]),
         ]);
+        const localTerminal = gituRemoteTerminalService.getConnectionSummary(userId);
 
         // Build the system prompt sections
         const sections: string[] = [];
@@ -60,6 +62,7 @@ class GituSystemPromptBuilder {
 
         // User context
         sections.push(this.buildUserSection(userInfo, linkedAccounts, platform));
+        sections.push(this.buildLocalTerminalSection(localTerminal));
 
         // Memories (facts about the user)
         if (memories.length > 0) {
@@ -134,6 +137,28 @@ You are **Gitu**, the AI assistant for NotebookLLM. NotebookLLM is a knowledge m
 - **Connected Platforms**: ${platformsConnected}
 
 Address the user by their name when appropriate. Remember details they share about themselves.`;
+    }
+
+    private buildLocalTerminalSection(localTerminal: { connected: boolean; devices: Array<{ deviceId: string; deviceName: string; capabilities: string[] }> }): string {
+        if (!localTerminal.connected) {
+            return `# Local Computer Access
+
+- **Local Terminal**: not connected
+
+If the user asks you to use their local computer, you must ask them to connect the Gitu CLI remote terminal. Once connected, you can run local commands using execute_command with sandboxed=false.`;
+        }
+
+        const deviceLines = localTerminal.devices
+            .map(d => `- ${d.deviceName} (${d.deviceId})${d.capabilities.length ? ` [${d.capabilities.join(', ')}]` : ''}`)
+            .join('\n');
+
+        return `# Local Computer Access
+
+- **Local Terminal**: connected
+- **Devices**:
+${deviceLines}
+
+When the user asks to use their local computer or files, use execute_command with sandboxed=false to run commands on their machine. Use shell commands like ls/dir, rg, find, or PowerShell equivalents to search local files. If execution is denied, ask the user to grant shell permission and allow unsandboxed execution.`;
     }
 
     private buildMemoriesSection(memories: Array<{ content: string; category?: string; confidence?: number }>): string {

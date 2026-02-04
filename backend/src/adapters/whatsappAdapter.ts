@@ -260,6 +260,16 @@ class WhatsAppAdapter {
         return jid.split(':')[0].split('@')[0] + '@lid';
     }
 
+    private normalizeContactJid(jid: string): string {
+        if (!jid) return '';
+        if (jid.includes('@g.us') || jid.includes('@broadcast') || jid.includes('@newsletter')) {
+            return jid;
+        }
+        const lid = this.normalizeLid(jid);
+        if (lid) return lid;
+        return this.normalizeJid(jid);
+    }
+
     private isSelfChat(remoteJid: string): boolean {
         if (!remoteJid) return false;
         const normalizedJid = this.normalizeJid(remoteJid);
@@ -590,13 +600,33 @@ class WhatsAppAdapter {
 
         this.logger.info(`Received message from ${remoteJid}: ${text} (fromMe: ${msg.key.fromMe}, Note to Self: ${isNoteToSelf})`);
 
+        // Upsert contact info from live messages (ensures search works even without full sync)
+        try {
+            const contactJid = this.normalizeContactJid(remoteJid);
+            if (contactJid) {
+                const existing = contactsStore[contactJid] || {};
+                const nameCandidate = !isGroup
+                    ? (msg.pushName || existing.name || existing.notify)
+                    : (existing.name || existing.subject || existing.notify);
+                contactsStore[contactJid] = {
+                    ...existing,
+                    id: contactJid,
+                    ...(msg.pushName ? { pushName: msg.pushName, notify: existing.notify || msg.pushName } : {}),
+                    ...(nameCandidate ? { name: nameCandidate } : {}),
+                };
+                schedulePersistContacts();
+            }
+        } catch (e) {
+            this.logger.debug({ err: e }, 'Failed to upsert contact from message');
+        }
+
         // ================== PERMISSION COMMANDS ==================
         if (text.toLowerCase().startsWith('/gitu allow')) {
              const query = text.substring(11).trim();
              if (!query) {
                  // Current chat
                  await this.setAutoReply(remoteJid, true);
-                 await this.sendMessage(remoteJid, '✅ *Auto-Reply Enabled*\nI will now reply to messages in this chat.');
+                 await this.sendMessage(remoteJid, '[OK] *Auto-Reply Enabled*\nI will now reply to messages in this chat.');
              } else {
                  // Specific contact
                  const result = await this.setPermissionByQuery(query, true);
@@ -608,7 +638,7 @@ class WhatsAppAdapter {
              const query = text.substring(10).trim();
              if (!query) {
                  await this.setAutoReply(remoteJid, false);
-                 await this.sendMessage(remoteJid, '🔇 *Auto-Reply Disabled*\nI will only reply when mentioned or commanded.');
+                 await this.sendMessage(remoteJid, '[Muted] *Auto-Reply Disabled*\nI will only reply when mentioned or commanded.');
              } else {
                  const result = await this.setPermissionByQuery(query, false);
                  await this.sendMessage(remoteJid, result.message);
@@ -619,7 +649,7 @@ class WhatsAppAdapter {
         // Debug command: Ping
         if (text.toLowerCase() === 'ping' && isNoteToSelf) {
             const replyJid = this.connectedAccountJid || remoteJid;
-            await this.sendMessage(replyJid, 'pong 🏓 (Connection Verified)');
+            await this.sendMessage(replyJid, 'pong (Connection Verified)');
             return;
         }
 
@@ -674,19 +704,19 @@ class WhatsAppAdapter {
 
                 if (command === 'spawn' || command === 'create') {
                     if (!args) {
-                        await this.sendMessage(replyJid, '⚠️ Usage: /agent spawn <task description>');
+                        await this.sendMessage(replyJid, 'Usage: /agent spawn <task description>');
                         return;
                     }
-                    await this.sendMessage(replyJid, `🤖 Spawning agent for: "${args}"...`);
+                    await this.sendMessage(replyJid, `Spawning agent for: "${args}"...`);
                     try {
                         const agent = await gituAgentManager.spawnAgent(userId, args, {
                             role: 'autonomous_agent',
                             focus: 'general',
                             autoLoadPlugins: true
                         });
-                        await this.sendMessage(replyJid, `✅ Agent spawned! ID: ${agent.id.substring(0, 8)}\nI will notify you when it completes.`);
+                        await this.sendMessage(replyJid, `Agent spawned! ID: ${agent.id.substring(0, 8)}\nI will notify you when it completes.`);
                     } catch (e: any) {
-                        await this.sendMessage(replyJid, `❌ Failed to spawn agent: ${e.message}`);
+                        await this.sendMessage(replyJid, `Failed to spawn agent: ${e.message}`);
                     }
                     return;
                 }
@@ -700,11 +730,11 @@ class WhatsAppAdapter {
                     const list = agents.map(a =>
                         `- *${a.task.substring(0, 30)}...*\n  Status: ${a.status}\n  ID: ${a.id.substring(0, 8)}`
                     ).join('\n\n');
-                    await this.sendMessage(replyJid, `📋 *Your Agents:*\n\n${list}`);
+                    await this.sendMessage(replyJid, `*Your Agents:*\n\n${list}`);
                     return;
                 }
 
-                await this.sendMessage(replyJid, 'ℹ️ Available commands:\n/agent spawn <task>\n/agent list');
+                await this.sendMessage(replyJid, 'Available commands:\n/agent spawn <task>\n/agent list');
                 return;
             }
 
@@ -729,24 +759,24 @@ class WhatsAppAdapter {
                         const list = missions.map(m =>
                             `- *${m.name}*\n  Status: ${m.status.toUpperCase()}\n  Agents: ${m.agentCount}`
                         ).join('\n\n');
-                        await this.sendMessage(replyJid, `🛸 *Active Swarms:*\n\n${list}`);
+                        await this.sendMessage(replyJid, `*Active Swarms:*\n\n${list}`);
                     } catch (e: any) {
-                        await this.sendMessage(replyJid, `❌ Error: ${e.message}`);
+                        await this.sendMessage(replyJid, ` Error: ${e.message}`);
                     }
                     return;
                 }
 
                 if (!args) {
-                    await this.sendMessage(replyJid, '⚠️ Usage: /swarm <complex objective>');
+                    await this.sendMessage(replyJid, ' Usage: /swarm <complex objective>');
                     return;
                 }
 
-                await this.sendMessage(replyJid, `🛸 Deploying Swarm: "${args}"...`);
+                await this.sendMessage(replyJid, `Deploying Swarm: "${args}"...`);
                 try {
                     const mission = await gituAgentOrchestrator.createMission(userId, args);
-                    await this.sendMessage(replyJid, `✅ **Swarm Deployed!**\nMission ID: ${mission.id.substring(0, 8)}\nI will notify you when finished.`);
+                    await this.sendMessage(replyJid, `**Swarm Deployed!**\nMission ID: ${mission.id.substring(0, 8)}\nI will notify you when finished.`);
                 } catch (e: any) {
-                    await this.sendMessage(replyJid, `❌ Failed to deploy swarm: ${e.message}`);
+                    await this.sendMessage(replyJid, `Failed to deploy swarm: ${e.message}`);
                 }
                 return;
             }
@@ -755,7 +785,10 @@ class WhatsAppAdapter {
             // ================== AI REPLY LOGIC ==================
             
             // Check Permissions
-            const isAllowed = contactsStore[remoteJid]?.auto_reply === true;
+            const normalizedRemoteJid = this.normalizeContactJid(remoteJid);
+            const isAllowed =
+                contactsStore[remoteJid]?.auto_reply === true ||
+                (normalizedRemoteJid ? contactsStore[normalizedRemoteJid]?.auto_reply === true : false);
             const isMention = text.toLowerCase().includes('gitu') || text.toLowerCase().includes('@bot');
             const isCommand = text.startsWith('/');
             const autoReplyAll = process.env.GITU_WHATSAPP_AUTO_REPLY_ALL === 'true';
@@ -843,7 +876,7 @@ class WhatsAppAdapter {
             } catch (aiError) {
                 this.logger.error({ err: aiError }, 'Error processing AI response');
                 if (isNoteToSelf) {
-                    await this.sendMessage(remoteJid, `⚠️ AI Error: ${aiError instanceof Error ? aiError.message : 'Unknown error'}`);
+                    await this.sendMessage(remoteJid, `AI Error: ${aiError instanceof Error ? aiError.message : 'Unknown error'}`);
                 }
             }
 
@@ -910,10 +943,11 @@ class WhatsAppAdapter {
      * Set auto-reply permission for a contact/group.
      */
     async setAutoReply(jid: string, allowed: boolean): Promise<void> {
-        if (!contactsStore[jid]) {
-            contactsStore[jid] = { id: jid };
+        const normalizedJid = this.normalizeContactJid(jid) || jid;
+        if (!contactsStore[normalizedJid]) {
+            contactsStore[normalizedJid] = { id: normalizedJid };
         }
-        contactsStore[jid].auto_reply = allowed;
+        contactsStore[normalizedJid].auto_reply = allowed;
         try {
             await persistContactsStore(true);
         } catch (err) {

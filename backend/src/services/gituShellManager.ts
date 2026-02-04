@@ -249,8 +249,8 @@ export class GituShellManager {
     }
 
     // Check if user has a remote terminal connected.
-    // If so, we may route the command to the user's actual computer, but only after permission checks.
-    if (gituRemoteTerminalService.hasConnection(userId)) {
+    // Only route to the user's actual computer when explicitly unsandboxed.
+    if (!sandboxed && gituRemoteTerminalService.hasConnection(userId)) {
       const remoteAllowed = executePermissions.some(hasUnsandboxedAllowance);
       if (!remoteAllowed) {
         return {

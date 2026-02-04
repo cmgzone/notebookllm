@@ -17,6 +17,7 @@ export interface SwarmTask {
     role: string; // e.g. "Researcher", "Coder"
     dependencies: string[]; // IDs of tasks that must complete first
     agentId?: string;
+    blockedBy?: string[]; // Failed dependency IDs
     status: 'pending' | 'in_progress' | 'completed' | 'failed';
 }
 
@@ -116,48 +117,53 @@ class GituAgentOrchestrator {
             return;
         }
 
-        // 1. Mark task as completed
-        let taskUpdated = false;
-        const completedTaskIds = new Set<string>();
+        // 1. Refresh task states from current agent statuses (avoids stale/concurrent overwrites)
+        const agents = await gituAgentManager.listAgentsByMission(mission.userId, missionId);
+        const agentsById = new Map(agents.map(a => [a.id, a]));
 
-        for (const t of plan.tasks) {
-            if (t.agentId === agentId) {
-                t.status = 'completed';
-                taskUpdated = true;
-                console.log(`[Orchestrator] Task ${t.id} completed by agent ${agentId}`);
+        const normalizedTasks: SwarmTask[] = plan.tasks.map(t => {
+            const dependencies = Array.isArray(t.dependencies) ? t.dependencies : [];
+            let status: SwarmTask['status'] = t.status || 'pending';
+
+            const agent = t.agentId ? agentsById.get(t.agentId) : undefined;
+            if (agent) {
+                if (agent.status === 'completed') status = 'completed';
+                else if (agent.status === 'failed') status = 'failed';
+                else if (agent.status === 'active') status = 'in_progress';
+                else if (agent.status === 'pending') status = 'pending';
             }
-            if (t.status === 'completed') {
-                completedTaskIds.add(t.id);
-            }
-        }
 
-        if (!taskUpdated) {
-            console.warn(`[Orchestrator] No task found for agent ${agentId} in mission ${missionId}`);
-            return;
-        }
-
-        // 2. Persist completion immediately
-        await gituMissionControl.updateMissionState(missionId, {
-            contextUpdates: { plan }
+            return { ...t, status, dependencies };
         });
 
-        // 3. Check for dependent tasks to launch
-        const pendingTasks = plan.tasks.filter(t => t.status === 'pending');
-        const readyTasks: SwarmTask[] = [];
+        const completedTaskIds = new Set(normalizedTasks.filter(t => t.status === 'completed').map(t => t.id));
+        const failedTaskIds = new Set(normalizedTasks.filter(t => t.status === 'failed').map(t => t.id));
 
-        for (const t of pendingTasks) {
-            const allDependenciesMet = t.dependencies.every(depId => completedTaskIds.has(depId));
-            if (allDependenciesMet) {
-                readyTasks.push(t);
-            }
-        }
+        const tasksWithBlocked: SwarmTask[] = normalizedTasks.map(t => {
+            if (t.status !== 'pending') return t;
+            const failedDeps = t.dependencies.filter(depId => failedTaskIds.has(depId));
+            if (failedDeps.length === 0) return t;
+            return { ...t, status: 'failed', blockedBy: failedDeps };
+        });
 
+        const completedTaskIdsFinal = new Set(tasksWithBlocked.filter(t => t.status === 'completed').map(t => t.id));
+        const pendingTasks = tasksWithBlocked.filter(t => t.status === 'pending');
+        const readyTasks = pendingTasks.filter(t => t.dependencies.every(depId => completedTaskIdsFinal.has(depId)));
+        const allTerminal = tasksWithBlocked.length > 0 && tasksWithBlocked.every(t => t.status === 'completed' || t.status === 'failed');
+
+        const updatedPlan: MissionPlan = { ...plan, tasks: tasksWithBlocked };
+
+        // 2. Persist updated plan
+        await gituMissionControl.updateMissionState(missionId, {
+            contextUpdates: { plan: updatedPlan }
+        });
+
+        // 3. Check for dependent tasks to launch or synthesize
         if (readyTasks.length > 0) {
             console.log(`[Orchestrator] Unlocking ${readyTasks.length} dependent tasks`);
-            await this.dispatchTasks(mission.userId, missionId, plan, readyTasks);
-        } else if (pendingTasks.length === 0 && plan.tasks.every(t => t.status === 'completed')) {
-            // All tasks done!
-            console.log(`[Orchestrator] All tasks completed. Synthesizing results.`);
+            await this.dispatchTasks(mission.userId, missionId, updatedPlan, readyTasks);
+        } else if (allTerminal) {
+            console.log(`[Orchestrator] All tasks terminal. Synthesizing results.`);
             await this.synthesizeMissionResults(missionId);
         }
     }
@@ -226,13 +232,18 @@ class GituAgentOrchestrator {
         if (!mission) throw new Error('Mission not found');
 
         const agents = await gituAgentManager.listAgentsByMission(mission.userId, missionId);
-        const missionAgents = agents.filter(a => a.status === 'completed');
+        const completedAgents = agents.filter(a => a.status === 'completed');
+        const failedAgents = agents.filter(a => a.status === 'failed');
+        const missionAgents = [...completedAgents, ...failedAgents];
 
         if (missionAgents.length === 0) {
-            return "No agents have completed their tasks yet.";
+            return "No agent outputs available yet.";
         }
 
-        const agentOutputs = missionAgents.map(a => `Task: ${a.task}\nResult: ${a.result?.output || 'No output'}`).join('\n\n---\n\n');
+        const agentOutputs = missionAgents.map(a => {
+            const output = a.result?.output || a.result?.error || 'No output';
+            return `Task: ${a.task}\nStatus: ${a.status}\nResult: ${output}`;
+        }).join('\n\n---\n\n');
 
         // Use AI to synthesize
         try {

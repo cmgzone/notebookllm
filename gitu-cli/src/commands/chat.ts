@@ -4,6 +4,7 @@ import { ApiClient } from '../api.js';
 import { RemoteTerminalClient } from '../remote-terminal.js';
 import { ConfigManager } from '../config.js';
 import { v4 as uuidv4 } from 'uuid';
+import { printBrand } from '../ui/brand.js';
 
 export class ChatCommand {
   static async start(api: ApiClient, config: ConfigManager) {
@@ -11,7 +12,8 @@ export class ChatCommand {
     const remoteTerminal = new RemoteTerminalClient(config);
     await remoteTerminal.connect();
 
-    console.log(chalk.bold.cyan('\n🤖 Gitu Interactive Chat'));
+    printBrand();
+    console.log(chalk.bold.cyan('Gitu Interactive Chat'));
     if (!config.get('remoteTerminalEnabled')) {
       console.log(chalk.gray('Remote Terminal: disabled (commands will run on server if executed)'));
     } else {

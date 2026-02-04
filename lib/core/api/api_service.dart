@@ -730,6 +730,23 @@ class ApiService {
     await post('/chunks/bulk', {'sourceId': sourceId, 'chunks': chunks});
   }
 
+  // ============ GITU ============
+
+  Future<String> gituChatMessage({
+    required String message,
+    List<String>? context,
+    String? sessionId,
+  }) async {
+    final response = await post<Map<String, dynamic>>('/gitu/message', {
+      'message': message,
+      if (context != null) 'context': context,
+      if (sessionId != null) 'sessionId': sessionId,
+    });
+    return (response['content'] as String?) ??
+        (response['response'] as String?) ??
+        '';
+  }
+
   // ============ CHAT ============
 
   Future<List<Map<String, dynamic>>> getChatHistory({String? notebookId}) async {

@@ -6,10 +6,12 @@ import { ApiClient } from '../api.js';
 import { ConfigManager } from '../config.js';
 import { RemoteTerminalClient } from '../remote-terminal.js';
 import qrcodeTerminal from 'qrcode-terminal';
+import { printBrand } from '../ui/brand.js';
 
 export class OnboardCommand {
   static async start(api: ApiClient, config: ConfigManager) {
-    console.log(chalk.bold.cyan('\n🧭 Gitu CLI Onboarding\n'));
+    printBrand();
+    console.log(chalk.bold.cyan('Gitu CLI Onboarding\n'));
 
     const existingToken = config.get('apiToken');
     const existingApiUrl = config.get('apiUrl');
@@ -33,7 +35,7 @@ export class OnboardCommand {
         type: 'confirm',
         name: 'enableRemoteTerminal',
         message: 'Enable Remote Terminal on this PC (allows backend to request local commands)?',
-        default: false,
+        default: true,
       },
       {
         type: 'confirm',
@@ -134,9 +136,11 @@ export class OnboardCommand {
 
     console.log(chalk.green('\n✓ CLI linked to your account'));
 
-    config.set('remoteTerminalEnabled', Boolean(answers.enableRemoteTerminal));
-    if (answers.enableRemoteTerminal) {
-      config.set('remoteTerminalRequireConfirm', Boolean(answers.requireConfirm));
+    // Auto-enable Remote Terminal after pairing
+    const enableRemoteTerminal = answers.enableRemoteTerminal !== false;
+    config.set('remoteTerminalEnabled', true);
+    config.set('remoteTerminalRequireConfirm', enableRemoteTerminal ? Boolean(answers.requireConfirm) : true);
+    if (enableRemoteTerminal) {
       if (answers.allowPreset === 'safe-dev') {
         config.set('remoteTerminalAllowedCommands', ['git ', 'npm ', 'node ', 'python ', 'python3 ']);
       } else if (answers.allowPreset === 'all') {
@@ -144,11 +148,13 @@ export class OnboardCommand {
       } else {
         config.set('remoteTerminalAllowedCommands', []);
       }
-
-      const rt = new RemoteTerminalClient(config);
-      await rt.connect();
-      console.log(chalk.green('✓ Remote Terminal configured'));
+    } else if (!Array.isArray(config.get('remoteTerminalAllowedCommands'))) {
+      config.set('remoteTerminalAllowedCommands', []);
     }
+
+    const rt = new RemoteTerminalClient(config);
+    await rt.connect();
+    console.log(chalk.green('✓ Remote Terminal configured'));
 
     const requestsToApprove: string[] = [];
 

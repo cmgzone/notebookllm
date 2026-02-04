@@ -151,5 +151,30 @@ export class MissionCommand {
       }
     }
   }
-}
 
+  static async synthesize(api: ApiClient, missionId: string, options: any) {
+    const spinner = ora('Synthesizing mission report...').start();
+    try {
+      const response = await api.synthesizeMission(missionId);
+      spinner.stop();
+
+      if (options.json) {
+        console.log(JSON.stringify(response, null, 2));
+        return;
+      }
+
+      const report = response.report || response.mission?.artifacts?.finalReport;
+      console.log(chalk.green('\nâœ“ Report synthesized'));
+      if (report) {
+        console.log(chalk.bold('\nFinal Report'));
+        console.log(report);
+      } else {
+        console.log(chalk.yellow('No report produced.'));
+      }
+      console.log('');
+    } catch (error: any) {
+      spinner.fail('Failed to synthesize report');
+      console.error(chalk.red(error.message));
+    }
+  }
+}

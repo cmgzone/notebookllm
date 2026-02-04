@@ -211,12 +211,8 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
     }
   }
 
-  void sendMessage(String text) {
-    if (_channel == null || !state.isConnected) {
-      connect(); // Try to reconnect
-      // For now, maybe queue or fail. Let's fail gracefully.
-      return;
-    }
+  Future<void> sendMessage(String text) async {
+    if (text.trim().isEmpty) return;
 
     // Optimistic add
     _addMessage(GituMessage(
@@ -226,12 +222,48 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
       timestamp: DateTime.now(),
     ));
 
+    if (_channel == null || !state.isConnected) {
+      // Try to reconnect, but also fall back to HTTP so the user still gets a reply.
+      connect();
+      await _sendViaHttp(text);
+      return;
+    }
+
     final message = {
       'type': 'user_message',
       'payload': {'text': text}
     };
 
     _channel!.sink.add(jsonEncode(message));
+  }
+
+  Future<void> _sendViaHttp(String text) async {
+    try {
+      final apiService = _ref.read(apiServiceProvider);
+      final recent = state.messages.length > 20
+          ? state.messages.sublist(state.messages.length - 20)
+          : state.messages;
+      final history = recent
+          .where((m) => m.content.trim().isNotEmpty)
+          .map((m) => '${m.isUser ? 'user' : 'assistant'}: ${m.content}')
+          .toList();
+      final response = await apiService.gituChatMessage(
+        message: text,
+        context: history,
+      );
+      if (response.isNotEmpty) {
+        _addMessage(GituMessage(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          content: response,
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        state = state.copyWith(error: 'Gitu chat failed: ${e.toString()}');
+      }
+    }
   }
 
   void _addMessage(GituMessage message) {

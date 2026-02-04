@@ -191,11 +191,19 @@ export class ApiClient {
     return this.post(`gitu/mission/${missionId}/stop`);
   }
 
+  async synthesizeMission(missionId: string) {
+    return this.post(`gitu/mission/${missionId}/synthesize`);
+  }
+
   async listNotebooks() {
     return this.get('notebooks');
   }
 
   async queryNotebook(notebookId: string, query: string) {
     return this.post(`notebooks/${notebookId}/query`, { query });
+  }
+
+  async getRemoteTerminalStatus() {
+    return this.get('gitu/terminal/remote-status');
   }
 }

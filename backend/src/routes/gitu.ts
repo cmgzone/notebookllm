@@ -40,10 +40,12 @@ import {
   analyzeSentiment,
 } from '../services/gituGmailAI.js';
 import { gituAIRouter } from '../services/gituAIRouter.js';
+import { gituToolExecutionService } from '../services/gituToolExecutionService.js';
 import { gituTaskScheduler } from '../services/gituTaskScheduler.js';
 import { gituTaskParser } from '../services/gituTaskParser.js';
 import { generateEmbedding } from '../services/aiService.js';
 import { gituMissionControl } from '../services/gituMissionControl.js';
+import { gituAgentOrchestrator } from '../services/gituAgentOrchestrator.js';
 import { gituSelfImprovementService } from '../services/gituSelfImprovementService.js';
 
 const router = express.Router();
@@ -62,18 +64,36 @@ router.post('/message', authenticateToken, async (req: AuthRequest, res: Respons
       return res.status(400).json({ error: 'message is required' });
     }
 
-    // Route through GituAIRouter
-    const response = await gituAIRouter.route({
-      userId: req.userId!,
-      platform: 'cli',
-      platformUserId: 'cli-user',
-      sessionId,
-      content: message,
-      taskType: 'chat',
-      useRetrieval: true // Enable RAG by default for CLI
-    });
+    const history = Array.isArray(context)
+      ? context.map((entry: any) => ({
+          role: 'user' as const,
+          content: typeof entry === 'string' ? entry : String(entry ?? ''),
+        }))
+      : [];
 
-    res.json({ success: true, content: response.content });
+    try {
+      const response = await gituToolExecutionService.processWithTools(
+        req.userId!,
+        message,
+        history,
+        { platform: 'terminal', sessionId }
+      );
+
+      res.json({ success: true, content: response.response, toolsUsed: response.toolsUsed });
+    } catch (toolError: any) {
+      // Fallback to direct chat if tool execution fails
+      const response = await gituAIRouter.route({
+        userId: req.userId!,
+        platform: 'terminal',
+        platformUserId: 'cli-user',
+        sessionId,
+        content: message,
+        taskType: 'chat',
+        useRetrieval: true // Enable RAG by default for CLI
+      });
+
+      res.json({ success: true, content: response.content });
+    }
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to process message', message: error.message });
   }
@@ -159,6 +179,15 @@ router.get('/terminal/devices', authenticateToken, async (req: AuthRequest, res:
     res.json({ success: true, devices });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to list linked devices', message: error.message });
+  }
+});
+
+router.get('/terminal/remote-status', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const status = gituRemoteTerminalService.getConnectionSummary(req.userId!);
+    res.json({ success: true, ...status });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to get remote terminal status', message: error.message });
   }
 });
 
@@ -2265,6 +2294,25 @@ router.get('/mission/:id/detail', async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to get mission detail', message: error.message });
+  }
+});
+
+/**
+ * POST /mission/:id/synthesize
+ * Force synthesis of a final report for a mission
+ */
+router.post('/mission/:id/synthesize', async (req: AuthRequest, res: Response) => {
+  try {
+    const mission = await gituMissionControl.getMission(req.params.id);
+    if (!mission) return res.status(404).json({ error: 'Mission not found' });
+    if (mission.userId !== req.userId) return res.status(403).json({ error: 'Access denied' });
+
+    const report = await gituAgentOrchestrator.synthesizeMissionResults(mission.id);
+    const refreshed = await gituMissionControl.getMission(mission.id);
+
+    res.json({ success: true, report, mission: refreshed });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to synthesize mission', message: error.message });
   }
 });
 
