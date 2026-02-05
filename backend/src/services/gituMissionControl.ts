@@ -228,8 +228,8 @@ class GituMissionControl {
         for (const task of plan.tasks) {
             const status = task.status || 'pending';
             if (status === 'completed') completed++;
-            else if (status === 'failed' || status === 'blocked') failed++;
-            else if (status === 'in_progress' || status === 'active') inProgress++;
+            else if (status === 'failed') failed++;
+            else if (status === 'in_progress') inProgress++;
             else pending++;
         }
 
