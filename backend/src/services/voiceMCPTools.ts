@@ -121,6 +121,10 @@ const sendVoiceNoteTool: MCPTool = {
     },
     handler: async (args: any, context: MCPContext) => {
         const { text, platform, recipient = 'self', voiceId } = args;
+        const normalizedText = typeof text === 'string' ? text.trim() : '';
+        if (!normalizedText) {
+            throw new Error('Text is required for a voice note.');
+        }
         const defaults = await getUserVoiceDefaults(context.userId);
         const resolvedVoiceId = voiceId || defaults.voiceId || 'en-US-natalie';
         const explicitPlatform = normalizePlatform(platform);
@@ -143,7 +147,7 @@ const sendVoiceNoteTool: MCPTool = {
         // 1. Generate Audio
         let audioUrl: string;
         try {
-            const result = await murfService.generateSpeech(text, { voiceId: resolvedVoiceId });
+            const result = await murfService.generateSpeech(normalizedText, { voiceId: resolvedVoiceId });
             audioUrl = result.audioUrl;
         } catch (e: any) {
             throw new Error(`Voice generation failed: ${e.message}`);

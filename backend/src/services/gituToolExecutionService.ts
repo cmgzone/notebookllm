@@ -166,6 +166,25 @@ class GituToolExecutionService {
                     console.log(`[ToolExecution] Tool call ${toolCallCount}: ${toolCall.name} (using model: ${selectedModel})`);
                 }
 
+                if (toolCall.name === 'send_voice_note' && !this.isExplicitVoiceRequest(userMessage)) {
+                    const wantsEnglish = /\b(english|in english|use english)\b/i.test(userMessage);
+                    const textOnlyPrompt = `The user did not explicitly request a voice note. Respond in text only${wantsEnglish ? ' and in English' : ''}.\n\nUser request: ${userMessage}`;
+                    const textOnlyResponse = await gituAIRouter.route({
+                        userId,
+                        sessionId,
+                        prompt: textOnlyPrompt,
+                        context: contextMessages,
+                        taskType: 'chat',
+                        platform,
+                        includeSystemPrompt: true,
+                        includeTools: false,
+                    });
+                    finalResponse = textOnlyResponse.content;
+                    selectedModel = textOnlyResponse.model;
+                    tokensUsed += textOnlyResponse.tokensUsed;
+                    break;
+                }
+
                 if (!this.isToolAllowed(toolCall.name, userMessage)) {
                     finalResponse = this.buildConfirmationPrompt(toolCall.name, userMessage);
                     break;
@@ -279,6 +298,18 @@ class GituToolExecutionService {
             this.isExplicitSwarmRequest(userMessage) ||
             /\b(spawn|create|start)\s+(an?\s+)?agent\b/i.test(msg) ||
             /\buse\s+an?\s+agent\b/i.test(msg)
+        );
+    }
+
+    private isExplicitVoiceRequest(userMessage: string): boolean {
+        const msg = userMessage.toLowerCase();
+        if (/\b(stop|disable|no|dont|don't|do not)\b.*\b(voice|audio)\b/i.test(msg)) {
+            return false;
+        }
+        return (
+            /\b(voice note|voice message|audio note)\b/i.test(msg) ||
+            /\b(send|record)\b.*\b(voice|audio)\b/i.test(msg) ||
+            /\b(read it out|say it out loud|speak it)\b/i.test(msg)
         );
     }
 
