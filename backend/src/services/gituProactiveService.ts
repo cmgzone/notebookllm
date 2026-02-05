@@ -618,16 +618,24 @@ class GituProactiveService {
         try {
             // Get all users with Gitu enabled
             const usersResult = await pool.query(
-                `SELECT id as user_id FROM users WHERE gitu_enabled = true`
+                `SELECT id as user_id,
+                        COALESCE((gitu_settings->'proactive'->>'highPriorityOnly')::boolean, false) as high_priority_only
+                 FROM users
+                 WHERE gitu_enabled = true
+                   AND (gitu_settings->'proactive'->>'enabled' IS NULL
+                        OR (gitu_settings->'proactive'->>'enabled')::boolean = true)`
             );
 
             for (const row of usersResult.rows) {
                 try {
                     const insights = await this.getProactiveInsights(row.user_id, false);
 
-                    // Create notifications for high-priority suggestions
-                    const highPriority = insights.suggestions.filter(s => s.priority === 'high');
-                    for (const suggestion of highPriority.slice(0, 2)) {
+                    const highPriorityOnly = row.high_priority_only === true;
+                    const candidateSuggestions = highPriorityOnly
+                        ? insights.suggestions.filter(s => s.priority === 'high')
+                        : insights.suggestions;
+
+                    for (const suggestion of candidateSuggestions.slice(0, 2)) {
                         await this.createProactiveNotification(
                             row.user_id,
                             'suggestion',

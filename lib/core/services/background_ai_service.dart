@@ -5,7 +5,11 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:record/record.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'dart:convert';
+import 'dart:math';
 
 /// Background AI Service for continuing generation when app is closed
 class BackgroundAIService {
@@ -26,6 +30,11 @@ class BackgroundAIService {
   static const String _taskResultKey = 'background_task_result';
   static const String _taskProgressKey = 'background_task_progress';
   static const String _taskErrorKey = 'background_task_error';
+  static const String _wakeWordEnabledKey = 'gitu_wake_word_enabled';
+  static const String _wakeWordPhraseKey = 'gitu_wake_word_phrase';
+  static const String _wakeWordAlwaysListeningKey =
+      'gitu_wake_word_always_listening';
+  static const String _wakeWordApiKeyKey = 'gitu_wake_word_deepgram_key';
 
   /// Check if background execution is enabled
   Future<bool> get isEnabled async {
@@ -80,7 +89,10 @@ class BackgroundAIService {
           initialNotificationTitle: 'Notebook LLM',
           initialNotificationContent: 'AI processing in background',
           foregroundServiceNotificationId: 888,
-          foregroundServiceTypes: [AndroidForegroundType.dataSync],
+          foregroundServiceTypes: [
+            AndroidForegroundType.dataSync,
+            AndroidForegroundType.microphone,
+          ],
         ),
       );
 
@@ -158,6 +170,57 @@ class BackgroundAIService {
       debugPrint('[BackgroundAI] Error starting task: $e');
       _logError(taskType, e.toString());
       return false;
+    }
+  }
+
+  /// Start always-listening wake word mode (Android foreground service)
+  Future<bool> startWakeWordListener({
+    required String phrase,
+    required bool alwaysListening,
+    String? deepgramApiKey,
+  }) async {
+    if (!_isEnabled) {
+      debugPrint('[BackgroundAI] Background execution disabled');
+      return false;
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_wakeWordEnabledKey, true);
+      await prefs.setString(_wakeWordPhraseKey, phrase);
+      await prefs.setBool(_wakeWordAlwaysListeningKey, alwaysListening);
+      if (deepgramApiKey != null && deepgramApiKey.trim().isNotEmpty) {
+        await prefs.setString(_wakeWordApiKeyKey, deepgramApiKey.trim());
+      }
+
+      await prefs.setString('background_task_type', 'wake_word');
+      await prefs.setString('background_task_id', 'wake_word_listener');
+      await prefs.setString(
+          'background_task_params', jsonEncode({'phrase': phrase}));
+      await prefs.setString(_taskStatusKey, 'starting');
+      await prefs.setInt(_taskProgressKey, 0);
+
+      final started = await _service.startService();
+      if (started) {
+        debugPrint('[BackgroundAI] Wake word listener started');
+      }
+      return started;
+    } catch (e) {
+      debugPrint('[BackgroundAI] Error starting wake word: $e');
+      _logError('wake_word', e.toString());
+      return false;
+    }
+  }
+
+  Future<void> stopWakeWordListener() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_wakeWordEnabledKey, false);
+      await prefs.setBool(_wakeWordAlwaysListeningKey, false);
+      _service.invoke('stopService');
+      await _notifications.cancel(888);
+    } catch (e) {
+      debugPrint('[BackgroundAI] Error stopping wake word: $e');
     }
   }
 
@@ -280,6 +343,8 @@ Future<void> onStart(ServiceInstance service) async {
       prefs.getString('background_task_id') ?? ''; // taskId for future use
   final paramsJson = prefs.getString('background_task_params') ?? '{}';
 
+  bool keepAlive = false;
+
   try {
     final params = jsonDecode(paramsJson) as Map<String, dynamic>;
 
@@ -290,6 +355,10 @@ Future<void> onStart(ServiceInstance service) async {
 
     // Execute based on task type
     switch (taskType) {
+      case 'wake_word':
+        keepAlive = true;
+        await _runWakeWordListener(params, prefs, service, notifications);
+        break;
       case 'artifact':
         await _generateArtifactInBackground(
             params, prefs, service, notifications);
@@ -308,22 +377,28 @@ Future<void> onStart(ServiceInstance service) async {
     await prefs.setString('background_task_status', 'completed');
     await prefs.setInt('background_task_progress', 100);
 
-    // Show completion notification
-    await _showCompletionNotification(
-        notifications, 'Task completed successfully!');
+    if (!keepAlive) {
+      // Show completion notification
+      await _showCompletionNotification(
+          notifications, 'Task completed successfully!');
+    }
   } catch (e) {
     debugPrint('[BackgroundAI] Task error: $e');
     await prefs.setString('background_task_status', 'error');
     await prefs.setString('background_task_error', e.toString());
 
-    // Show error notification
-    await _showErrorNotification(
-        notifications, 'Task failed: ${e.toString().substring(0, 50)}...');
+    if (!keepAlive) {
+      // Show error notification
+      await _showErrorNotification(
+          notifications, 'Task failed: ${e.toString().substring(0, 50)}...');
+    }
   }
 
-  // Stop service after task completes
-  await Future.delayed(const Duration(seconds: 2));
-  service.stopSelf();
+  if (!keepAlive) {
+    // Stop service after task completes
+    await Future.delayed(const Duration(seconds: 2));
+    service.stopSelf();
+  }
 }
 
 Future<void> _showProgressNotification(
@@ -394,6 +469,206 @@ Future<void> _showErrorNotification(
     ),
   );
   await notifications.cancel(888);
+}
+
+Future<void> _showWakeWordNotification(
+  FlutterLocalNotificationsPlugin notifications,
+  String phrase,
+) async {
+  await notifications.show(
+    888,
+    'Notebook LLM - Listening',
+    'Listening for "$phrase"...',
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+        'notebook_llm_background',
+        'Background Processing',
+        channelDescription: 'AI processing tasks',
+        importance: Importance.low,
+        priority: Priority.low,
+        ongoing: true,
+        icon: '@mipmap/ic_launcher',
+      ),
+    ),
+  );
+}
+
+Future<void> _notifyWakeWordDetected(
+  FlutterLocalNotificationsPlugin notifications,
+  String transcript,
+) async {
+  final snippet = transcript.length > 60
+      ? '${transcript.substring(0, 60)}...'
+      : transcript;
+  await notifications.show(
+    891,
+    'Wake word detected',
+    snippet.isEmpty ? 'Hey Gitu detected' : snippet,
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+        'notebook_llm_background',
+        'Background Processing',
+        channelDescription: 'AI processing tasks',
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+      ),
+    ),
+  );
+}
+
+Future<void> _runWakeWordListener(
+  Map<String, dynamic> params,
+  SharedPreferences prefs,
+  ServiceInstance service,
+  FlutterLocalNotificationsPlugin notifications,
+) async {
+  final phraseRaw =
+      (params['phrase'] as String?) ?? prefs.getString('gitu_wake_word_phrase');
+  final phrase =
+      (phraseRaw == null || phraseRaw.trim().isEmpty) ? 'hey gitu' : phraseRaw;
+  final phraseLower = phrase.toLowerCase();
+
+  final envKey = dotenv.env['DEEPGRAM_API_KEY'];
+  final storedKey = prefs.getString('gitu_wake_word_deepgram_key');
+  final apiKey = (params['deepgramApiKey'] as String?) ??
+      (storedKey != null && storedKey.trim().isNotEmpty ? storedKey : null) ??
+      (envKey != null && envKey.trim().isNotEmpty ? envKey : null);
+
+  if (apiKey == null || apiKey.trim().isEmpty) {
+    throw Exception('Deepgram API key not configured for wake word');
+  }
+
+  final recorder = AudioRecorder();
+  final hasPermission = await recorder.hasPermission();
+  if (!hasPermission) {
+    throw Exception('Microphone permission denied');
+  }
+
+  bool stopRequested = false;
+  service.on('stopService').listen((event) {
+    stopRequested = true;
+  });
+
+  const cooldown = Duration(seconds: 20);
+  DateTime lastTrigger = DateTime.fromMillisecondsSinceEpoch(0);
+
+  await prefs.setString('background_task_status', 'listening');
+  await _showWakeWordNotification(notifications, phrase);
+
+  const int sampleRate = 16000;
+  const int channels = 1;
+  const String encoding = 'linear16';
+
+  while (!stopRequested) {
+    WebSocketChannel? channel;
+    StreamSubscription? wsSub;
+    StreamSubscription<Uint8List>? audioSub;
+    bool socketClosed = false;
+
+    try {
+      final paramsQuery = <String, String>{
+        'model': 'nova-2',
+        'encoding': encoding,
+        'sample_rate': sampleRate.toString(),
+        'channels': channels.toString(),
+        'punctuate': 'true',
+        'smart_format': 'true',
+        'interim_results': 'true',
+        'vad_events': 'true',
+        'endpointing': '300',
+        'utterance_end_ms': '1000',
+      };
+      final queryString =
+          paramsQuery.entries.map((e) => '${e.key}=${e.value}').join('&');
+      final wsUrl = 'wss://api.deepgram.com/v1/listen?$queryString';
+
+      channel = WebSocketChannel.connect(
+        Uri.parse(wsUrl),
+        protocols: ['token', apiKey],
+      );
+
+      wsSub = channel.stream.listen(
+        (message) {
+          try {
+            final data = jsonDecode(message as String);
+            if (data['type'] != 'Results') return;
+            final channelData = data['channel'] as Map<String, dynamic>?;
+            final alternatives =
+                channelData?['alternatives'] as List<dynamic>? ?? const [];
+            if (alternatives.isEmpty) return;
+            final transcript = alternatives.first['transcript'] as String? ?? '';
+            if (transcript.isEmpty) return;
+            final transcriptLower = transcript.toLowerCase();
+            if (!transcriptLower.contains(phraseLower)) return;
+
+            final now = DateTime.now();
+            if (now.difference(lastTrigger) < cooldown) return;
+
+            lastTrigger = now;
+            prefs.setInt('wake_word_last_triggered', now.millisecondsSinceEpoch);
+            prefs.setString('wake_word_last_transcript', transcript);
+            service.invoke('wakeWordDetected', {
+              'phrase': phrase,
+              'transcript': transcript,
+              'timestamp': now.toIso8601String(),
+            });
+            _notifyWakeWordDetected(notifications, transcript);
+          } catch (e) {
+            // ignore parse errors
+          }
+        },
+        onError: (error) {
+          socketClosed = true;
+        },
+        onDone: () {
+          socketClosed = true;
+        },
+      );
+
+      final stream = await recorder.startStream(
+        const RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: sampleRate,
+          numChannels: channels,
+        ),
+      );
+
+      audioSub = stream.listen(
+        (data) {
+          if (!stopRequested && !socketClosed) {
+            channel?.sink.add(data);
+          }
+        },
+        onError: (e) {
+          socketClosed = true;
+        },
+      );
+
+      while (!stopRequested && !socketClosed) {
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
+    } catch (e) {
+      debugPrint('[BackgroundAI] Wake word loop error: $e');
+    } finally {
+      try {
+        await audioSub?.cancel();
+      } catch (_) {}
+      try {
+        await recorder.stop();
+      } catch (_) {}
+      try {
+        await wsSub?.cancel();
+      } catch (_) {}
+      try {
+        await channel?.sink.close();
+      } catch (_) {}
+    }
+
+    if (!stopRequested) {
+      await Future.delayed(Duration(seconds: 2 + Random().nextInt(3)));
+    }
+  }
 }
 
 /// iOS background handler

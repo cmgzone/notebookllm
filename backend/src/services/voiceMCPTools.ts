@@ -17,6 +17,22 @@ async function getLinkedIdentity(userId: string, platform: 'whatsapp' | 'telegra
     return res.rows.length > 0 ? res.rows[0].platform_user_id : null;
 }
 
+async function getUserVoiceDefaults(userId: string): Promise<{ voiceId?: string; provider?: string }> {
+    try {
+        const res = await pool.query(
+            `SELECT gitu_settings FROM users WHERE id = $1`,
+            [userId]
+        );
+        const settings = res.rows[0]?.gitu_settings || {};
+        const voice = settings.voice || {};
+        const voiceId = typeof voice.voiceId === 'string' && voice.voiceId.trim().length > 0 ? voice.voiceId : undefined;
+        const provider = typeof voice.provider === 'string' && voice.provider.trim().length > 0 ? voice.provider : undefined;
+        return { voiceId, provider };
+    } catch {
+        return {};
+    }
+}
+
 /**
  * Tool: Transcribe Audio
  */
@@ -63,11 +79,13 @@ const sendVoiceNoteTool: MCPTool = {
     },
     handler: async (args: any, context: MCPContext) => {
         const { text, platform, recipient = 'self', voiceId } = args;
+        const defaults = await getUserVoiceDefaults(context.userId);
+        const resolvedVoiceId = voiceId || defaults.voiceId || 'en-US-natalie';
 
         // 1. Generate Audio
         let audioUrl: string;
         try {
-            const result = await murfService.generateSpeech(text, { voiceId });
+            const result = await murfService.generateSpeech(text, { voiceId: resolvedVoiceId });
             audioUrl = result.audioUrl;
         } catch (e: any) {
             throw new Error(`Voice generation failed: ${e.message}`);

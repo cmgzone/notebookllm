@@ -270,6 +270,86 @@ class WhatsAppAdapter {
         return this.normalizeJid(jid);
     }
 
+    private parseGituCommand(text: string): { command: string; args: string } | null {
+        const trimmed = text.trim();
+        if (!trimmed) return null;
+        const match = trimmed.match(/^\/?@?gitu\b\s*(.*)$/i);
+        if (!match) return null;
+        const rest = (match[1] || '').trim();
+        if (!rest) return null;
+        const [command, ...args] = rest.split(/\s+/);
+        return { command: command.toLowerCase(), args: args.join(' ').trim() };
+    }
+
+    private extractPreferredName(text: string): string | null {
+        const match = text.match(/\b(?:call me|my name is)\s+([A-Za-z][A-Za-z\s'-]{1,40})/i);
+        if (!match) return null;
+        let name = match[1].trim();
+        name = name.replace(/[^A-Za-z\s'-]/g, '').replace(/\s+/g, ' ').trim();
+        name = name.replace(/\b(please|pls|plz|thanks|thank you)\b.*$/i, '').trim();
+        if (name.length < 2 || name.length > 40) return null;
+        return name;
+    }
+
+    private updateContactPreferredName(remoteJid: string, text: string, isGroup: boolean, isNoteToSelf: boolean): string | null {
+        if (isGroup || isNoteToSelf) return null;
+        const preferredName = this.extractPreferredName(text);
+        if (!preferredName) return null;
+        const normalizedJid = this.normalizeContactJid(remoteJid) || remoteJid;
+        const existing = contactsStore[normalizedJid] || { id: normalizedJid };
+        contactsStore[normalizedJid] = {
+            ...existing,
+            id: normalizedJid,
+            name: preferredName,
+            notify: existing.notify || preferredName,
+        };
+        schedulePersistContacts();
+        return preferredName;
+    }
+
+    private getContactDisplayName(jid: string): string | null {
+        const normalizedJid = this.normalizeContactJid(jid) || jid;
+        const contact = contactsStore[normalizedJid] || contactsStore[jid];
+        const name =
+            contact?.name ||
+            contact?.notify ||
+            contact?.pushName ||
+            contact?.verifiedName ||
+            contact?.subject ||
+            '';
+        if (typeof name !== 'string') return null;
+        const trimmed = name.trim();
+        return trimmed.length > 0 ? trimmed : null;
+    }
+
+    private redactPhoneNumbersForWhatsApp(text: string): string {
+        if (!text) return text;
+        return text.replace(/(\+?\d[\d\s().-]{6,}\d)/g, (match) => {
+            const digits = match.replace(/\D/g, '');
+            if (digits.length < 7) return match;
+            return '[number hidden]';
+        });
+    }
+
+    private formatWhatsAppResponse(
+        raw: string,
+        options: { isNoteToSelf: boolean; nameUpdate?: string | null }
+    ): string {
+        let response = raw || '';
+        const nameUpdate = options.nameUpdate?.trim();
+        if (nameUpdate) {
+            const lowerResponse = response.toLowerCase();
+            if (!lowerResponse.includes(nameUpdate.toLowerCase())) {
+                const prefix = `Thanks for clarifying, ${nameUpdate}.`;
+                response = response ? `${prefix} ${response}` : prefix;
+            }
+        }
+        if (!options.isNoteToSelf) {
+            response = this.redactPhoneNumbersForWhatsApp(response);
+        }
+        return response;
+    }
+
     private isSelfChat(remoteJid: string): boolean {
         if (!remoteJid) return false;
         const normalizedJid = this.normalizeJid(remoteJid);
@@ -620,29 +700,27 @@ class WhatsAppAdapter {
             this.logger.debug({ err: e }, 'Failed to upsert contact from message');
         }
 
+        const nameUpdate = this.updateContactPreferredName(remoteJid, text || '', isGroup, isNoteToSelf);
+
         // ================== PERMISSION COMMANDS ==================
-        if (text.toLowerCase().startsWith('/gitu allow')) {
-             const query = text.substring(11).trim();
+        const gituCommand = this.parseGituCommand(text || '');
+        if (gituCommand && (gituCommand.command === 'allow' || gituCommand.command === 'mute')) {
+             const isAllow = gituCommand.command === 'allow';
+             const query = gituCommand.args.trim();
+             let responseMessage = '';
              if (!query) {
                  // Current chat
-                 await this.setAutoReply(remoteJid, true);
-                 await this.sendMessage(remoteJid, '[OK] *Auto-Reply Enabled*\nI will now reply to messages in this chat.');
+                 await this.setAutoReply(remoteJid, isAllow);
+                 responseMessage = isAllow
+                     ? '[OK] *Auto-Reply Enabled*\nI will now reply to messages in this chat.'
+                     : '[Muted] *Auto-Reply Disabled*\nI will only reply when mentioned or commanded.';
              } else {
                  // Specific contact
-                 const result = await this.setPermissionByQuery(query, true);
-                 await this.sendMessage(remoteJid, result.message);
+                 const result = await this.setPermissionByQuery(query, isAllow);
+                 responseMessage = result.message;
              }
-             return;
-        }
-        if (text.toLowerCase().startsWith('/gitu mute')) {
-             const query = text.substring(10).trim();
-             if (!query) {
-                 await this.setAutoReply(remoteJid, false);
-                 await this.sendMessage(remoteJid, '[Muted] *Auto-Reply Disabled*\nI will only reply when mentioned or commanded.');
-             } else {
-                 const result = await this.setPermissionByQuery(query, false);
-                 await this.sendMessage(remoteJid, result.message);
-             }
+             const finalResponse = this.formatWhatsAppResponse(responseMessage, { isNoteToSelf, nameUpdate });
+             await this.sendMessage(remoteJid, finalResponse);
              return;
         }
 
@@ -800,7 +878,7 @@ class WhatsAppAdapter {
                 shouldReply = true;
             } else if (isAllowed) {
                 shouldReply = true;
-            } else if (isMention || isCommand) {
+            } else if (isMention || isCommand || !!nameUpdate) {
                 shouldReply = true;
             } else if (autoReplyAll) {
                 // WARNING: This will reply to EVERYONE
@@ -841,6 +919,19 @@ class WhatsAppAdapter {
                     role: m.role as 'user' | 'assistant' | 'system' | 'tool',
                     content: m.content
                 }));
+                const contactDisplayName = this.getContactDisplayName(remoteJid);
+                if (contactDisplayName && !isGroup && !isNoteToSelf) {
+                    recentHistory.unshift({
+                        role: 'system',
+                        content: `WhatsApp contact name: ${contactDisplayName}. Reply on behalf of the user and address them appropriately.`
+                    });
+                }
+                if (nameUpdate && !isGroup && !isNoteToSelf) {
+                    recentHistory.unshift({
+                        role: 'system',
+                        content: `The contact asked to be called "${nameUpdate}". Acknowledge this briefly in your reply.`
+                    });
+                }
 
                 // Use Tool Execution Service for smart responses
                 const result = await gituToolExecutionService.processWithTools(
@@ -858,17 +949,19 @@ class WhatsAppAdapter {
                     } as any
                 );
 
+                const finalResponse = this.formatWhatsAppResponse(result.response, { isNoteToSelf, nameUpdate });
+
                 // Add Assistant Response to History
                 await gituSessionService.updateActivity(session.id);
                 await gituSessionService.addMessage(session.id, {
                     role: 'assistant',
-                    content: result.response,
+                    content: finalResponse,
                     platform: 'whatsapp'
                 });
 
                 // Send Response
-                await this.sendMessage(remoteJid, result.response);
-                await gituMessageGateway.trackOutboundMessage(userId, 'whatsapp', result.response, {
+                await this.sendMessage(remoteJid, finalResponse);
+                await gituMessageGateway.trackOutboundMessage(userId, 'whatsapp', finalResponse, {
                     sessionId: session.id,
                     replyToMessageId: gatewayMessageId,
                     userMessageText: text || '',

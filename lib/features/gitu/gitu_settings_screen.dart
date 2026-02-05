@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/ai/ai_models_provider.dart';
+import '../../core/audio/voice_models_provider.dart';
 import '../../theme/app_theme.dart';
 import 'gitu_settings_provider.dart';
 import 'gitu_settings_model.dart';
@@ -52,6 +53,12 @@ class GituSettingsScreen extends ConsumerWidget {
                 _buildApiKeySection(context, ref, settings),
                 const SizedBox(height: 20),
                 _buildModelSelectionSection(context, ref, settings),
+                const SizedBox(height: 20),
+                _buildVoiceSection(context, ref, settings),
+                const SizedBox(height: 20),
+                _buildProactiveSection(context, ref, settings),
+                const SizedBox(height: 20),
+                _buildAnalyticsSection(context, ref, settings),
                 const SizedBox(height: 20),
                 _buildPlatformConnectionsSection(context, ref),
                 const SizedBox(height: 20),
@@ -279,6 +286,256 @@ class GituSettingsScreen extends ConsumerWidget {
         title: Text('System Operational'),
         subtitle: Text('Gitu is active and listening for events.'),
       ),
+    );
+  }
+
+  Widget _buildVoiceSection(
+      BuildContext context, WidgetRef ref, GituSettings settings) {
+    final voice = settings.voice;
+    const providers = [
+      {'id': 'murf', 'label': 'Murf (Recommended)'},
+      {'id': 'elevenlabs', 'label': 'ElevenLabs'},
+      {'id': 'google', 'label': 'Google'},
+      {'id': 'google_cloud', 'label': 'Google Cloud'},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Voice & Wake Word',
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                DropdownButtonFormField<String>(
+                  key: ValueKey(voice.provider),
+                  initialValue: voice.provider,
+                  decoration: const InputDecoration(
+                    labelText: 'Voice Provider',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: providers
+                      .map((p) => DropdownMenuItem<String>(
+                            value: p['id'],
+                            child: Text(p['label'] ?? p['id']!),
+                          ))
+                      .toList(),
+                  onChanged: (val) async {
+                    if (val == null) return;
+                    ref.read(gituSettingsProvider.notifier).updateVoiceSettings(
+                          voice.copyWith(
+                            provider: val,
+                          ),
+                        );
+                  },
+                ),
+                const SizedBox(height: 12),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final voicesAsync =
+                        ref.watch(availableVoiceModelsProvider);
+                    return voicesAsync.when(
+                      loading: () =>
+                          const LinearProgressIndicator(minHeight: 2),
+                      error: (_, __) => const Text('Failed to load voices'),
+                      data: (voices) {
+                        final list = voices[voice.provider] ?? [];
+                        final effectiveValue = list
+                                .any((v) => v.voiceId == voice.voiceId)
+                            ? voice.voiceId
+                            : (list.isNotEmpty ? list.first.voiceId : '');
+                        return DropdownButtonFormField<String>(
+                          key: ValueKey('${voice.provider}_$effectiveValue'),
+                          initialValue:
+                              effectiveValue.isEmpty ? null : effectiveValue,
+                          decoration: const InputDecoration(
+                            labelText: 'Voice Selection',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: list
+                              .map((v) => DropdownMenuItem<String>(
+                                    value: v.voiceId,
+                                    child: Text(v.name),
+                                  ))
+                              .toList(),
+                          onChanged: (val) async {
+                            if (val == null) return;
+                            ref
+                                .read(gituSettingsProvider.notifier)
+                                .updateVoiceSettings(
+                                  voice.copyWith(voiceId: val),
+                                );
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enable Wake Word'),
+                  subtitle: const Text('Listen for "Hey Gitu" to activate'),
+                  value: voice.wakeWordEnabled,
+                  onChanged: (val) {
+                    ref.read(gituSettingsProvider.notifier).updateWakeWord(
+                          enabled: val,
+                          alwaysListening:
+                              val ? voice.alwaysListening : false,
+                          phrase: voice.wakeWordPhrase,
+                        );
+                  },
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Always Listening (Background)'),
+                  subtitle: const Text(
+                      'Keeps the microphone active for wake word detection'),
+                  value: voice.alwaysListening,
+                  onChanged: voice.wakeWordEnabled
+                      ? (val) {
+                          ref
+                              .read(gituSettingsProvider.notifier)
+                              .updateWakeWord(
+                                enabled: true,
+                                alwaysListening: val,
+                                phrase: voice.wakeWordPhrase,
+                              );
+                        }
+                      : null,
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Wake Word Phrase'),
+                  subtitle: Text(voice.wakeWordPhrase),
+                  trailing: const Icon(Icons.edit),
+                  onTap: () async {
+                    final controller = TextEditingController(
+                        text: voice.wakeWordPhrase);
+                    final result = await showDialog<String>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Wake Word Phrase'),
+                        content: TextField(
+                          controller: controller,
+                          decoration: const InputDecoration(
+                            hintText: 'e.g. hey gitu',
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(
+                                context, controller.text.trim()),
+                            child: const Text('Save'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (result != null && result.isNotEmpty) {
+                      ref.read(gituSettingsProvider.notifier).updateWakeWord(
+                            enabled: voice.wakeWordEnabled,
+                            alwaysListening: voice.alwaysListening,
+                            phrase: result,
+                          );
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProactiveSection(
+      BuildContext context, WidgetRef ref, GituSettings settings) {
+    final proactive = settings.proactive;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Proactive Assistance',
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Card(
+          child: Column(
+            children: [
+              SwitchListTile(
+                title: const Text('Enable Proactive Insights'),
+                subtitle: const Text(
+                    'Generate suggestions and summaries automatically'),
+                value: proactive.enabled,
+                onChanged: (val) {
+                  ref.read(gituSettingsProvider.notifier).updateProactiveSettings(
+                        proactive.copyWith(enabled: val),
+                      );
+                },
+              ),
+              const Divider(height: 1),
+              SwitchListTile(
+                title: const Text('High Priority Only'),
+                subtitle: const Text('Notify only for urgent suggestions'),
+                value: proactive.highPriorityOnly,
+                onChanged: proactive.enabled
+                    ? (val) {
+                        ref
+                            .read(gituSettingsProvider.notifier)
+                            .updateProactiveSettings(
+                              proactive.copyWith(highPriorityOnly: val),
+                            );
+                      }
+                    : null,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAnalyticsSection(
+      BuildContext context, WidgetRef ref, GituSettings settings) {
+    final analytics = settings.analytics;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Analytics & Insights',
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Card(
+          child: Column(
+            children: [
+              SwitchListTile(
+                title: const Text('Enable Usage Analytics'),
+                subtitle: const Text('Track usage and performance metrics'),
+                value: analytics.enabled,
+                onChanged: (val) {
+                  ref.read(gituSettingsProvider.notifier).updateAnalyticsSettings(
+                        analytics.copyWith(enabled: val),
+                      );
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.analytics),
+                title: const Text('View Analytics'),
+                subtitle: const Text('Usage, costs, and task performance'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/gitu/analytics'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

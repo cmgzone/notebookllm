@@ -72,6 +72,15 @@ class GituToolExecutionService {
             const result = await this.executeTool(forcedTool, { userId, sessionId, notebookId });
             toolsUsed.push(result);
 
+            if (result.error) {
+                return {
+                    response: this.formatToolResultFallback(forcedTool.name, result, userId),
+                    toolsUsed,
+                    model: 'fallback',
+                    tokensUsed: 0,
+                };
+            }
+
             // Now ask AI to format the result nicely
             const formatPrompt = this.buildResultFormattingPrompt(userMessage, forcedTool.name, result);
 
@@ -154,6 +163,11 @@ class GituToolExecutionService {
                 // Execute the tool
                 const result = await this.executeTool(toolCall, { userId, sessionId, notebookId });
                 toolsUsed.push(result);
+
+                if (result.error) {
+                    finalResponse = this.formatToolResultFallback(toolCall.name, result, userId);
+                    break;
+                }
 
                 // Update context with tool result for next iteration
                 contextMessages.push(`I'll use the ${toolCall.name} tool to help with that.`);
@@ -277,6 +291,16 @@ Please provide a friendly, well-formatted response to the user based on this ACT
      */
     private formatToolResultFallback(toolName: string, result: ToolResult, userId?: string): string {
         if (result.error) {
+            if (toolName === 'execute_command') {
+                const raw = String(result.error);
+                const marker = 'LOCAL_ACCESS_NOT_GRANTED';
+                if (raw.includes(marker)) {
+                    const message = raw.split(marker)[1]?.replace(/^[:\s-]+/, '').trim();
+                    return message && message.length > 0
+                        ? message
+                        : 'Local access not yet granted. Connect the Gitu CLI remote terminal and approve shell access, then try again.';
+                }
+            }
             return `❌ Error executing ${toolName}: ${result.error}`;
         }
 

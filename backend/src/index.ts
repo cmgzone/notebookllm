@@ -75,6 +75,7 @@ import { connectRedis, disconnectRedis } from './config/redis.js';
 import { gituScheduler } from './services/gituScheduler.js';
 import { gituTaskScheduler } from './services/gituTaskScheduler.js';
 import { ensureGituSchema } from './config/gituSchema.js';
+import { gituProactiveService } from './services/gituProactiveService.js';
 
 // Load environment variables
 dotenv.config();
@@ -87,6 +88,29 @@ ensureGituSchema()
         console.log('✅ Gitu Task Scheduler started');
     })
     .catch(err => console.error('❌ Failed to ensure Gitu schema:', err));
+
+// Proactive checks scheduling
+const proactiveIntervalMinutes = (() => {
+    const raw = process.env.GITU_PROACTIVE_CHECKS_INTERVAL_MINUTES;
+    if (!raw) return 15;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : 15;
+})();
+
+if (proactiveIntervalMinutes > 0) {
+    setTimeout(() => {
+        gituProactiveService.runProactiveChecks().catch(err => {
+            console.error('❌ Proactive checks failed:', err);
+        });
+    }, 60_000);
+
+    setInterval(() => {
+        gituProactiveService.runProactiveChecks().catch(err => {
+            console.error('❌ Proactive checks failed:', err);
+        });
+    }, proactiveIntervalMinutes * 60_000);
+    console.log(`✅ Proactive checks scheduled every ${proactiveIntervalMinutes} minutes`);
+}
 
 // Initialize Redis
 connectRedis().catch(err => {

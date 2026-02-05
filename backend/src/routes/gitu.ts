@@ -297,9 +297,26 @@ router.get('/settings', async (req: AuthRequest, res: Response) => {
     );
     const raw = result.rows[0]?.gitu_settings || {};
     const enabled = !!raw.enabled;
+    const rawVoice = raw.voice || {};
+    const rawProactive = raw.proactive || {};
+    const rawAnalytics = raw.analytics || {};
+    const voiceSettings = {
+      provider: typeof rawVoice.provider === 'string' && rawVoice.provider.trim().length > 0 ? rawVoice.provider : 'murf',
+      voiceId: typeof rawVoice.voiceId === 'string' && rawVoice.voiceId.trim().length > 0 ? rawVoice.voiceId : 'en-US-natalie',
+      wakeWordEnabled: rawVoice.wakeWordEnabled === true,
+      wakeWordPhrase: typeof rawVoice.wakeWordPhrase === 'string' && rawVoice.wakeWordPhrase.trim().length > 0 ? rawVoice.wakeWordPhrase : 'hey gitu',
+      alwaysListening: rawVoice.alwaysListening === true,
+    };
+    const proactiveSettings = {
+      enabled: rawProactive.enabled !== false,
+      highPriorityOnly: rawProactive.highPriorityOnly === true,
+    };
+    const analyticsSettings = {
+      enabled: rawAnalytics.enabled !== false,
+    };
     res.json({
       enabled,
-      settings: { modelPreferences: prefs },
+      settings: { modelPreferences: prefs, voice: voiceSettings, proactive: proactiveSettings, analytics: analyticsSettings },
     });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to load settings', message: error.message });
@@ -311,30 +328,170 @@ router.post('/settings', async (req: AuthRequest, res: Response) => {
     const body = req.body as any;
     const enabled = body?.enabled === true;
     const modelPrefs = body?.settings?.modelPreferences;
+    const voicePayload = body?.settings?.voice;
+    const proactivePayload = body?.settings?.proactive;
+    const analyticsPayload = body?.settings?.analytics;
 
     if (modelPrefs && typeof modelPrefs === 'object') {
       await gituAIRouter.updateUserPreferences(req.userId!, modelPrefs);
     }
 
+    const currentResult = await pool.query(
+      `SELECT gitu_settings FROM users WHERE id = $1`,
+      [req.userId]
+    );
+    const current = currentResult.rows[0]?.gitu_settings || {};
+    const updated = {
+      ...current,
+      enabled,
+      ...(voicePayload && typeof voicePayload === 'object' ? { voice: voicePayload } : {}),
+      ...(proactivePayload && typeof proactivePayload === 'object' ? { proactive: proactivePayload } : {}),
+      ...(analyticsPayload && typeof analyticsPayload === 'object' ? { analytics: analyticsPayload } : {}),
+    };
     await pool.query(
       `UPDATE users 
-       SET gitu_settings = jsonb_set(
-         COALESCE(gitu_settings, '{}'::jsonb),
-         '{enabled}',
-         to_jsonb($1::boolean),
-         true
-       )
+       SET gitu_settings = $1
        WHERE id = $2`,
-      [enabled, req.userId]
+      [updated, req.userId]
     );
 
     const prefs = await gituAIRouter.getUserPreferences(req.userId!);
+    const rawVoice = updated.voice || {};
+    const rawProactive = updated.proactive || {};
+    const rawAnalytics = updated.analytics || {};
+    const voiceSettings = {
+      provider: typeof rawVoice.provider === 'string' && rawVoice.provider.trim().length > 0 ? rawVoice.provider : 'murf',
+      voiceId: typeof rawVoice.voiceId === 'string' && rawVoice.voiceId.trim().length > 0 ? rawVoice.voiceId : 'en-US-natalie',
+      wakeWordEnabled: rawVoice.wakeWordEnabled === true,
+      wakeWordPhrase: typeof rawVoice.wakeWordPhrase === 'string' && rawVoice.wakeWordPhrase.trim().length > 0 ? rawVoice.wakeWordPhrase : 'hey gitu',
+      alwaysListening: rawVoice.alwaysListening === true,
+    };
+    const proactiveSettings = {
+      enabled: rawProactive.enabled !== false,
+      highPriorityOnly: rawProactive.highPriorityOnly === true,
+    };
+    const analyticsSettings = {
+      enabled: rawAnalytics.enabled !== false,
+    };
     res.json({
       enabled,
-      settings: { modelPreferences: prefs },
+      settings: { modelPreferences: prefs, voice: voiceSettings, proactive: proactiveSettings, analytics: analyticsSettings },
     });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to update settings', message: error.message });
+  }
+});
+
+/**
+ * GET /analytics
+ * Gitu usage analytics summary
+ */
+router.get('/analytics', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const [
+      messagesByPlatformRes,
+      usageTotalsRes,
+      usageModelsRes,
+      tasksRes,
+      taskExecRes,
+      memoriesRes,
+    ] = await Promise.all([
+      pool.query(
+        `SELECT platform, COUNT(*)::int AS count
+         FROM gitu_messages
+         WHERE user_id = $1
+         GROUP BY platform`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT COALESCE(SUM(tokens_used), 0)::int AS tokens,
+                COALESCE(SUM(cost_usd), 0)::numeric AS cost
+         FROM gitu_usage_records
+         WHERE user_id = $1`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT model,
+                COUNT(*)::int AS count,
+                COALESCE(SUM(tokens_used), 0)::int AS tokens,
+                COALESCE(SUM(cost_usd), 0)::numeric AS cost
+         FROM gitu_usage_records
+         WHERE user_id = $1
+         GROUP BY model
+         ORDER BY count DESC
+         LIMIT 5`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS total,
+                COALESCE(SUM(CASE WHEN enabled THEN 1 ELSE 0 END), 0)::int AS enabled
+         FROM gitu_scheduled_tasks
+         WHERE user_id = $1`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS total,
+                COALESCE(SUM(CASE WHEN te.success THEN 1 ELSE 0 END), 0)::int AS success
+         FROM gitu_task_executions te
+         JOIN gitu_scheduled_tasks t ON te.task_id = t.id
+         WHERE t.user_id = $1`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS total
+         FROM gitu_memories
+         WHERE user_id = $1`,
+        [userId]
+      ),
+    ]);
+
+    const messagesByPlatform = messagesByPlatformRes.rows.map(r => ({
+      platform: r.platform || 'unknown',
+      count: Number(r.count) || 0,
+    }));
+    const totalMessages = messagesByPlatform.reduce((sum, row) => sum + (row.count || 0), 0);
+
+    const usageTotals = usageTotalsRes.rows[0] || { tokens: 0, cost: 0 };
+    const usageByModel = usageModelsRes.rows.map(r => ({
+      model: r.model || 'unknown',
+      count: Number(r.count) || 0,
+      tokens: Number(r.tokens) || 0,
+      cost: Number(r.cost) || 0,
+    }));
+
+    const tasksRow = tasksRes.rows[0] || { total: 0, enabled: 0 };
+    const taskExecRow = taskExecRes.rows[0] || { total: 0, success: 0 };
+    const memoriesRow = memoriesRes.rows[0] || { total: 0 };
+
+    res.json({
+      success: true,
+      analytics: {
+        messages: {
+          total: totalMessages,
+          byPlatform: messagesByPlatform,
+        },
+        usage: {
+          tokens: Number(usageTotals.tokens) || 0,
+          cost: Number(usageTotals.cost) || 0,
+          byModel: usageByModel,
+        },
+        tasks: {
+          total: Number(tasksRow.total) || 0,
+          enabled: Number(tasksRow.enabled) || 0,
+          executions: {
+            total: Number(taskExecRow.total) || 0,
+            success: Number(taskExecRow.success) || 0,
+            failed: Math.max(0, (Number(taskExecRow.total) || 0) - (Number(taskExecRow.success) || 0)),
+          },
+        },
+        memories: {
+          total: Number(memoriesRow.total) || 0,
+        },
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to load analytics', message: error.message });
   }
 });
 

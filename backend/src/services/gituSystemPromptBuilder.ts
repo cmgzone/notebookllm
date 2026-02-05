@@ -41,13 +41,14 @@ class GituSystemPromptBuilder {
         const { userId, platform = 'web', includeTools = true, includeMemories = true } = context;
 
         // Gather all context in parallel
-        const [userInfo, linkedAccounts, memories, tools, userPlugins, activeRules] = await Promise.all([
+        const [userInfo, linkedAccounts, memories, tools, userPlugins, activeRules, agentSkills] = await Promise.all([
             this.getUserInfo(userId),
             this.getLinkedAccounts(userId),
             includeMemories ? this.getRecentMemories(userId) : Promise.resolve([]),
             includeTools ? this.getAvailableTools(userId) : Promise.resolve([]),
             includeTools ? this.getUserPlugins(userId) : Promise.resolve([]),
             includeTools ? this.getActiveRules(userId) : Promise.resolve([]),
+            includeTools ? this.getAgentSkills(userId) : Promise.resolve([]),
         ]);
         const localTerminal = gituRemoteTerminalService.getConnectionSummary(userId);
 
@@ -72,6 +73,11 @@ class GituSystemPromptBuilder {
         // Custom Skills (Plugins & Rules)
         if (userPlugins.length > 0 || activeRules.length > 0) {
             sections.push(this.buildCustomSkillsSection(userPlugins, activeRules));
+        }
+
+        // Agent Skills (Reusable prompt skills)
+        if (agentSkills.length > 0) {
+            sections.push(this.buildAgentSkillsSection(agentSkills));
         }
 
         // Available tools
@@ -119,7 +125,7 @@ You are **Gitu**, the AI assistant for NotebookLLM. NotebookLLM is a knowledge m
 - You proactively offer to help with related tasks
 
 ## Platform Persona
-- **WhatsApp**: When replying on WhatsApp (unless it's a "Note to Self"), you act as the user's personal AI agent or secretary. You represent the user ("I am replying on behalf of [User]"). Adopt a professional yet helpful tone suitable for the user's contacts. If the user asks you to "reply like me", try to match their likely tone based on context.`;
+- **WhatsApp**: When replying on WhatsApp (unless it's a "Note to Self"), you act as the user's personal AI agent or secretary. You represent the user ("I am replying on behalf of [User]"). Address the contact by their name if known (or use a neutral greeting), and never address them as the user. Avoid sharing phone numbers or private identifiers in replies unless the user explicitly asked you to share them. If the user asks you to "reply like me", try to match their likely tone based on context.`;
     }
 
     private buildUserSection(
@@ -196,6 +202,28 @@ Use this knowledge to personalize your responses, but don't mention that you "re
             section += `\nThese rules run automatically based on their triggers. You can manage them using 'list_rules', 'create_rule', or 'delete_rule'.\n`;
         }
 
+        return section;
+    }
+
+    private buildAgentSkillsSection(
+        skills: Array<{ name: string; description?: string; content?: string; parameters?: any }>
+    ): string {
+        const maxSkills = 8;
+        const trimmed = skills.slice(0, maxSkills);
+        let section = `# Agent Skills\n\n`;
+        section += `You have access to the following reusable prompt skills. Apply them when they fit the user's request. If multiple skills are relevant, you can combine their guidance.\n\n`;
+        for (const skill of trimmed) {
+            const description = skill.description ? ` — ${skill.description}` : '';
+            const content = typeof skill.content === 'string' ? skill.content.trim() : '';
+            const clipped = content.length > 1200 ? `${content.slice(0, 1200)}…` : content;
+            section += `- **${skill.name}**${description}\n`;
+            if (clipped.length > 0) {
+                section += `  Instructions: ${clipped}\n`;
+            }
+        }
+        if (skills.length > maxSkills) {
+            section += `\n(Showing ${maxSkills} of ${skills.length} skills. Use the most relevant ones first.)\n`;
+        }
         return section;
     }
 
@@ -343,6 +371,28 @@ Example: "Run my daily report plugin" → use learn_plugin first, then run_user_
             }));
         } catch (error) {
             console.error('[SystemPromptBuilder] Error fetching rules:', error);
+            return [];
+        }
+    }
+
+    private async getAgentSkills(userId: string): Promise<Array<{ name: string; description?: string; content?: string; parameters?: any }>> {
+        try {
+            const result = await pool.query(
+                `SELECT name, description, content, parameters
+                 FROM agent_skills
+                 WHERE user_id = $1 AND is_active = true
+                 ORDER BY updated_at DESC
+                 LIMIT 20`,
+                [userId]
+            );
+            return result.rows.map(r => ({
+                name: r.name,
+                description: r.description ?? undefined,
+                content: r.content ?? undefined,
+                parameters: r.parameters ?? undefined,
+            }));
+        } catch (error) {
+            console.error('[SystemPromptBuilder] Error fetching agent skills:', error);
             return [];
         }
     }

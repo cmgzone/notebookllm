@@ -747,6 +747,11 @@ class ApiService {
         '';
   }
 
+  Future<Map<String, dynamic>> getGituAnalytics() async {
+    final response = await get<Map<String, dynamic>>('/gitu/analytics');
+    return Map<String, dynamic>.from(response);
+  }
+
   // ============ CHAT ============
 
   Future<List<Map<String, dynamic>>> getChatHistory({String? notebookId}) async {
