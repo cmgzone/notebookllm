@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../../ui/components/glass_container.dart';
 import '../../theme/app_theme.dart';
 import 'gitu_provider.dart';
@@ -31,6 +32,7 @@ class GituChatScreen extends ConsumerWidget {
             _ConnectionBadge(
               isConnected: state.isConnected,
               isConnecting: state.isConnecting,
+              isHttpMode: state.isHttpMode,
             ),
           ],
         ),
@@ -75,7 +77,10 @@ class GituChatScreen extends ConsumerWidget {
                 onRetry: () => notifier.connect(),
               ),
             Expanded(
-              child: _GituMessageList(messages: state.messages),
+              child: _GituMessageList(
+                messages: state.messages,
+                isTyping: state.isTyping,
+              ),
             ),
             if (state.isConnecting)
                const LinearProgressIndicator(minHeight: 2),
@@ -90,10 +95,12 @@ class GituChatScreen extends ConsumerWidget {
 class _ConnectionBadge extends StatelessWidget {
   final bool isConnected;
   final bool isConnecting;
+  final bool isHttpMode;
 
   const _ConnectionBadge({
     required this.isConnected,
     required this.isConnecting,
+    required this.isHttpMode,
   });
 
   @override
@@ -124,6 +131,21 @@ class _ConnectionBadge extends StatelessWidget {
         child: const Text(
           'Online',
           style: TextStyle(fontSize: 10, color: Colors.green),
+        ),
+      );
+    }
+
+    if (isHttpMode) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.blue.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue.withValues(alpha: 0.5)),
+        ),
+        child: const Text(
+          'HTTP',
+          style: TextStyle(fontSize: 10, color: Colors.blue),
         ),
       );
     }
@@ -182,8 +204,12 @@ class _ErrorBanner extends StatelessWidget {
 
 class _GituMessageList extends StatelessWidget {
   final List<GituMessage> messages;
+  final bool isTyping;
 
-  const _GituMessageList({required this.messages});
+  const _GituMessageList({
+    required this.messages,
+    required this.isTyping,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -205,24 +231,89 @@ class _GituMessageList extends StatelessWidget {
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: messages.length,
+      itemCount: messages.length + (isTyping ? 1 : 0),
       itemBuilder: (context, index) {
+        if (isTyping && index == messages.length) {
+          return const _GituTypingIndicator();
+        }
         final message = messages[index];
+        if (message.metadata?['type'] == 'mission_update') {
+          return _GituMissionUpdateBubble(message: message);
+        }
+        if (message.metadata?['type'] == 'agent_update') {
+          return _GituAgentUpdateBubble(message: message);
+        }
+        if (message.metadata?['type'] == 'whatsapp_qr') {
+          return _GituWhatsAppQrBubble(message: message);
+        }
         return _GituMessageBubble(message: message);
       },
     );
   }
 }
 
-class _GituMessageBubble extends StatelessWidget {
+class _GituTypingIndicator extends StatelessWidget {
+  const _GituTypingIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+            bottomRight: Radius.circular(20),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: scheme.primary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Gitu is typing...',
+              style: TextStyle(
+                fontSize: 12,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GituMessageBubble extends ConsumerWidget {
   final GituMessage message;
 
   const _GituMessageBubble({required this.message});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isUser = message.isUser;
     final scheme = Theme.of(context).colorScheme;
+    final confirmation = !isUser ? _parseConfirmation(message.content) : null;
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -270,11 +361,292 @@ class _GituMessageBubble extends StatelessWidget {
                 height: 1.5,
               ),
             ),
+            if (confirmation != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  FilledButton(
+                    onPressed: () {
+                      ref
+                          .read(gituChatProvider.notifier)
+                          .sendMessage(confirmation.confirmCommand);
+                    },
+                    child: const Text('Confirm'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: () {
+                      ref.read(gituChatProvider.notifier).sendMessage('No');
+                    },
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
     ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0);
   }
+}
+
+class _GituMissionUpdateBubble extends StatelessWidget {
+  final GituMessage message;
+
+  const _GituMissionUpdateBubble({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final summary = message.metadata?['summary'] as Map<String, dynamic>?;
+    final startedAtRaw = message.metadata?['startedAt'] as String?;
+    final progressValue = _computeProgress(summary);
+    final eta = _computeEta(startedAtRaw, summary);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: scheme.primary.withValues(alpha: 0.25)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(LucideIcons.activity, size: 18, color: scheme.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    message.content,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurface,
+                      height: 1.35,
+                    ),
+                  ),
+                  if (progressValue != null) ...[
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: progressValue,
+                      minHeight: 6,
+                      color: scheme.primary,
+                      backgroundColor: scheme.outline.withValues(alpha: 0.2),
+                    ),
+                  ],
+                  if (eta != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'ETA ~ $eta',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GituAgentUpdateBubble extends StatelessWidget {
+  final GituMessage message;
+
+  const _GituAgentUpdateBubble({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: scheme.tertiary.withValues(alpha: 0.25)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(LucideIcons.bot, size: 18, color: scheme.tertiary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message.content,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: scheme.onSurface,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GituWhatsAppQrBubble extends StatelessWidget {
+  final GituMessage message;
+
+  const _GituWhatsAppQrBubble({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final qr = message.metadata?['qr'] as String? ?? '';
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: scheme.secondary.withValues(alpha: 0.25)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(LucideIcons.qrCode, size: 18, color: scheme.secondary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Scan this QR in WhatsApp to link your account.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurface,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (qr.isNotEmpty)
+                    Center(
+                      child: QrImageView(
+                        data: qr,
+                        size: 180,
+                        backgroundColor: Colors.white,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ConfirmationData {
+  final String action;
+  final String objective;
+  final String confirmCommand;
+
+  const _ConfirmationData({
+    required this.action,
+    required this.objective,
+    required this.confirmCommand,
+  });
+}
+
+_ConfirmationData? _parseConfirmation(String content) {
+  if (!content.toLowerCase().contains('confirmation required')) return null;
+  final actionMatch =
+      RegExp(r'Action:\s*(.+)', caseSensitive: false).firstMatch(content);
+  final goalMatch =
+      RegExp(r'(Goal|Task):\s*\"([^\"]+)\"', caseSensitive: false)
+          .firstMatch(content);
+  if (actionMatch == null || goalMatch == null) return null;
+
+  final action = actionMatch.group(1)!.trim();
+  final objective = goalMatch.group(2)!.trim();
+  final isSwarm = action.toLowerCase().contains('swarm');
+  final confirmCommand =
+      isSwarm ? 'Deploy swarm: $objective' : 'Spawn agent: $objective';
+
+  return _ConfirmationData(
+    action: action,
+    objective: objective,
+    confirmCommand: confirmCommand,
+  );
+}
+
+double? _computeProgress(Map<String, dynamic>? summary) {
+  if (summary == null) return null;
+  final total = (summary['total'] as num?)?.toInt() ?? 0;
+  final completed = (summary['completed'] as num?)?.toInt() ?? 0;
+  if (total <= 0) return null;
+  return (completed / total).clamp(0.0, 1.0);
+}
+
+String? _computeEta(String? startedAtRaw, Map<String, dynamic>? summary) {
+  if (summary == null || startedAtRaw == null) return null;
+  final total = (summary['total'] as num?)?.toInt() ?? 0;
+  final completed = (summary['completed'] as num?)?.toInt() ?? 0;
+  if (total <= 0 || completed <= 0 || completed >= total) return null;
+
+  final startedAt = DateTime.tryParse(startedAtRaw);
+  if (startedAt == null) return null;
+  final elapsed = DateTime.now().difference(startedAt);
+  if (elapsed.inSeconds < 5) return null;
+
+  final estimatedTotalMs = (elapsed.inMilliseconds / completed) * total;
+  final remainingMs = estimatedTotalMs - elapsed.inMilliseconds;
+  if (remainingMs.isNaN || remainingMs.isInfinite || remainingMs <= 0) {
+    return null;
+  }
+
+  return _formatDuration(Duration(milliseconds: remainingMs.round()));
+}
+
+String _formatDuration(Duration duration) {
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60);
+  final seconds = duration.inSeconds.remainder(60);
+  if (hours > 0) {
+    return '${hours}h ${minutes}m';
+  }
+  if (minutes > 0) {
+    return '${minutes}m ${seconds}s';
+  }
+  return '${seconds}s';
 }
 
 class _GituInputBar extends ConsumerStatefulWidget {
@@ -327,9 +699,11 @@ class _GituInputBarState extends ConsumerState<_GituInputBar> {
                   child: TextField(
                     controller: _controller,
                     focusNode: _focusNode,
-                    enabled: state.isConnected,
+                    enabled: state.isConnected || state.isHttpMode,
                     decoration: InputDecoration(
-                      hintText: state.isConnected ? 'Message Gitu...' : 'Connecting...',
+                      hintText: state.isConnected || state.isHttpMode
+                          ? 'Message Gitu...'
+                          : 'Connecting...',
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                       isDense: true,
@@ -349,15 +723,17 @@ class _GituInputBarState extends ConsumerState<_GituInputBar> {
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  onPressed: state.isConnected ? _sendMessage : null,
+                  onPressed:
+                      (state.isConnected || state.isHttpMode) ? _sendMessage : null,
                   icon: Icon(
                     LucideIcons.send, 
-                    color: Colors.white.withValues(alpha: state.isConnected ? 1.0 : 0.5), 
+                    color: Colors.white.withValues(
+                        alpha: (state.isConnected || state.isHttpMode) ? 1.0 : 0.5), 
                     size: 20
                   ),
                   tooltip: 'Send',
                 ),
-              ).animate(target: state.isConnected ? 1 : 0).scale(duration: 200.ms),
+              ).animate(target: (state.isConnected || state.isHttpMode) ? 1 : 0).scale(duration: 200.ms),
             ],
           ),
         ),

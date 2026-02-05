@@ -350,6 +350,15 @@ class WhatsAppAdapter {
         return response;
     }
 
+    private async sendTypingIndicator(remoteJid: string, isTyping: boolean): Promise<void> {
+        if (!this.sock || !remoteJid) return;
+        try {
+            await this.sock.sendPresenceUpdate(isTyping ? 'composing' : 'paused', remoteJid);
+        } catch (error) {
+            this.logger.debug({ err: error }, 'Failed to send WhatsApp typing indicator');
+        }
+    }
+
     private isSelfChat(remoteJid: string): boolean {
         if (!remoteJid) return false;
         const normalizedJid = this.normalizeJid(remoteJid);
@@ -441,7 +450,7 @@ class WhatsAppAdapter {
                 this.qrCode = qr;
                 this.connectionState = 'connecting';
                 this.logger.info('QR Code received');
-                // TODO: Emit QR code to frontend via WebSocket if needed
+                await this.emitQrToFrontend(qr);
             }
 
             if (connection === 'close') {
@@ -901,6 +910,13 @@ class WhatsAppAdapter {
             }
 
             // Route to AI
+            const typingAllowed = !isGroup;
+            let typingStarted = false;
+            if (typingAllowed) {
+                await this.sendTypingIndicator(remoteJid, true);
+                typingStarted = true;
+            }
+
             try {
                 // Ensure session exists
                 const session = await gituSessionService.getOrCreateSession(userId, 'universal');
@@ -970,6 +986,10 @@ class WhatsAppAdapter {
                 this.logger.error({ err: aiError }, 'Error processing AI response');
                 if (isNoteToSelf) {
                     await this.sendMessage(remoteJid, `AI Error: ${aiError instanceof Error ? aiError.message : 'Unknown error'}`);
+                }
+            } finally {
+                if (typingStarted) {
+                    await this.sendTypingIndicator(remoteJid, false);
                 }
             }
 
@@ -1046,6 +1066,37 @@ class WhatsAppAdapter {
         } catch (err) {
             this.logger.error({ err }, 'Failed to save contacts store');
         }
+    }
+
+    private async emitQrToFrontend(qr: string): Promise<void> {
+        try {
+            const userId = await this.resolveQrOwnerUserId();
+            if (!userId) return;
+            gituMessageGateway.broadcastWhatsAppQr(userId, qr);
+        } catch (error) {
+            this.logger.debug({ err: error }, 'Failed to emit WhatsApp QR to frontend');
+        }
+    }
+
+    private async resolveQrOwnerUserId(): Promise<string | null> {
+        const explicit = (process.env.GITU_WHATSAPP_QR_USER_ID || '').trim();
+        if (explicit.length > 0) return explicit;
+
+        if (this.connectedAccountJid) {
+            try {
+                return await this.getUserIdFromJid(this.connectedAccountJid);
+            } catch {
+                // Fall through
+            }
+        }
+
+        const result = await pool.query(
+            `SELECT user_id FROM gitu_linked_accounts
+             WHERE platform = 'whatsapp' AND status = 'active'
+             ORDER BY last_used_at DESC NULLS LAST, linked_at DESC NULLS LAST
+             LIMIT 1`
+        );
+        return result.rows[0]?.user_id ?? null;
     }
 
     /**

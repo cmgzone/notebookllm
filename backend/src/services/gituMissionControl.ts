@@ -139,7 +139,17 @@ class GituMissionControl {
                 update.contextUpdates?.swarmState
             );
             if (shouldBroadcastMissionUpdate) {
-                gituMessageGateway.broadcastMissionUpdate(mission.userId, mission.id, mission.status);
+                const summary = this.buildMissionSummary(mission.context?.plan as MissionPlan | undefined);
+                const message = typeof update.logEntry === 'string' && update.logEntry.trim().length > 0
+                    ? update.logEntry
+                    : undefined;
+                gituMessageGateway.broadcastMissionUpdate(mission.userId, mission.id, mission.status, {
+                    message,
+                    summary,
+                    startedAt: mission.createdAt ? new Date(mission.createdAt).toISOString() : undefined,
+                    updatedAt: mission.updatedAt ? new Date(mission.updatedAt).toISOString() : undefined,
+                    completedAt: mission.completedAt ? new Date(mission.completedAt).toISOString() : null
+                });
             }
 
             return mission;
@@ -196,6 +206,38 @@ class GituMissionControl {
             createdAt: row.created_at,
             updatedAt: row.updated_at,
             completedAt: row.completed_at,
+        };
+    }
+
+    private buildMissionSummary(plan?: MissionPlan): {
+        total: number;
+        completed: number;
+        failed: number;
+        inProgress: number;
+        pending: number;
+    } | undefined {
+        if (!plan || !Array.isArray(plan.tasks) || plan.tasks.length === 0) {
+            return undefined;
+        }
+        let completed = 0;
+        let failed = 0;
+        let inProgress = 0;
+        let pending = 0;
+
+        for (const task of plan.tasks) {
+            const status = task.status || 'pending';
+            if (status === 'completed') completed++;
+            else if (status === 'failed' || status === 'blocked') failed++;
+            else if (status === 'in_progress' || status === 'active') inProgress++;
+            else pending++;
+        }
+
+        return {
+            total: plan.tasks.length,
+            completed,
+            failed,
+            inProgress,
+            pending,
         };
     }
 }

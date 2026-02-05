@@ -137,6 +137,8 @@ function mapProviderName(dbProvider: string): 'openrouter' | 'gemini' | 'openai'
 // ==================== SERVICE CLASS ====================
 
 class GituAIRouter {
+  private readonly verboseLogs =
+    process.env.GITU_LOG_LEVEL === 'debug' || process.env.GITU_LOG_VERBOSE === 'true';
   /**
    * Load models from database and cache them
    */
@@ -306,7 +308,9 @@ class GituAIRouter {
     if (request.useRetrieval) {
       const retrieved = await this.retrieveContext(prompt, request.userId);
       if (retrieved.length > 0) {
-        console.log(`[Gitu AI Router] Injected ${retrieved.length} chunks of context.`);
+        if (this.verboseLogs) {
+          console.log(`[Gitu AI Router] Injected ${retrieved.length} chunks of context.`);
+        }
         context.push(...retrieved);
       }
     }
@@ -323,7 +327,9 @@ class GituAIRouter {
           includeMemories: true,
         });
         systemPrompt = promptResult.systemPrompt;
-        console.log(`[Gitu AI Router] Built system prompt with ${promptResult.toolDefinitions?.length || 0} tools`);
+        if (this.verboseLogs) {
+          console.log(`[Gitu AI Router] Built system prompt with ${promptResult.toolDefinitions?.length || 0} tools`);
+        }
       } catch (error) {
         console.warn('[Gitu AI Router] Failed to build system prompt, using minimal:', error);
         systemPrompt = await gituSystemPromptBuilder.buildMinimalPrompt(request.userId);
@@ -360,7 +366,9 @@ class GituAIRouter {
     // Load and add chat history
     const history = await this.getChatHistory(request.userId, request.sessionId);
     if (history.length > 0) {
-      console.log(`[Gitu AI Router] Injected ${history.length} messages of history.`);
+      if (this.verboseLogs) {
+        console.log(`[Gitu AI Router] Injected ${history.length} messages of history.`);
+      }
       messages.push(...history);
     }
 

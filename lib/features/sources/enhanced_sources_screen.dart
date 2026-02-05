@@ -5,7 +5,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
 import 'dart:convert';
+import 'dart:io';
 
 import 'add_source_sheet.dart';
 import 'source_provider.dart';
@@ -97,11 +100,104 @@ class _EnhancedSourcesScreenState extends ConsumerState<EnhancedSourcesScreen> {
     );
   }
 
-  void _exportAsPDF() {
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('PDF export coming soon...')),
+  Future<Uint8List> _buildNotebookPdf(
+    String title,
+    List<Source> sources,
+  ) async {
+    final pdf = pw.Document();
+    final generatedOn = DateTime.now().toLocal();
+
+    pdf.addPage(
+      pw.MultiPage(
+        build: (context) => [
+          pw.Header(
+            level: 0,
+            child: pw.Text(
+              title,
+              style: pw.TextStyle(
+                fontSize: 26,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+          ),
+          pw.Text('Generated: ${generatedOn.toString().split(' ')[0]}'),
+          pw.SizedBox(height: 8),
+          pw.Text('Sources: ${sources.length}'),
+          pw.SizedBox(height: 16),
+          for (var i = 0; i < sources.length; i++)
+            _buildPdfSourceSection(i, sources[i]),
+        ],
+      ),
     );
+
+    return pdf.save();
+  }
+
+  pw.Widget _buildPdfSourceSection(int index, Source source) {
+    final addedOn = source.addedAt.toLocal().toString().split(' ')[0];
+    final contentPreview = source.content.length > 1200
+        ? '${source.content.substring(0, 1200)}...'
+        : source.content;
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          '${index + 1}. ${source.title}',
+          style: pw.TextStyle(
+            fontSize: 16,
+            fontWeight: pw.FontWeight.bold,
+          ),
+        ),
+        pw.SizedBox(height: 4),
+        pw.Text('Type: ${source.type}'),
+        pw.Text('Added: $addedOn'),
+        if (source.summary != null && source.summary!.isNotEmpty) ...[
+          pw.SizedBox(height: 6),
+          pw.Text(
+            'Summary:',
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+          ),
+          pw.Paragraph(text: source.summary!),
+        ],
+        pw.SizedBox(height: 6),
+        pw.Text(
+          'Content:',
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+        ),
+        pw.Paragraph(text: contentPreview),
+        pw.Divider(),
+        pw.SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Future<void> _exportAsPDF() async {
+    Navigator.pop(context);
+    final sources = ref.read(sourceProvider);
+    final notebooks = ref.read(notebookProvider);
+    final notebook = notebooks.isNotEmpty ? notebooks.first : null;
+    final title = notebook?.title ?? 'Notebook';
+
+    try {
+      final pdfBytes = await _buildNotebookPdf(title, sources);
+      final tempDir = await getTemporaryDirectory();
+      final sanitizedTitle = title.replaceAll(RegExp(r'[^\w\s-]'), '');
+      final fileName =
+          '${sanitizedTitle}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final file = File('${tempDir.path}/$fileName');
+      await file.writeAsBytes(pdfBytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: title,
+        text: 'Notebook: $title',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to export PDF: $e')),
+      );
+    }
   }
 
   void _exportAsMarkdown() {

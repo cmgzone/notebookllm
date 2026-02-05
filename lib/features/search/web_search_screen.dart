@@ -22,6 +22,8 @@ class WebSearchScreen extends ConsumerStatefulWidget {
 class _WebSearchScreenState extends ConsumerState<WebSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
+  final TextEditingController _filterDomainController =
+      TextEditingController();
   bool _isDeepResearch = false;
   bool _isResearching = false;
   List<ResearchUpdate> _researchUpdates = [];
@@ -36,11 +38,63 @@ class _WebSearchScreenState extends ConsumerState<WebSearchScreen> {
   final List<String> _searchedSites = [];
   String? _currentSearchQuery;
 
+  // Filters for standard search
+  String _filterDomain = '';
+  bool _filterHasDate = false;
+  bool _filterHasSource = false;
+  bool _filterHasImage = false;
+
   @override
   void dispose() {
     _searchController.dispose();
     _searchFocus.dispose();
+    _filterDomainController.dispose();
     super.dispose();
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _filterDomain = '';
+      _filterHasDate = false;
+      _filterHasSource = false;
+      _filterHasImage = false;
+      _filterDomainController.clear();
+    });
+  }
+
+  List<SerperSearchResult> _applyFilters(List<SerperSearchResult> results) {
+    if (_filterDomain.isEmpty &&
+        !_filterHasDate &&
+        !_filterHasSource &&
+        !_filterHasImage) {
+      return results;
+    }
+
+    final query = _filterDomain.trim().toLowerCase();
+    return results.where((result) {
+      if (query.isNotEmpty) {
+        final domain = _extractDomain(result.link)?.toLowerCase() ?? '';
+        final link = result.link.toLowerCase();
+        final source = result.source?.toLowerCase() ?? '';
+        if (!domain.contains(query) &&
+            !link.contains(query) &&
+            !source.contains(query)) {
+          return false;
+        }
+      }
+      if (_filterHasDate && (result.date == null || result.date!.isEmpty)) {
+        return false;
+      }
+      if (_filterHasSource &&
+          (result.source == null || result.source!.isEmpty)) {
+        return false;
+      }
+      if (_filterHasImage &&
+          (result.imageUrl == null || result.imageUrl!.isEmpty)) {
+        return false;
+      }
+      return true;
+    }).toList();
   }
 
   // Helper methods for favicon display (matching deep_research_screen)
@@ -219,6 +273,7 @@ $content''',
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final searchState = ref.watch(searchProvider);
+    final filteredResults = _applyFilters(searchState.results);
 
     return Scaffold(
       appBar: AppBar(
@@ -480,6 +535,63 @@ $content''',
               ),
             ).animate().slideY(begin: 0.2, delay: 150.ms).fadeIn(),
 
+          // Filters (standard search only)
+          if (!_isDeepResearch)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _filterDomainController,
+                    decoration: InputDecoration(
+                      hintText: 'Filter by domain or source (e.g. nytimes.com)',
+                      prefixIcon: const Icon(Icons.filter_alt_outlined),
+                      suffixIcon: _filterDomain.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: _clearFilters,
+                            ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(() => _filterDomain = value);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      FilterChip(
+                        label: const Text('Has Date'),
+                        selected: _filterHasDate,
+                        onSelected: (value) {
+                          setState(() => _filterHasDate = value);
+                        },
+                      ),
+                      FilterChip(
+                        label: const Text('Has Source'),
+                        selected: _filterHasSource,
+                        onSelected: (value) {
+                          setState(() => _filterHasSource = value);
+                        },
+                      ),
+                      FilterChip(
+                        label: const Text('Has Image'),
+                        selected: _filterHasImage,
+                        onSelected: (value) {
+                          setState(() => _filterHasImage = value);
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ).animate().slideY(begin: 0.2, delay: 180.ms).fadeIn(),
+
           const SizedBox(height: 16),
 
           if (searchState.verification != null)
@@ -584,7 +696,42 @@ $content''',
                 ),
               ),
             )
-          else if (searchState.results.isNotEmpty)
+          else if (searchState.results.isNotEmpty &&
+              filteredResults.isEmpty)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.filter_alt_off,
+                      size: 64,
+                      color: scheme.onSurface.withValues(alpha: 0.4),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No results match your filters',
+                      style: text.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Try adjusting or clearing your filters',
+                      style: text.bodyMedium?.copyWith(
+                        color: scheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: _clearFilters,
+                      icon: const Icon(Icons.clear_all),
+                      label: const Text('Clear Filters'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (filteredResults.isNotEmpty)
             Expanded(
               child: _searchType == SearchType.images
                   ? GridView.builder(
@@ -596,9 +743,9 @@ $content''',
                         mainAxisSpacing: 12,
                         childAspectRatio: 0.75,
                       ),
-                      itemCount: searchState.results.length,
+                      itemCount: filteredResults.length,
                       itemBuilder: (context, index) {
-                        final result = searchState.results[index];
+                        final result = filteredResults[index];
                         return _ImageResultCard(
                           result: result,
                           onAddSource: () => _addAsSource(result),
@@ -614,9 +761,9 @@ $content''',
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: searchState.results.length,
+                      itemCount: filteredResults.length,
                       itemBuilder: (context, index) {
-                        final result = searchState.results[index];
+                        final result = filteredResults[index];
                         return _SearchResultCard(
                           result: result,
                           onAddSource: () => _addAsSource(result),
@@ -675,11 +822,11 @@ $content''',
         ],
       ),
       floatingActionButton: searchState.status == SearchStatus.success &&
-              searchState.results.isNotEmpty
+              filteredResults.isNotEmpty
           ? FloatingActionButton.extended(
-              onPressed: () => _showAddAllDialog(context, searchState.results),
+              onPressed: () => _showAddAllDialog(context, filteredResults),
               icon: const Icon(Icons.add_circle_outline),
-              label: Text('Add All (${searchState.results.length})'),
+              label: Text('Add All (${filteredResults.length})'),
               backgroundColor: scheme.primary,
               foregroundColor: scheme.onPrimary,
             )
@@ -722,7 +869,7 @@ $content''',
             _buildHelpItem(
               icon: Icons.filter_list,
               title: 'Filters',
-              description: 'Use filters to narrow down results (coming soon)',
+              description: 'Filter by domain or require date/source/image',
               scheme: scheme,
             ),
           ],

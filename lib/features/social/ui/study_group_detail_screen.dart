@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_service.dart';
+import '../models/friend.dart';
 import '../models/study_group.dart';
 import '../social_provider.dart';
 
@@ -276,17 +277,246 @@ class _StudyGroupDetailScreenState
   }
 
   void _inviteMember() {
-    // Feature coming soon - will show friend picker
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Invite feature coming soon')),
-    );
+    final rootContext = context;
+    final controller = TextEditingController();
+    List<UserSearchResult> results = [];
+    bool isSearching = false;
+    String? errorMessage;
+
+    Future<void> runSearch(String query, StateSetter setState) async {
+      if (query.trim().isEmpty) return;
+      setState(() {
+        isSearching = true;
+        errorMessage = null;
+      });
+      try {
+        results =
+            await ref.read(friendsProvider.notifier).searchUsers(query.trim());
+      } catch (e) {
+        errorMessage = 'Search failed: $e';
+      } finally {
+        setState(() {
+          isSearching = false;
+        });
+      }
+    }
+
+    showDialog(
+      context: rootContext,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
+          title: const Text('Invite Member'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  textInputAction: TextInputAction.search,
+                  decoration: const InputDecoration(
+                    hintText: 'Search username or email',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onSubmitted: (value) => runSearch(value, setState),
+                ),
+                const SizedBox(height: 12),
+                if (isSearching) const LinearProgressIndicator(),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    errorMessage!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ],
+                if (!isSearching && results.isEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    controller.text.trim().isEmpty
+                        ? 'Start typing to search users.'
+                        : 'No users found.',
+                    style: Theme.of(dialogContext)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.grey),
+                  ),
+                ],
+                if (results.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 220,
+                    child: ListView.separated(
+                      itemCount: results.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final user = results[index];
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundImage: user.avatarUrl != null
+                                ? NetworkImage(user.avatarUrl!)
+                                : null,
+                            child: user.avatarUrl == null
+                                ? Text(user.username[0].toUpperCase())
+                                : null,
+                          ),
+                          title: Text(user.username),
+                          subtitle:
+                              user.email != null ? Text(user.email!) : null,
+                          trailing: TextButton(
+                            onPressed: () async {
+                              try {
+                                await ref
+                                    .read(studyGroupsProvider.notifier)
+                                    .inviteUser(widget.groupId, user.id);
+                                if (!dialogContext.mounted) return;
+                                Navigator.pop(dialogContext);
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(rootContext).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                        'Invitation sent to ${user.username}'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(rootContext).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Invite failed: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            },
+                            child: const Text('Invite'),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+            ElevatedButton(
+              onPressed: isSearching
+                  ? null
+                  : () => runSearch(controller.text, setState),
+              child: const Text('Search'),
+            ),
+          ],
+        ),
+      ),
+    ).then((_) => controller.dispose());
   }
 
   void _showSettings() {
-    // Feature coming soon - will show group settings
+    final rootContext = context;
+    final nameController = TextEditingController(text: _group?.name ?? '');
+    final descriptionController =
+        TextEditingController(text: _group?.description ?? '');
+    bool isSaving = false;
+
+    showDialog(
+      context: rootContext,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
+          title: const Text('Group Settings'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Group name',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description (optional)',
+                ),
+                maxLines: 3,
+              ),
+              if (isSaving) ...[
+                const SizedBox(height: 12),
+                const LinearProgressIndicator(),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      final name = nameController.text.trim();
+                      final description = descriptionController.text.trim();
+                      if (name.isEmpty) {
+                        ScaffoldMessenger.of(rootContext).showSnackBar(
+                          const SnackBar(
+                            content: Text('Group name is required'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      setState(() => isSaving = true);
+                      try {
+                        final api = ref.read(apiServiceProvider);
+                        await api.put(
+                          '/social/groups/${widget.groupId}',
+                          {
+                            'name': name,
+                            'description':
+                                description.isEmpty ? null : description,
+                          },
+                        );
+                        if (!dialogContext.mounted) return;
+                        Navigator.pop(dialogContext);
+                        if (!mounted) return;
+                        await _loadGroup();
+                        if (!mounted || !rootContext.mounted) return;
+                        ScaffoldMessenger.of(rootContext).showSnackBar(
+                          const SnackBar(
+                            content: Text('Group updated'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      } catch (e) {
+                        if (!mounted || !rootContext.mounted) return;
+                        setState(() => isSaving = false);
+                        ScaffoldMessenger.of(rootContext).showSnackBar(
+                          SnackBar(
+                            content: Text('Update failed: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    ).then((_) {
+      nameController.dispose();
+      descriptionController.dispose();
+    });
   }
 
   void _leaveGroup() {
+    final navigator = Navigator.of(context);
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -303,7 +533,7 @@ class _StudyGroupDetailScreenState
                   .read(studyGroupsProvider.notifier)
                   .leaveGroup(widget.groupId);
               if (!mounted) return;
-              Navigator.pop(context);
+              navigator.pop();
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Leave'),
@@ -314,6 +544,7 @@ class _StudyGroupDetailScreenState
   }
 
   void _deleteGroup() {
+    final navigator = Navigator.of(context);
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -331,7 +562,7 @@ class _StudyGroupDetailScreenState
                   .read(studyGroupsProvider.notifier)
                   .deleteGroup(widget.groupId);
               if (!mounted) return;
-              Navigator.pop(context);
+              navigator.pop();
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete'),

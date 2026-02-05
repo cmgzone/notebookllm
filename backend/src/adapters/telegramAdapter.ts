@@ -29,6 +29,7 @@ export interface TelegramMessage {
   caption?: string; // Caption for photo/document
   photo?: Buffer;
   document?: { data: Buffer; filename: string };
+  video?: { url: string } | Buffer | string;
   audio?: { url: string } | Buffer | string;
   data?: Buffer;
   filename?: string;
@@ -829,6 +830,17 @@ _Click buttons below to change settings:_
           reply_markup: message.replyMarkup,
         }, {
           filename: message.document.filename,
+        });
+      }
+
+      // Send video
+      if (message.video) {
+        const videoSource = (typeof message.video === 'object' && 'url' in message.video)
+          ? message.video.url
+          : message.video;
+        await this.bot.sendVideo(chatId, videoSource, {
+          caption: message.caption,
+          reply_markup: message.replyMarkup,
         });
       }
 

@@ -1166,7 +1166,7 @@ ${chalk.gray('>')} Help me write a function to sort an array
       };
 
       // Show processing indicator
-      this.startSpinner('Processing...');
+      this.startSpinner('Thinking...');
 
       // Process through message gateway
       const normalizedMessage = await gituMessageGateway.processMessage(rawMessage);

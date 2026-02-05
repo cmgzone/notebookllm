@@ -91,7 +91,8 @@ function getTemplatePrompt(template: ResearchTemplate): string {
 export async function searchWeb(query: string, num: number = 5): Promise<any[]> {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey) {
-        throw new Error('Serper API key not configured');
+        console.warn('[Research] SERPER_API_KEY not configured; returning empty search results');
+        return [];
     }
 
     try {
@@ -219,6 +220,10 @@ async function synthesizeReport(
     provider?: 'gemini' | 'openrouter',
     model?: string
 ): Promise<string> {
+    if (sources.length === 0) {
+        return `No sources were retrieved for "${query}".\n\n` +
+            `If you expected results, verify that web search is configured (SERPER_API_KEY) and try again.`;
+    }
     // Limit sources and content to prevent memory issues
     const limitedSources = sources.slice(0, 8).map((s, i) => ({
         ...s,

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../api/api_service.dart';
 
 class ContentExtractorService {
   final Ref ref;
@@ -297,10 +298,51 @@ If the file is private, please make it publicly accessible or copy the content m
     required String sourceId,
     String url = '',
   }) async {
-    // This would be implemented with a backend service
-    // For now, return null to indicate not implemented
     debugPrint('Ingest source called for: $sourceId');
-    return null;
+
+    final api = ref.read(apiServiceProvider);
+
+    try {
+      final source = await api.getSource(sourceId);
+      final existingUrl = source['url'] as String? ?? '';
+      final resolvedUrl = url.isNotEmpty ? url : existingUrl;
+
+      String content = source['content'] as String? ?? '';
+      if (content.trim().isEmpty && resolvedUrl.isNotEmpty) {
+        if (_extractYouTubeVideoId(resolvedUrl) != null) {
+          content = await extractYouTubeContent(resolvedUrl);
+        } else {
+          content = await extractWebContent(resolvedUrl);
+        }
+      }
+
+      if (content.trim().isNotEmpty) {
+        await api.updateSource(
+          sourceId,
+          content: content,
+          url: resolvedUrl.isNotEmpty ? resolvedUrl : null,
+        );
+      }
+
+      // Trigger backend ingestion (chunk + embed + store)
+      await api.post('/rag/ingestion/process', {
+        'sourceId': sourceId,
+      });
+
+      return {
+        'success': true,
+        'sourceId': sourceId,
+        'contentLength': content.length,
+        if (resolvedUrl.isNotEmpty) 'url': resolvedUrl,
+      };
+    } catch (e) {
+      debugPrint('Ingest source failed for $sourceId: $e');
+      return {
+        'success': false,
+        'sourceId': sourceId,
+        'error': e.toString(),
+      };
+    }
   }
 }
 

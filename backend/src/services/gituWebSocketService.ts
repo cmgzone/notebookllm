@@ -19,6 +19,7 @@ type WSEvent =
   | { type: 'connected'; payload: { connectionId: string; userId: string } }
   | { type: 'pong' }
   | { type: 'incoming_message'; payload: GituIncomingMessage }
+  | { type: 'assistant_typing'; payload: { sessionId?: string; isTyping: boolean } }
   | { type: 'assistant_response'; payload: { sessionId: string; content: string; model: string; tokensUsed: number; cost: number } }
   | { type: 'error'; payload: { error: string } };
 
@@ -193,6 +194,8 @@ class GituWebSocketService {
           return;
         }
 
+        let typingSessionId: string | undefined;
+        let typingSent = false;
         try {
           // Normalize message
           const rawMessage: RawMessage = {
@@ -219,6 +222,13 @@ class GituWebSocketService {
           } else {
             session = await gituSessionService.getOrCreateSession(connection.userId, 'web');
           }
+
+          typingSessionId = session.id;
+          this.sendToConnection(connectionId, {
+            type: 'assistant_typing',
+            payload: { sessionId: typingSessionId, isTyping: true }
+          });
+          typingSent = true;
 
           // Add user message to session
           await gituSessionService.addMessage(session.id, {
@@ -276,6 +286,13 @@ class GituWebSocketService {
         } catch (error: any) {
           console.error('[Gitu Web WS] Error processing message:', error);
           this.sendToConnection(connectionId, { type: 'error', payload: { error: error.message || 'Failed to process message' } });
+        } finally {
+          if (typingSent) {
+            this.sendToConnection(connectionId, {
+              type: 'assistant_typing',
+              payload: { sessionId: typingSessionId, isTyping: false }
+            });
+          }
         }
         return;
       }

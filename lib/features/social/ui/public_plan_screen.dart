@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:share_plus/share_plus.dart';
 import '../social_sharing_provider.dart';
 import '../../../core/api/api_service.dart';
 import '../../../theme/app_theme.dart';
@@ -133,6 +134,34 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
     }
   }
 
+  Future<void> _sharePlan(String title) async {
+    try {
+      final api = ref.read(apiServiceProvider);
+      final publicUrl =
+          '${api.baseUrl}social-sharing/public/plans/${widget.planId}';
+      await Share.share(
+        'Plan: $title\n$publicUrl',
+        subject: title,
+      );
+      try {
+        await ref.read(socialSharingServiceProvider).shareContent(
+              contentType: 'plan',
+              contentId: widget.planId,
+            );
+      } catch (_) {
+        // Ignore analytics failures.
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to share: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -186,9 +215,7 @@ class _PublicPlanScreenState extends ConsumerState<PublicPlanScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.share),
-            onPressed: () {
-              // Share link functionality
-            },
+            onPressed: () => _sharePlan(title.toString()),
           ),
         ],
         bottom: TabBar(

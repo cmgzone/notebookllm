@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
 import '../social_sharing_provider.dart';
 import '../../../core/api/api_service.dart';
 import '../../../core/sources/source_icon_helper.dart';
@@ -150,6 +151,34 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
     );
   }
 
+  Future<void> _shareNotebook(String title) async {
+    try {
+      final api = ref.read(apiServiceProvider);
+      final publicUrl =
+          '${api.baseUrl}social-sharing/public/notebooks/${widget.notebookId}';
+      await Share.share(
+        'Notebook: $title\n$publicUrl',
+        subject: title,
+      );
+      try {
+        await ref.read(socialSharingServiceProvider).shareContent(
+              contentType: 'notebook',
+              contentId: widget.notebookId,
+            );
+      } catch (_) {
+        // Ignore analytics failures.
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to share: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -207,12 +236,7 @@ class _PublicNotebookScreenState extends ConsumerState<PublicNotebookScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.share, color: Colors.white),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Share functionality coming soon!')),
-              );
-            },
+            onPressed: () => _shareNotebook(title.toString()),
           ),
         ],
       ),

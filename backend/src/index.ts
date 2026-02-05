@@ -60,6 +60,7 @@ import { registerGitHubTools } from './services/githubMCPTools.js';
 import { registerAgentTools } from './services/agentMCPTools.js';
 import { registerExternalMcpTools } from './services/externalMCPTools.js';
 import { registerVoiceTools } from './services/voiceMCPTools.js';
+import { registerRemotionTools } from './services/remotionMCPTools.js';
 import { whatsappAdapter } from './adapters/whatsappAdapter.js';
 import { whatsappHealthMonitor } from './services/whatsappHealthMonitor.js';
 import { telegramAdapter } from './adapters/telegramAdapter.js';
@@ -135,6 +136,7 @@ registerBrowserTools();
 registerPluginMCPTools();
 registerRuleMCPTools();
 registerVoiceTools();
+registerRemotionTools();
 registerAgentTools();
 registerExternalMcpTools();
 

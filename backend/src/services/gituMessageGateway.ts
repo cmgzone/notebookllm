@@ -766,7 +766,24 @@ class GituMessageGateway {
   /**
    * Broadcast mission status update to user's WebSocket.
    */
-  broadcastMissionUpdate(userId: string, missionId: string, status: string): void {
+  broadcastMissionUpdate(
+    userId: string,
+    missionId: string,
+    status: string,
+    options?: {
+      message?: string;
+      summary?: {
+        total: number;
+        completed: number;
+        failed: number;
+        inProgress: number;
+        pending: number;
+      };
+      startedAt?: string;
+      updatedAt?: string;
+      completedAt?: string | null;
+    }
+  ): void {
     const set = this.wsClients.get(userId);
     if (!set) return;
     for (const ws of set) {
@@ -774,10 +791,72 @@ class GituMessageGateway {
         try {
           ws.send(JSON.stringify({
             type: 'mission_updated',
-            payload: { missionId, status, timestamp: new Date().toISOString() }
+            payload: {
+              missionId,
+              status,
+              timestamp: new Date().toISOString(),
+              message: options?.message,
+              summary: options?.summary,
+              startedAt: options?.startedAt,
+              updatedAt: options?.updatedAt,
+              completedAt: options?.completedAt ?? null
+            }
           }));
         } catch (error) {
           console.error(`[Gitu Gateway] Failed to broadcast mission update to ${userId}:`, error);
+        }
+      }
+    }
+  }
+
+  /**
+   * Broadcast agent status update to user's WebSocket.
+   */
+  broadcastAgentUpdate(
+    userId: string,
+    update: {
+      agentId: string;
+      missionId?: string;
+      task?: string;
+      status: string;
+      message?: string;
+      updatedAt?: string;
+    }
+  ): void {
+    const set = this.wsClients.get(userId);
+    if (!set) return;
+    for (const ws of set) {
+      if (ws && ws.readyState === 1) {
+        try {
+          ws.send(JSON.stringify({
+            type: 'agent_updated',
+            payload: {
+              ...update,
+              timestamp: new Date().toISOString()
+            }
+          }));
+        } catch (error) {
+          console.error(`[Gitu Gateway] Failed to broadcast agent update to ${userId}:`, error);
+        }
+      }
+    }
+  }
+
+  /**
+   * Broadcast WhatsApp QR code to user's WebSocket.
+   */
+  broadcastWhatsAppQr(userId: string, qr: string): void {
+    const set = this.wsClients.get(userId);
+    if (!set) return;
+    for (const ws of set) {
+      if (ws && ws.readyState === 1) {
+        try {
+          ws.send(JSON.stringify({
+            type: 'whatsapp_qr',
+            payload: { qr, timestamp: new Date().toISOString() }
+          }));
+        } catch (error) {
+          console.error(`[Gitu Gateway] Failed to broadcast WhatsApp QR to ${userId}:`, error);
         }
       }
     }

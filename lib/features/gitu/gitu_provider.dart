@@ -52,12 +52,16 @@ class GituChatState {
   final List<GituMessage> messages;
   final bool isConnected;
   final bool isConnecting;
+  final bool isTyping;
+  final bool isHttpMode;
   final String? error;
 
   const GituChatState({
     this.messages = const [],
     this.isConnected = false,
     this.isConnecting = false,
+    this.isTyping = false,
+    this.isHttpMode = false,
     this.error,
   });
 
@@ -65,12 +69,16 @@ class GituChatState {
     List<GituMessage>? messages,
     bool? isConnected,
     bool? isConnecting,
+    bool? isTyping,
+    bool? isHttpMode,
     String? error,
   }) {
     return GituChatState(
       messages: messages ?? this.messages,
       isConnected: isConnected ?? this.isConnected,
       isConnecting: isConnecting ?? this.isConnecting,
+      isTyping: isTyping ?? this.isTyping,
+      isHttpMode: isHttpMode ?? this.isHttpMode,
       error: error,
     );
   }
@@ -81,6 +89,7 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
   WebSocketChannel? _channel;
   Timer? _pingTimer;
   final WebSocketChannel Function(Uri)? _channelBuilder;
+  bool _forceHttp = false;
 
   GituChatNotifier(this._ref, {WebSocketChannel Function(Uri)? channelBuilder})
       : _channelBuilder = channelBuilder,
@@ -88,6 +97,12 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
 
   Future<void> connect() async {
     if (state.isConnected || state.isConnecting) return;
+    if (_forceHttp) {
+      if (mounted) {
+        state = state.copyWith(isHttpMode: true, isConnecting: false);
+      }
+      return;
+    }
 
     if (mounted) {
       state = state.copyWith(isConnecting: true, error: null);
@@ -157,7 +172,12 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
       switch (type) {
         case 'connected':
           if (mounted) {
-            state = state.copyWith(isConnected: true, isConnecting: false);
+            _forceHttp = false;
+            state = state.copyWith(
+              isConnected: true,
+              isConnecting: false,
+              isHttpMode: false,
+            );
           }
           break;
         case 'pong':
@@ -172,6 +192,16 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
             timestamp: DateTime.now(),
             model: payload['model'] as String?,
           ));
+          if (mounted) {
+            state = state.copyWith(isTyping: false);
+          }
+          break;
+        case 'assistant_typing':
+          final payload = data['payload'] as Map<String, dynamic>? ?? {};
+          final isTyping = payload['isTyping'] == true;
+          if (mounted) {
+            state = state.copyWith(isTyping: isTyping);
+          }
           break;
         case 'incoming_message':
           // Handle messages from other platforms if needed
@@ -180,7 +210,10 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
         case 'error':
           final payload = data['payload'] as Map<String, dynamic>;
           if (mounted) {
-            state = state.copyWith(error: payload['error'] as String?);
+            state = state.copyWith(
+              error: payload['error'] as String?,
+              isTyping: false,
+            );
           }
           break;
         case 'insights_updated':
@@ -191,11 +224,83 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
           // Note: The provider will be refreshed by the proactiveInsightsProvider
           break;
         case 'mission_updated':
-          // Mission status updated
           final payload = data['payload'] as Map<String, dynamic>;
-          developer.log(
-              'Mission ${payload['missionId']} updated: ${payload['status']}',
-              name: 'GituChatNotifier');
+          final missionId = payload['missionId'] as String? ?? '';
+          final status = payload['status'] as String? ?? 'updated';
+          final message = payload['message'] as String?;
+          final summary = payload['summary'] as Map<String, dynamic>?;
+          final startedAt = payload['startedAt'] as String?;
+          final updatedAt = payload['updatedAt'] as String?;
+          final completedAt = payload['completedAt'] as String?;
+
+          String progress = '';
+          if (summary != null) {
+            final total = summary['total'] as int? ?? 0;
+            final completed = summary['completed'] as int? ?? 0;
+            final failed = summary['failed'] as int? ?? 0;
+            final inProgress = summary['inProgress'] as int? ?? 0;
+            final pending = summary['pending'] as int? ?? 0;
+            if (total > 0) {
+              progress = '$completed/$total done';
+              if (inProgress > 0) progress += ' · $inProgress in progress';
+              if (pending > 0) progress += ' · $pending pending';
+              if (failed > 0) progress += ' · $failed failed';
+            }
+          }
+
+          final content = [
+            'Swarm update — ${status.replaceAll('_', ' ')}',
+            if (message != null && message.trim().isNotEmpty) message,
+            if (progress.isNotEmpty) progress,
+            if (missionId.isNotEmpty) 'Mission: ${missionId.substring(0, 8)}',
+          ].join('\n');
+
+          _addMessage(GituMessage(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            content: content,
+            isUser: false,
+            timestamp: DateTime.now(),
+            metadata: {
+              'type': 'mission_update',
+              'missionId': missionId,
+              'status': status,
+              if (summary != null) 'summary': summary,
+              if (startedAt != null) 'startedAt': startedAt,
+              if (updatedAt != null) 'updatedAt': updatedAt,
+              if (completedAt != null) 'completedAt': completedAt,
+            },
+          ));
+          break;
+        case 'agent_updated':
+          final payload = data['payload'] as Map<String, dynamic>;
+          final agentId = payload['agentId'] as String? ?? '';
+          final missionId = payload['missionId'] as String?;
+          final status = payload['status'] as String? ?? 'updated';
+          final task = payload['task'] as String? ?? 'Agent task';
+          final message = payload['message'] as String?;
+
+          final content = [
+            'Agent update — ${status.replaceAll('_', ' ')}',
+            task,
+            if (message != null && message.trim().isNotEmpty) message,
+            if (agentId.isNotEmpty) 'Agent: ${agentId.substring(0, 8)}',
+            if (missionId != null && missionId.isNotEmpty)
+              'Mission: ${missionId.substring(0, 8)}',
+          ].join('\n');
+
+          _addMessage(GituMessage(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            content: content,
+            isUser: false,
+            timestamp: DateTime.now(),
+            metadata: {
+              'type': 'agent_update',
+              'agentId': agentId,
+              if (missionId != null) 'missionId': missionId,
+              'status': status,
+              'task': task,
+            },
+          ));
           break;
         case 'notification':
           // General notification from backend
@@ -203,6 +308,22 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
           developer.log(
               'Notification: ${payload['title']} - ${payload['body']}',
               name: 'GituChatNotifier');
+          break;
+        case 'whatsapp_qr':
+          final payload = data['payload'] as Map<String, dynamic>;
+          final qr = payload['qr'] as String?;
+          if (qr != null && qr.isNotEmpty) {
+            _addMessage(GituMessage(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              content: 'WhatsApp QR ready — scan to link your account.',
+              isUser: false,
+              timestamp: DateTime.now(),
+              metadata: {
+                'type': 'whatsapp_qr',
+                'qr': qr,
+              },
+            ));
+          }
           break;
       }
     } catch (e) {
@@ -221,10 +342,14 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
       isUser: true,
       timestamp: DateTime.now(),
     ));
+    if (mounted) {
+      state = state.copyWith(isTyping: true);
+    }
 
-    if (_channel == null || !state.isConnected) {
-      // Try to reconnect, but also fall back to HTTP so the user still gets a reply.
-      connect();
+    if (_forceHttp || _channel == null || !state.isConnected) {
+      if (mounted) {
+        state = state.copyWith(isHttpMode: true);
+      }
       await _sendViaHttp(text);
       return;
     }
@@ -234,7 +359,15 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
       'payload': {'text': text}
     };
 
-    _channel!.sink.add(jsonEncode(message));
+    try {
+      _channel!.sink.add(jsonEncode(message));
+    } catch (_) {
+      _forceHttp = true;
+      if (mounted) {
+        state = state.copyWith(isHttpMode: true, isConnected: false);
+      }
+      await _sendViaHttp(text);
+    }
   }
 
   Future<void> _sendViaHttp(String text) async {
@@ -259,9 +392,16 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
           timestamp: DateTime.now(),
         ));
       }
+      if (mounted) {
+        state = state.copyWith(isTyping: false);
+      }
     } catch (e) {
       if (mounted) {
-        state = state.copyWith(error: 'Gitu chat failed: ${e.toString()}');
+        state = state.copyWith(
+          error: 'Gitu chat failed: ${e.toString()}',
+          isTyping: false,
+          isHttpMode: true,
+        );
       }
     }
   }
@@ -286,10 +426,15 @@ class GituChatNotifier extends StateNotifier<GituChatState> {
   void _disconnect({String? error}) {
     _pingTimer?.cancel();
     _channel = null;
+    if (error != null && error.isNotEmpty) {
+      _forceHttp = true;
+    }
     if (mounted) {
       state = state.copyWith(
         isConnected: false,
         isConnecting: false,
+        isTyping: false,
+        isHttpMode: _forceHttp,
         error: error,
       );
     }

@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database.js';
+import { gituMessageGateway } from './gituMessageGateway.js';
 
 import { gituAIRouter } from './gituAIRouter.js';
 import { gituEvaluationService } from './gituEvaluationService.js';
@@ -401,10 +402,39 @@ export class GituAgentManager {
    * Update an agent's status and result.
    */
   async updateAgentStatus(agentId: string, status: GituAgent['status'], result?: any): Promise<void> {
-    await pool.query(
-      `UPDATE gitu_agents SET status = $1, result = $2, updated_at = NOW() WHERE id = $3`,
+    const updateResult = await pool.query(
+      `UPDATE gitu_agents SET status = $1, result = $2, updated_at = NOW() WHERE id = $3
+       RETURNING *`,
       [status, result ? JSON.stringify(result) : null, agentId]
     );
+
+    if (updateResult.rows.length === 0) return;
+    const agent = this.mapRowToAgent(updateResult.rows[0]);
+    const missionId =
+      typeof agent.memory?.missionId === 'string' && agent.memory.missionId.length > 0
+        ? agent.memory.missionId
+        : undefined;
+    const message = this.buildAgentUpdateMessage(agent, result);
+
+    gituMessageGateway.broadcastAgentUpdate(agent.userId, {
+      agentId: agent.id,
+      missionId,
+      task: agent.task,
+      status: agent.status,
+      message,
+      updatedAt: agent.updatedAt ? new Date(agent.updatedAt).toISOString() : undefined,
+    });
+  }
+
+  private buildAgentUpdateMessage(agent: GituAgent, result?: any): string | undefined {
+    if (!result) return undefined;
+    const raw = typeof result === 'string'
+      ? result
+      : (result?.output || result?.error || result?.message);
+    if (!raw || typeof raw !== 'string') return undefined;
+    const trimmed = raw.trim();
+    if (!trimmed) return undefined;
+    return trimmed.length > 160 ? `${trimmed.slice(0, 157)}...` : trimmed;
   }
 
   private mapRowToAgent(row: any): GituAgent {

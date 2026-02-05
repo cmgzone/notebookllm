@@ -2,6 +2,7 @@ import express, { type Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
+import { gituAIRouter } from '../services/gituAIRouter.js';
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -232,9 +233,6 @@ router.post('/:id/query', async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ error: 'Notebook not found' });
         }
 
-        // TODO: Import this properly at top of file
-        const { gituAIRouter } = await import('../services/gituAIRouter.js');
-        
         // Retrieve context from this specific notebook (returns string[])
         const contextChunks = await gituAIRouter.retrieveContext(query, req.userId!, 5);
         

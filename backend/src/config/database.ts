@@ -25,6 +25,7 @@ const pool = new Pool({
 (globalThis as any).__notebookLlmPgPool = pool;
 
 const shouldLogDbEvents = !(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID);
+let hasLoggedDbConnect = false;
 
 // Helper function to execute query with retry for connection issues
 export async function queryWithRetry<T>(
@@ -61,7 +62,10 @@ export async function queryWithRetry<T>(
 // Test the connection
 if (shouldLogDbEvents) {
     pool.on('connect', () => {
-        console.log('✅ Connected to Neon database');
+        if (!hasLoggedDbConnect) {
+            hasLoggedDbConnect = true;
+            console.log('✅ Connected to Neon database');
+        }
     });
 }
 

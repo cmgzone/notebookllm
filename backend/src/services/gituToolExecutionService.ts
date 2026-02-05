@@ -41,6 +41,8 @@ export interface ToolExecutionResult {
 }
 
 class GituToolExecutionService {
+    private readonly verboseLogs =
+        process.env.GITU_LOG_LEVEL === 'debug' || process.env.GITU_LOG_VERBOSE === 'true';
     /**
      * Process a user message with tool execution capability.
      * This handles the full conversation loop including tool calls.
@@ -66,10 +68,12 @@ class GituToolExecutionService {
         // This prevents AI from hallucinating when it should use tools
         const forcedTool = this.detectForcedTool(userMessage, toolNames);
         if (forcedTool) {
-            console.log(`[ToolExecution] Forcing tool call: ${forcedTool.name} for user request`);
+            if (this.verboseLogs) {
+                console.log(`[ToolExecution] Forcing tool call: ${forcedTool.name} for user request`);
+            }
 
             // Execute the tool directly
-            const result = await this.executeTool(forcedTool, { userId, sessionId, notebookId });
+            const result = await this.executeTool(forcedTool, { userId, sessionId, notebookId, platform });
             toolsUsed.push(result);
 
             if (result.error) {
@@ -96,11 +100,11 @@ class GituToolExecutionService {
             };
 
             try {
-                const aiResponse = await gituAIRouter.route(aiRequest);
-                return {
-                    response: aiResponse.content,
-                    toolsUsed,
-                    model: aiResponse.model,
+            const aiResponse = await gituAIRouter.route(aiRequest);
+            return {
+                response: aiResponse.content,
+                toolsUsed,
+                model: aiResponse.model,
                     tokensUsed: aiResponse.tokensUsed,
                 };
             } catch (error) {
@@ -158,10 +162,17 @@ class GituToolExecutionService {
 
             if (toolCall) {
                 toolCallCount++;
-                console.log(`[ToolExecution] Tool call ${toolCallCount}: ${toolCall.name} (using model: ${selectedModel})`);
+                if (this.verboseLogs) {
+                    console.log(`[ToolExecution] Tool call ${toolCallCount}: ${toolCall.name} (using model: ${selectedModel})`);
+                }
+
+                if (!this.isToolAllowed(toolCall.name, userMessage)) {
+                    finalResponse = this.buildConfirmationPrompt(toolCall.name, userMessage);
+                    break;
+                }
 
                 // Execute the tool
-                const result = await this.executeTool(toolCall, { userId, sessionId, notebookId });
+                const result = await this.executeTool(toolCall, { userId, sessionId, notebookId, platform });
                 toolsUsed.push(result);
 
                 if (result.error) {
@@ -247,29 +258,70 @@ class GituToolExecutionService {
         }
 
         // Swarm/Research-related queries → force deploy_swarm
-        if (availableTools.includes('deploy_swarm')) {
-            const swarmPatterns = [
-                /\b(start|deploy|create)\b.*(swarm|team|agent\s+group)/i,
-                /\b(research|investigate|analyze)\b.*(deep|comprehensive|thorough|in-depth)/i,
-                /\b(deep\s+dive)\b/i,
-                /^research\s+(.*)/i, // Matches "Research <topic>" directly
-            ];
-            for (const pattern of swarmPatterns) {
-                if (pattern.test(msg)) {
-                    // Extract the objective from the message if possible, or use full message
-                    // Simple heuristic: if "research <X>", X is objective. Else full msg.
-                    let objective = userMessage;
-                    const researchMatch = msg.match(/^research\s+(.*)/i);
-                    if (researchMatch) {
-                        objective = researchMatch[1];
-                    }
-
-                    return { name: 'deploy_swarm', arguments: { objective } };
-                }
-            }
+        if (availableTools.includes('deploy_swarm') && this.isExplicitSwarmRequest(userMessage)) {
+            return { name: 'deploy_swarm', arguments: { objective: userMessage } };
         }
 
         return null;
+    }
+
+    private isExplicitSwarmRequest(userMessage: string): boolean {
+        const msg = userMessage.toLowerCase();
+        return (
+            /\b(swarm|agent swarm|agent team|team of agents|agent group|multi-agent)\b/i.test(msg) ||
+            /\b(deploy|start|create|spin up)\s+(a\s+)?swarm\b/i.test(msg)
+        );
+    }
+
+    private isExplicitAgentRequest(userMessage: string): boolean {
+        const msg = userMessage.toLowerCase();
+        return (
+            this.isExplicitSwarmRequest(userMessage) ||
+            /\b(spawn|create|start)\s+(an?\s+)?agent\b/i.test(msg) ||
+            /\buse\s+an?\s+agent\b/i.test(msg)
+        );
+    }
+
+    private isToolAllowed(toolName: string, userMessage: string): boolean {
+        if (toolName === 'deploy_swarm') return this.isExplicitSwarmRequest(userMessage);
+        if (toolName === 'spawn_agent') return this.isExplicitAgentRequest(userMessage);
+        return true;
+    }
+
+    private buildConfirmationPrompt(toolName: string, userMessage: string): string {
+        const objective = this.clampText(userMessage.trim(), 160);
+        if (toolName === 'deploy_swarm') {
+            return [
+                '**Confirmation Required**',
+                'I can deploy a swarm of agents, but I need explicit confirmation.',
+                '',
+                `Action: Deploy swarm`,
+                `Goal: "${objective}"`,
+                '',
+                'Reply with one of:',
+                `1. "Deploy swarm: ${objective}" to proceed`,
+                '2. "No" to cancel',
+            ].join('\n');
+        }
+        if (toolName === 'spawn_agent') {
+            return [
+                '**Confirmation Required**',
+                'I can spawn a dedicated agent, but I need explicit confirmation.',
+                '',
+                `Action: Spawn agent`,
+                `Task: "${objective}"`,
+                '',
+                'Reply with one of:',
+                `1. "Spawn agent: ${objective}" to proceed`,
+                '2. "No" to cancel',
+            ].join('\n');
+        }
+        return `I can do that, but I need explicit confirmation.`;
+    }
+
+    private clampText(text: string, max: number): string {
+        if (text.length <= max) return text;
+        return `${text.slice(0, max - 1).trim()}…`;
     }
 
     /**
@@ -375,7 +427,9 @@ If you don't need a tool, just respond normally without the tool block.`;
             try {
                 const parsed = JSON.parse(toolMatch[1].trim());
                 if (parsed.tool) {
-                    console.log(`[ToolExecution] Detected tool call: ${parsed.tool}`);
+                    if (this.verboseLogs) {
+                        console.log(`[ToolExecution] Detected tool call: ${parsed.tool}`);
+                    }
                     return {
                         name: parsed.tool,
                         arguments: parsed.args || {},
@@ -415,7 +469,9 @@ If you don't need a tool, just respond normally without the tool block.`;
                     const parsed = JSON.parse(jsonStr);
 
                     if (parsed.tool) {
-                        console.log(`[ToolExecution] Detected tool call (JSON format): ${parsed.tool}`);
+                        if (this.verboseLogs) {
+                            console.log(`[ToolExecution] Detected tool call (JSON format): ${parsed.tool}`);
+                        }
                         return {
                             name: parsed.tool,
                             arguments: parsed.args || {},

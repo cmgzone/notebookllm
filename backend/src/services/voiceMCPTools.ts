@@ -17,6 +17,48 @@ async function getLinkedIdentity(userId: string, platform: 'whatsapp' | 'telegra
     return res.rows.length > 0 ? res.rows[0].platform_user_id : null;
 }
 
+async function getActiveMessagingPlatforms(userId: string): Promise<Array<{ platform: 'whatsapp' | 'telegram'; platformUserId: string }>> {
+    const res = await pool.query(
+        `SELECT platform, platform_user_id
+         FROM gitu_linked_accounts
+         WHERE user_id = $1
+           AND platform IN ('whatsapp', 'telegram')
+           AND status = 'active'`,
+        [userId]
+    );
+    return res.rows.map((row: any) => ({
+        platform: row.platform,
+        platformUserId: row.platform_user_id,
+    }));
+}
+
+function normalizePlatform(raw?: string | null): 'whatsapp' | 'telegram' | undefined {
+    if (!raw) return undefined;
+    const value = String(raw).trim().toLowerCase();
+    if (value === 'whatsapp' || value === 'wa') return 'whatsapp';
+    if (value === 'telegram' || value === 'tg') return 'telegram';
+    return undefined;
+}
+
+function inferPlatformFromRecipient(recipient: string | undefined): 'whatsapp' | 'telegram' | undefined {
+    if (!recipient) return undefined;
+    const value = recipient.trim().toLowerCase();
+    if (value.startsWith('tg:') || value.startsWith('telegram:')) return 'telegram';
+    if (value.startsWith('wa:') || value.startsWith('whatsapp:')) return 'whatsapp';
+    if (value.includes('@s.whatsapp.net') || value.includes('@g.us')) return 'whatsapp';
+    return undefined;
+}
+
+function stripRecipientPrefix(recipient: string, prefixes: string[]): string {
+    const lower = recipient.trim().toLowerCase();
+    for (const prefix of prefixes) {
+        if (lower.startsWith(prefix)) {
+            return recipient.trim().slice(prefix.length).trim();
+        }
+    }
+    return recipient.trim();
+}
+
 async function getUserVoiceDefaults(userId: string): Promise<{ voiceId?: string; provider?: string }> {
     try {
         const res = await pool.query(
@@ -71,16 +113,32 @@ const sendVoiceNoteTool: MCPTool = {
         type: 'object',
         properties: {
             text: { type: 'string', description: 'The text to speak.' },
-            platform: { type: 'string', enum: ['whatsapp', 'telegram'], description: 'Platform to send to.' },
-            recipient: { type: 'string', description: 'Recipient (name, number, or "self").', default: 'self' },
+            platform: { type: 'string', enum: ['whatsapp', 'telegram'], description: 'Optional: platform to send to.' },
+            recipient: { type: 'string', description: 'Recipient (name, number, or "self"). Prefix with wa:/tg: to disambiguate.', default: 'self' },
             voiceId: { type: 'string', description: 'Optional: Voice ID (e.g. en-US-natalie, en-US-ryan).' }
         },
-        required: ['text', 'platform']
+        required: ['text']
     },
     handler: async (args: any, context: MCPContext) => {
         const { text, platform, recipient = 'self', voiceId } = args;
         const defaults = await getUserVoiceDefaults(context.userId);
         const resolvedVoiceId = voiceId || defaults.voiceId || 'en-US-natalie';
+        const explicitPlatform = normalizePlatform(platform);
+        const contextPlatform = normalizePlatform(context.platform);
+        const recipientPlatform = inferPlatformFromRecipient(recipient);
+
+        let resolvedPlatform = explicitPlatform || contextPlatform || recipientPlatform;
+        if (!resolvedPlatform) {
+            const activePlatforms = await getActiveMessagingPlatforms(context.userId);
+            if (activePlatforms.length === 1) {
+                resolvedPlatform = activePlatforms[0].platform;
+            }
+        }
+        if (!resolvedPlatform) {
+            throw new Error(
+                'Platform is required. Specify "whatsapp" or "telegram", or link exactly one of them and try again.'
+            );
+        }
 
         // 1. Generate Audio
         let audioUrl: string;
@@ -93,28 +151,34 @@ const sendVoiceNoteTool: MCPTool = {
 
         // 2. Resolve Recipient
         let targetId: string;
-        const myIdentity = await getLinkedIdentity(context.userId, platform as any);
-        if (!myIdentity) throw new Error(`No linked ${platform} account found.`);
+        const myIdentity = await getLinkedIdentity(context.userId, resolvedPlatform);
+        if (!myIdentity) {
+            throw new Error(
+                `No linked ${resolvedPlatform} account found. Link it in the app (Settings → Gitu → Linked Accounts), then retry.`
+            );
+        }
 
         if (recipient === 'self') {
             targetId = myIdentity;
         } else {
             // Basic resolution (same logic as messaging tools)
-            if (platform === 'whatsapp') {
-                if (recipient.includes('@')) targetId = recipient;
+            if (resolvedPlatform === 'whatsapp') {
+                const cleaned = stripRecipientPrefix(recipient, ['wa:', 'whatsapp:']);
+                if (cleaned.includes('@')) targetId = cleaned;
                 else {
                     // Try to find contact
-                    const contacts = await whatsappAdapter.searchContacts(recipient);
+                    const contacts = await whatsappAdapter.searchContacts(cleaned);
                     if (contacts.length > 0) targetId = contacts[0].id;
-                    else targetId = `${recipient.replace(/\D/g, '')}@s.whatsapp.net`;
+                    else targetId = `${cleaned.replace(/\D/g, '')}@s.whatsapp.net`;
                 }
             } else {
-                targetId = recipient; // Telegram usually requires Chat ID
+                const cleaned = stripRecipientPrefix(recipient, ['tg:', 'telegram:']);
+                targetId = cleaned; // Telegram usually requires Chat ID
             }
         }
 
         // 3. Send Audio
-        if (platform === 'whatsapp') {
+        if (resolvedPlatform === 'whatsapp') {
             await whatsappAdapter.sendMessage(targetId, {
                 // Sending as PTT (Voice Note) requires specific handling in Baileys usually,
                 // but sending as audio/url is supported by our adapter now (we need to update it to support 'audio' type specifically or generic url)
@@ -125,7 +189,7 @@ const sendVoiceNoteTool: MCPTool = {
                 audio: { url: audioUrl },
                 ptt: true // Request PTT format
             } as any); 
-        } else if (platform === 'telegram') {
+        } else if (resolvedPlatform === 'telegram') {
             await telegramAdapter.sendMessage(targetId, {
                 audio: { url: audioUrl },
                 caption: 'Voice Note'
@@ -134,7 +198,7 @@ const sendVoiceNoteTool: MCPTool = {
 
         return {
             success: true,
-            message: `Voice note sent to ${recipient} on ${platform}`,
+            message: `Voice note sent to ${recipient} on ${resolvedPlatform}`,
             audioUrl
         };
     }

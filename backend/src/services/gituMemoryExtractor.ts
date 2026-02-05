@@ -23,6 +23,9 @@ export interface ExtractedFact {
 const SYSTEM_USER_ID = 'system';
 
 class GituMemoryExtractor {
+    private readonly verboseLogs =
+        process.env.GITU_LOG_LEVEL === 'debug' || process.env.GITU_LOG_VERBOSE === 'true';
+
     /**
      * Extract memorable facts from a conversation turn.
      * This should be called after each user message or conversation.
@@ -42,14 +45,28 @@ class GituMemoryExtractor {
         if (userMessage.length < 20 || this.isSimpleQuery(userMessage)) {
             return [];
         }
+        if (this.isEphemeralIntent(userMessage) && !this.hasGoalSignal(userMessage)) {
+            return [];
+        }
 
         try {
             // Use AI to extract facts
             const facts = await this.extractFactsWithAI(userId, userMessage, assistantResponse);
 
             // Store extracted facts
+            const hasGoalSignal = this.hasGoalSignal(userMessage);
             for (const fact of facts) {
-                if (fact.confidence >= 0.6) {
+                if (this.isLikelyEphemeralFact(fact.content)) {
+                    continue;
+                }
+                if ((fact.category === 'goal' || fact.category === 'work') && !hasGoalSignal) {
+                    continue;
+                }
+                const minConfidence =
+                    fact.category === 'goal' || fact.category === 'work'
+                        ? (hasGoalSignal ? 0.75 : 0.85)
+                        : 0.6;
+                if (fact.confidence >= minConfidence) {
                     try {
                         await gituMemoryService.createMemory(userId, {
                             content: fact.content,
@@ -58,7 +75,9 @@ class GituMemoryExtractor {
                             tags: [platform, 'auto-extracted'],
                             confidence: fact.confidence,
                         });
-                        console.log(`[MemoryExtractor] Stored fact: "${fact.content.substring(0, 50)}..."`);
+                        if (this.verboseLogs) {
+                            console.log(`[MemoryExtractor] Stored fact: "${fact.content.substring(0, 50)}..."`);
+                        }
                     } catch (error) {
                         // Ignore duplicate or storage errors
                         console.warn('[MemoryExtractor] Failed to store fact:', error);
@@ -92,6 +111,24 @@ class GituMemoryExtractor {
         return false;
     }
 
+    private hasGoalSignal(message: string): boolean {
+        const lower = message.toLowerCase();
+        return /\b(my goal|my goals|long-term|long term|plan to|planning to|building|working on|project|startup|launching|shipping)\b/.test(lower);
+    }
+
+    private isEphemeralIntent(message: string): boolean {
+        const lower = message.toLowerCase();
+        return /\b(write|draft|summarize|translate|generate|create|make|compose|reply|send|fix|debug|analyze|research|look up|find)\b/.test(lower);
+    }
+
+    private isLikelyEphemeralFact(content: string): boolean {
+        const lower = content.toLowerCase();
+        if (!/(user (wants|asked|needs|requested|is asking) to)/.test(lower)) {
+            return false;
+        }
+        return /(write|draft|summarize|translate|generate|create|make|compose|reply|send|fix|debug|analyze|research|look up|find)/.test(lower);
+    }
+
     /**
      * Use AI to extract facts from a conversation.
      */
@@ -108,6 +145,7 @@ Extract facts that are:
 - Work/project details (current projects, goals)
 - Relationships (family, friends mentioned)
 - Interests and hobbies
+Only include durable, long-term facts. Do NOT include one-off requests, short-lived tasks, or transient intents.
 
 Respond with a JSON array of facts. Each fact should have:
 - "content": A clear, standalone statement about the user (e.g., "User's favorite color is blue")

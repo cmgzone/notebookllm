@@ -34,7 +34,9 @@ whatsapp_contacts.json
 backend/.env
 admin_panel/.env
 
-# IDEs
+# Temporary files
+tmp/
+
 .idea/
 .vscode/
 *.iml

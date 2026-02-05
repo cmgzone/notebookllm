@@ -32,6 +32,7 @@ export interface MCPContext {
   userId: string;
   sessionId?: string;
   notebookId?: string;
+  platform?: string;
 }
 
 export interface MCPToolDefinition {
