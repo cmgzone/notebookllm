@@ -311,6 +311,10 @@ export async function performCloudResearch(
     config: ResearchConfig,
     onProgress?: (progress: ResearchProgress) => void
 ): Promise<{ sessionId: string; report: string; sources: ResearchSource[] }> {
+    if (typeof query !== 'string' || query.trim().length === 0) {
+        throw new Error('Query is required');
+    }
+    const normalizedQuery = query.trim();
     const sessionId = uuidv4();
     const depthConfig = getDepthConfig(config.depth);
     const sources: ResearchSource[] = [];
@@ -324,7 +328,7 @@ export async function performCloudResearch(
         // Generate sub-queries
         onProgress?.({ status: 'Generating research angles...', progress: 0.15, isComplete: false });
         const subQueries = await generateSubQueries(
-            query,
+            normalizedQuery,
             config.template,
             depthConfig.subQueryCount,
             config.provider,
@@ -333,8 +337,8 @@ export async function performCloudResearch(
 
         // Initial media search
         const [images, videos] = await Promise.all([
-            searchImages(query),
-            searchVideos(query)
+            searchImages(normalizedQuery),
+            searchVideos(normalizedQuery)
         ]);
         allImages.push(...images);
         allVideos.push(...videos);
@@ -393,7 +397,7 @@ export async function performCloudResearch(
             // Generate follow-up queries based on initial findings
             const followUpMessages: ChatMessage[] = [{
                 role: 'user',
-                content: `Based on initial research on "${query}", generate 3 follow-up search queries to explore deeper. Sources found: ${sources.slice(0, 5).map(s => s.title).join(', ')}. Return only queries, one per line.`
+                content: `Based on initial research on "${normalizedQuery}", generate 3 follow-up search queries to explore deeper. Sources found: ${sources.slice(0, 5).map(s => s.title).join(', ')}. Return only queries, one per line.`
             }];
 
             try {
@@ -434,7 +438,7 @@ export async function performCloudResearch(
         onProgress?.({ status: 'Synthesizing report...', progress: 0.8, sources, images: uniqueImages, videos: uniqueVideos, isComplete: false });
 
         const report = await synthesizeReport(
-            query,
+            normalizedQuery,
             sources,
             uniqueImages,
             uniqueVideos,
@@ -449,7 +453,7 @@ export async function performCloudResearch(
         await pool.query(
             `INSERT INTO research_sessions (id, user_id, notebook_id, query, report, depth, template, status)
              VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed')`,
-            [sessionId, userId, config.notebookId || null, query, report, config.depth, config.template]
+            [sessionId, userId, config.notebookId || null, normalizedQuery, report, config.depth, config.template]
         );
 
         for (const source of sources) {

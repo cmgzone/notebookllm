@@ -28,6 +28,10 @@ const deepResearchTool: MCPTool = {
     },
     handler: async (args: any, context: MCPContext) => {
         const { query, depth = 'standard', template = 'general' } = args;
+        const normalizedQuery = typeof query === 'string' ? query.trim() : '';
+        if (!normalizedQuery) {
+            throw new Error('Query is required');
+        }
 
         const depthValue = depth as ResearchDepth;
         const creditCost =
@@ -47,7 +51,7 @@ const deepResearchTool: MCPTool = {
             {
                 depth: depthValue,
                 template,
-                queryLength: typeof query === 'string' ? query.length : 0
+                queryLength: normalizedQuery.length
             }
         );
 
@@ -55,9 +59,9 @@ const deepResearchTool: MCPTool = {
             throw new Error(consumeResult.error || 'Failed to consume credits');
         }
 
-        console.log(`[ResearchTool] Starting research for user ${context.userId}: "${query}"`);
+        console.log(`[ResearchTool] Starting research for user ${context.userId}: "${normalizedQuery}"`);
         try {
-            const result = await performCloudResearch(context.userId, query, {
+            const result = await performCloudResearch(context.userId, normalizedQuery, {
                 depth: depthValue,
                 template: template as ResearchTemplate,
                 notebookId: context.notebookId
