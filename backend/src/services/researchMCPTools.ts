@@ -1,5 +1,6 @@
 import { gituMCPHub, MCPTool, MCPContext } from './gituMCPHub.js';
 import { performCloudResearch, ResearchDepth, ResearchTemplate } from './researchService.js';
+import { checkCredits, consumeCredits, CreditCosts } from './creditService.js';
 
 /**
  * Tool: Deep Research
@@ -8,7 +9,6 @@ import { performCloudResearch, ResearchDepth, ResearchTemplate } from './researc
 const deepResearchTool: MCPTool = {
     name: 'deep_research',
     description: 'Perform comprehensive web research on any topic. Returns a detailed report and sources.',
-    requiresPremium: true,
     schema: {
         type: 'object',
         properties: {
@@ -29,20 +29,56 @@ const deepResearchTool: MCPTool = {
     handler: async (args: any, context: MCPContext) => {
         const { query, depth = 'standard', template = 'general' } = args;
 
+        const depthValue = depth as ResearchDepth;
+        const creditCost =
+            depthValue === 'deep' ? CreditCosts.deepResearch * 2 : CreditCosts.deepResearch;
+
+        const creditCheck = await checkCredits(context.userId, creditCost);
+        if (!creditCheck.hasEnough) {
+            throw new Error(
+                `Insufficient credits. Required: ${creditCost}, available: ${creditCheck.currentBalance}`
+            );
+        }
+
+        const consumeResult = await consumeCredits(
+            context.userId,
+            creditCost,
+            'deep_research',
+            {
+                depth: depthValue,
+                template,
+                queryLength: typeof query === 'string' ? query.length : 0
+            }
+        );
+
+        if (!consumeResult.success) {
+            throw new Error(consumeResult.error || 'Failed to consume credits');
+        }
+
         console.log(`[ResearchTool] Starting research for user ${context.userId}: "${query}"`);
+        try {
+            const result = await performCloudResearch(context.userId, query, {
+                depth: depthValue,
+                template: template as ResearchTemplate,
+                notebookId: context.notebookId
+            });
 
-        const result = await performCloudResearch(context.userId, query, {
-            depth: depth as ResearchDepth,
-            template: template as ResearchTemplate,
-            notebookId: context.notebookId
-        });
-
-        return {
-            success: true,
-            report: result.report,
-            sourceCount: result.sources.length,
-            sessionId: result.sessionId
-        };
+            return {
+                success: true,
+                report: result.report,
+                sourceCount: result.sources.length,
+                sessionId: result.sessionId
+            };
+        } catch (error) {
+            try {
+                await consumeCredits(context.userId, -creditCost, 'refund', {
+                    reason: 'deep_research_failed'
+                });
+            } catch (refundError) {
+                console.error('[ResearchTool] Failed to refund credits:', refundError);
+            }
+            throw error;
+        }
     }
 };
 
@@ -62,7 +98,7 @@ const webSearchTool: MCPTool = {
         required: ['query']
     },
     handler: async (args: any, context: MCPContext) => {
-        // Dynamically import to avoid circular dependency if any, 
+        // Dynamically import to avoid circular dependency if any,
         // although researchService is a standalone file.
         const { searchWeb } = await import('./researchService.js');
 

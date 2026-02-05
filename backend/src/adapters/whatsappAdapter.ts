@@ -1129,7 +1129,7 @@ class WhatsAppAdapter {
     async sendMessage(jid: string, content: string | { 
         text?: string; 
         image?: string; 
-        video?: string; 
+        video?: string | Buffer; 
         document?: string; 
         fileName?: string;
         mimetype?: string;

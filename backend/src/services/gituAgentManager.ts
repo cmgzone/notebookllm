@@ -1,7 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database.js';
-import { gituMessageGateway } from './gituMessageGateway.js';
-
 import { gituAIRouter } from './gituAIRouter.js';
 import { gituEvaluationService } from './gituEvaluationService.js';
 import { gituMessageGateway } from './gituMessageGateway.js';
