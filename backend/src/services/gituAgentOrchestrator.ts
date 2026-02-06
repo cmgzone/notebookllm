@@ -4,6 +4,8 @@ import { gituAIRouter, TaskType } from './gituAIRouter.js';
 import { gituAgentManager, AgentConfig } from './gituAgentManager.js';
 import { gituEvaluationService } from './gituEvaluationService.js';
 import { gituMissionControl, Mission, MissionStatus } from './gituMissionControl.js';
+import { gituMCPHub } from './gituMCPHub.js';
+import { gituMessageGateway } from './gituMessageGateway.js';
 
 export interface MissionPlan {
     objective: string;
@@ -16,12 +18,72 @@ export interface SwarmTask {
     description: string;
     role: string; // e.g. "Researcher", "Coder"
     dependencies: string[]; // IDs of tasks that must complete first
+    allowedTools?: string[]; // Tool allowlist (supports wildcards like "github_*" or "*")
     agentId?: string;
     blockedBy?: string[]; // Failed dependency IDs
     status: 'pending' | 'in_progress' | 'completed' | 'failed';
 }
 
 class GituAgentOrchestrator {
+    private readonly DEFAULT_MAX_TASKS = 100;
+
+    private getMaxTasks(): number {
+        const raw = process.env.GITU_SWARM_MAX_TASKS;
+        const parsed = raw ? Number(raw) : NaN;
+        if (Number.isFinite(parsed) && parsed > 0) {
+            return Math.min(parsed, this.DEFAULT_MAX_TASKS);
+        }
+        return this.DEFAULT_MAX_TASKS;
+    }
+
+    private normalizePlan(plan: MissionPlan, objective: string, maxTasks: number): MissionPlan {
+        const incomingTasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
+        const trimmed = incomingTasks.slice(0, maxTasks);
+
+        let normalizedTasks: SwarmTask[] = trimmed.map((t, idx) => {
+            const dependencies = Array.isArray(t.dependencies)
+                ? t.dependencies.filter(dep => typeof dep === 'string' && dep.trim().length > 0)
+                : [];
+
+            const allowedToolsRaw = Array.isArray((t as any).allowedTools)
+                ? (t as any).allowedTools.filter((tool: any) => typeof tool === 'string' && tool.trim().length > 0)
+                : undefined;
+            const allowedTools = allowedToolsRaw !== undefined ? allowedToolsRaw : ['*'];
+
+            return {
+                id: typeof t.id === 'string' && t.id.trim().length > 0 ? t.id : `task_${idx + 1}`,
+                description: typeof t.description === 'string' && t.description.trim().length > 0 ? t.description : objective,
+                role: typeof t.role === 'string' && t.role.trim().length > 0 ? t.role : 'generalist',
+                dependencies,
+                allowedTools,
+                status: t.status || 'pending',
+            };
+        });
+
+        if (normalizedTasks.length === 0) {
+            normalizedTasks = [{
+                id: 'task_1',
+                description: objective,
+                role: 'generalist',
+                dependencies: [],
+                allowedTools: ['*'],
+                status: 'pending',
+            }];
+        }
+
+        const idSet = new Set(normalizedTasks.map(t => t.id));
+        normalizedTasks = normalizedTasks.map(t => ({
+            ...t,
+            dependencies: t.dependencies.filter(dep => idSet.has(dep)),
+        }));
+
+        return {
+            objective,
+            strategy: plan?.strategy || 'parallel',
+            tasks: normalizedTasks,
+        };
+    }
+
     /**
      * Create and plan a new mission.
      * Uses AI to decompose the high-level objective into a dependency graph.
@@ -33,12 +95,18 @@ class GituAgentOrchestrator {
         // 2. AI Planning Step (Decomposition)
         console.log(`[Orchestrator] Planning mission ${mission.id}: ${objective}`);
 
+        const maxTasks = this.getMaxTasks();
+        const availableTools = await gituMCPHub.listTools(userId);
+        const toolNames = availableTools.map(t => t.name).sort();
+        const toolListText = toolNames.length > 0 ? toolNames.join(', ') : '(none)';
+
         // We ask the AI to break it down into tasks
         const prompt = `
       OBJECTIVE: ${objective}
       
       You are the Gitu Swarm Orchestrator. 
       Break this objective down into a set of distinct, actionable tasks for a team of autonomous agents.
+      Prefer parallel execution. Only use dependencies when strictly necessary.
       
       Return a JSON object with this structure:
       {
@@ -47,13 +115,19 @@ class GituAgentOrchestrator {
           {
             "id": "task_1",
             "description": "Detailed instruction for the agent",
-            "role": "coder" | "researcher" | "writer" | "reviewer",
-            "dependencies": [] 
+            "role": "coder" | "researcher" | "writer" | "reviewer" | "generalist",
+            "dependencies": [],
+            "allowedTools": ["tool_name", "github_*", "*"] // optional
           }
         ]
       }
       
-      Keep it efficient. Max 5 initial tasks.
+      Rules:
+      - Max ${maxTasks} tasks.
+      - If a task needs no tools, set allowedTools to [].
+      - Otherwise choose allowedTools from this list: ${toolListText}
+      - Use "*" only if any tool is acceptable for that task.
+      - Keep tasks focused and non-overlapping.
     `;
 
         try {
@@ -66,9 +140,10 @@ class GituAgentOrchestrator {
 
             // Parse AI plan
             const plan = this.parsePlan(response.content);
+            const normalizedPlan = this.normalizePlan(plan, objective, maxTasks);
 
             // Ensure all tasks have a status of 'pending' if not provided by AI
-            plan.tasks = plan.tasks.map(t => ({
+            normalizedPlan.tasks = normalizedPlan.tasks.map(t => ({
                 ...t,
                 status: t.status || 'pending',
                 dependencies: t.dependencies || []
@@ -78,14 +153,14 @@ class GituAgentOrchestrator {
             await gituMissionControl.updateMissionState(mission.id, {
                 status: 'active',
                 contextUpdates: {
-                    plan,
+                    plan: normalizedPlan,
                     swarmState: 'deployed'
                 },
-                logEntry: `Mission planned: ${plan.tasks.length} tasks generated.`
+                logEntry: `Mission planned: ${normalizedPlan.tasks.length} tasks generated.`
             });
 
             // 3. Spawns Initial Agents (Roots of dependency graph)
-            await this.unleashSwarm(userId, mission.id, plan);
+            await this.unleashSwarm(userId, mission.id, normalizedPlan);
 
             return await gituMissionControl.getMission(mission.id) as Mission;
 
@@ -163,7 +238,14 @@ class GituAgentOrchestrator {
             console.log(`[Orchestrator] Unlocking ${readyTasks.length} dependent tasks`);
             await this.dispatchTasks(mission.userId, missionId, updatedPlan, readyTasks);
         } else if (allTerminal) {
+            if (mission.status === 'completed' || mission.context?.swarmState === 'synthesizing') {
+                return;
+            }
             console.log(`[Orchestrator] All tasks terminal. Synthesizing results.`);
+            await gituMissionControl.updateMissionState(missionId, {
+                contextUpdates: { swarmState: 'synthesizing' },
+                logEntry: 'Swarm synthesis started.'
+            });
             await this.synthesizeMissionResults(missionId);
         }
     }
@@ -193,7 +275,10 @@ class GituAgentOrchestrator {
                 autoLoadPlugins: true,
                 initialMemory: {
                     taskDescription: task.description,
-                    taskId: task.id
+                    taskId: task.id,
+                    taskRole: task.role,
+                    missionObjective: plan.objective,
+                    allowedTools: task.allowedTools ?? ['*']
                 }
             };
 
@@ -241,6 +326,23 @@ class GituAgentOrchestrator {
         }
 
         const agentOutputs = missionAgents.map(a => {
+            const artifact = a.result?.artifact;
+            if (artifact && typeof artifact === 'object') {
+                const summary = artifact.summary || artifact.title || 'No summary';
+                const findings = Array.isArray(artifact.findings) ? artifact.findings.join('; ') : '';
+                const deliverables = Array.isArray(artifact.deliverables) ? artifact.deliverables.join('; ') : '';
+                const openQuestions = Array.isArray(artifact.openQuestions) ? artifact.openQuestions.join('; ') : '';
+                const confidence = typeof artifact.confidence === 'number' ? artifact.confidence : undefined;
+                return [
+                    `Task: ${a.task}`,
+                    `Status: ${a.status}`,
+                    `Summary: ${summary}`,
+                    findings ? `Findings: ${findings}` : undefined,
+                    deliverables ? `Deliverables: ${deliverables}` : undefined,
+                    openQuestions ? `Open Questions: ${openQuestions}` : undefined,
+                    confidence !== undefined ? `Confidence: ${confidence}` : undefined
+                ].filter(Boolean).join('\n');
+            }
             const output = a.result?.output || a.result?.error || 'No output';
             return `Task: ${a.task}\nStatus: ${a.status}\nResult: ${output}`;
         }).join('\n\n---\n\n');
@@ -257,9 +359,14 @@ class GituAgentOrchestrator {
            ${agentOutputs}
            
            SYNTHESIZE THESE RESULTS INTO A FINAL PROFESSIONAL REPORT.
-           Focus on the outcome and actionable next steps.
+           Use this structure:
+           1) Executive Summary
+           2) Consolidated Findings
+           3) Risks / Open Questions
+           4) Recommended Next Steps
+           Focus on outcomes and actionable next steps.
          `,
-                taskType: 'chat',
+                taskType: 'analysis',
                 platform: 'terminal'
             });
 
@@ -267,7 +374,8 @@ class GituAgentOrchestrator {
             await gituMissionControl.updateMissionState(missionId, {
                 status: 'completed',
                 completedAt: new Date(),
-                artifacts: { finalReport: response.content }
+                artifacts: { finalReport: response.content },
+                contextUpdates: { swarmState: 'completed' }
             });
 
             const plan = mission.context.plan as MissionPlan | undefined;
@@ -284,6 +392,12 @@ class GituAgentOrchestrator {
                 });
             } catch (e) {
                 console.error(`[Orchestrator] Failed to store mission evaluation for ${missionId}`, e);
+            }
+
+            try {
+                await gituMessageGateway.notifyUser(mission.userId, response.content);
+            } catch (e) {
+                console.error(`[Orchestrator] Failed to notify user for mission ${missionId}`, e);
             }
 
             return response.content;

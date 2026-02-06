@@ -34,6 +34,12 @@ export interface AgentConfig {
 
 export class GituAgentManager {
   private readonly MAX_AGENTS_PER_USER = 100; // Increased limit for swarms
+  private readonly MAX_QUEUE_BATCH = (() => {
+    const raw = process.env.GITU_AGENT_QUEUE_LIMIT;
+    const parsed = raw ? Number(raw) : NaN;
+    if (Number.isFinite(parsed) && parsed > 0) return Math.min(parsed, 100);
+    return 100;
+  })();
 
   /**
    * Spawn a new autonomous agent.
@@ -126,7 +132,7 @@ export class GituAgentManager {
       `SELECT * FROM gitu_agents 
        WHERE user_id = $1 AND status IN ('pending', 'active')
        ORDER BY updated_at ASC
-       LIMIT 5`, // Process up to 5 agents per tick per user
+       LIMIT ${this.MAX_QUEUE_BATCH}`, // Process up to MAX_QUEUE_BATCH agents per tick per user
       [userId]
     );
 
@@ -170,10 +176,12 @@ export class GituAgentManager {
    */
   private async executeAgentStep(agent: GituAgent): Promise<void> {
     const history = (agent.memory.history as any[]) || [];
+    const allowedTools = this.normalizeAllowedTools((agent.memory as any)?.allowedTools);
+    const allowedToolsText = allowedTools.length === 0 ? 'none' : allowedTools.join(', ');
 
     const response = await gituAIRouter.route({
       userId: agent.userId,
-      prompt: `Recent Context: ${JSON.stringify(history.slice(-5))}\n\nTask: ${agent.task}\n\nRespond with a single JSON object in a \`\`\`json\`\`\` code block:\n{\n  \"status\": \"continue\" | \"done\" | \"failed\",\n  \"message\": \"what you did / what you will do next\",\n  \"toolCall\": { \"tool\": \"tool_name\", \"args\": { } }\n}\n\nOmit toolCall if no tool is needed.`,
+      prompt: `Recent Context: ${JSON.stringify(history.slice(-5))}\n\nTask: ${agent.task}\n\nAllowed tools for this task: ${allowedToolsText}\n\nRespond with a single JSON object in a \`\`\`json\`\`\` code block:\n{\n  \"status\": \"continue\" | \"done\" | \"failed\",\n  \"message\": \"what you did / what you will do next\",\n  \"toolCall\": { \"tool\": \"tool_name\", \"args\": { } },\n  \"artifact\": {\n    \"title\": \"Short title\",\n    \"summary\": \"Concise summary of results\",\n    \"findings\": [\"bullet\", \"bullet\"],\n    \"deliverables\": [\"item\"],\n    \"openQuestions\": [\"question\"],\n    \"confidence\": 0.0\n  }\n}\n\nRules:\n- Include toolCall only if you need a tool from the allowed list.\n- Include artifact only when status is \"done\" or \"failed\".\n- If no tool is needed, omit toolCall.\n- Confidence is 0.0 to 1.0.`,
       taskType: 'chat',
       platform: 'terminal',
       includeSystemPrompt: true, // Let router build the standard Gitu prompt + tools
@@ -186,15 +194,19 @@ export class GituAgentManager {
 
     const toolCall = envelope?.toolCall || this.tryParseLegacyToolCall(rawContent);
     if (toolCall?.tool && toolCall?.args) {
-      console.log(`[Agent ${agent.id}] Executing tool: ${toolCall.tool}`);
-      try {
-        const result = await gituMCPHub.executeTool(toolCall.tool, toolCall.args, {
-          userId: agent.userId,
-          sessionId: agent.id
-        });
-        toolOutput = `\nTool '${toolCall.tool}' Result: ${JSON.stringify(result)}`;
-      } catch (e: any) {
-        toolOutput = `\nTool '${toolCall.tool}' Failed: ${e.message}`;
+      if (!this.isToolAllowed(allowedTools, toolCall.tool)) {
+        toolOutput = `\nTool '${toolCall.tool}' Blocked: not allowed for this task.`;
+      } else {
+        console.log(`[Agent ${agent.id}] Executing tool: ${toolCall.tool}`);
+        try {
+          const result = await gituMCPHub.executeTool(toolCall.tool, toolCall.args, {
+            userId: agent.userId,
+            sessionId: agent.id
+          });
+          toolOutput = `\nTool '${toolCall.tool}' Result: ${JSON.stringify(result)}`;
+        } catch (e: any) {
+          toolOutput = `\nTool '${toolCall.tool}' Failed: ${e.message}`;
+        }
       }
     }
 
@@ -235,7 +247,11 @@ export class GituAgentManager {
             : null;
 
     if (completionStatus === 'done') {
-      await this.updateAgentStatus(agent.id, 'completed', { output: content + toolOutput });
+      const resultPayload: any = { output: content + toolOutput };
+      if (envelope?.artifact && typeof envelope.artifact === 'object') {
+        resultPayload.artifact = envelope.artifact;
+      }
+      await this.updateAgentStatus(agent.id, 'completed', resultPayload);
 
       await gituMessageGateway.notifyUser(
         agent.userId,
@@ -267,7 +283,11 @@ export class GituAgentManager {
         }
       }
     } else if (completionStatus === 'failed') {
-      await this.updateAgentStatus(agent.id, 'failed', { output: content + toolOutput });
+      const resultPayload: any = { output: content + toolOutput };
+      if (envelope?.artifact && typeof envelope.artifact === 'object') {
+        resultPayload.artifact = envelope.artifact;
+      }
+      await this.updateAgentStatus(agent.id, 'failed', resultPayload);
 
       await gituMessageGateway.notifyUser(
         agent.userId,
@@ -307,7 +327,7 @@ export class GituAgentManager {
     }
   }
 
-  private tryParseAgentEnvelope(content: string): { status: 'continue' | 'done' | 'failed'; message: string; toolCall?: { tool: string; args: any } } | null {
+  private tryParseAgentEnvelope(content: string): { status: 'continue' | 'done' | 'failed'; message: string; toolCall?: { tool: string; args: any }; artifact?: any } | null {
     const jsonCandidate = this.extractEnvelopeJson(content);
     if (!jsonCandidate) return null;
     try {
@@ -321,10 +341,15 @@ export class GituAgentManager {
       if (status !== 'continue' && status !== 'done' && status !== 'failed') return null;
       if (!message) return null;
       const toolCall = parsed?.toolCall || parsed?.tool_call;
+      const artifact = parsed?.artifact && typeof parsed?.artifact === 'object' ? parsed.artifact : undefined;
+      const result: { status: 'continue' | 'done' | 'failed'; message: string; toolCall?: { tool: string; args: any }; artifact?: any } = { status, message };
       if (toolCall && typeof toolCall?.tool === 'string' && toolCall?.args && typeof toolCall?.args === 'object') {
-        return { status, message, toolCall: { tool: toolCall.tool, args: toolCall.args } };
+        result.toolCall = { tool: toolCall.tool, args: toolCall.args };
       }
-      return { status, message };
+      if (artifact !== undefined) {
+        result.artifact = artifact;
+      }
+      return result;
     } catch {
       return null;
     }
@@ -364,6 +389,35 @@ export class GituAgentManager {
     if (/^\s*(DONE|COMPLETED|FINISHED|FINAL)\b/m.test(content)) return 'done';
     if (/^\s*(FAILED|ERROR|FAILURE)\b/m.test(content)) return 'failed';
     return null;
+  }
+
+  private normalizeAllowedTools(value: any): string[] {
+    if (!Array.isArray(value)) return ['*'];
+    return value
+      .filter(v => typeof v === 'string' && v.trim().length > 0)
+      .map(v => v.trim());
+  }
+
+  private isToolAllowed(allowedTools: string[], toolName: string): boolean {
+    if (!Array.isArray(allowedTools)) return true;
+    if (allowedTools.length === 0) return false;
+    const lowerTool = toolName.toLowerCase();
+
+    const matchesPattern = (pattern: string): boolean => {
+      const lowerPattern = pattern.toLowerCase();
+      if (lowerPattern === '*') return true;
+      if (lowerPattern.endsWith('*') && lowerPattern.length > 1) {
+        return lowerTool.startsWith(lowerPattern.slice(0, -1));
+      }
+      if (lowerPattern.includes('*')) {
+        const escaped = lowerPattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp('^' + escaped.replace(/\\\*/g, '.*') + '$');
+        return regex.test(lowerTool);
+      }
+      return lowerTool === lowerPattern;
+    };
+
+    return allowedTools.some(matchesPattern);
   }
 
   /**

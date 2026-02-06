@@ -120,8 +120,11 @@ class GituTaskScheduler {
         `SELECT * FROM gitu_scheduled_tasks
          WHERE enabled = true
          AND (next_run_at IS NULL OR next_run_at <= NOW())
+         AND jsonb_typeof(action) = 'object'
+         AND (action->>'type') = ANY($1::text[])
          ORDER BY next_run_at ASC NULLS FIRST
-         LIMIT 100`
+         LIMIT 100`,
+        [['send_message', 'run_command', 'ai_request', 'webhook', 'custom']]
       );
 
       const tasks = result.rows.map(row => this.mapRowToTask(row));
