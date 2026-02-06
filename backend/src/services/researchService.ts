@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database.js';
 import { generateWithGemini, generateWithOpenRouter, type ChatMessage } from './aiService.js';
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 // Research depth configuration
 export type ResearchDepth = 'quick' | 'standard' | 'deep';
 export type ResearchTemplate = 'general' | 'academic' | 'productComparison' | 'marketAnalysis' | 'howToGuide' | 'prosAndCons';
@@ -95,58 +97,98 @@ export async function searchWeb(query: string, num: number = 5): Promise<any[]> 
         return [];
     }
 
-    try {
-        const response = await axios.post(
-            'https://google.serper.dev/search',
-            { q: query, num },
-            {
-                headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-                timeout: 15000 // 15 second timeout
+    let retries = 3;
+    let delay = 2000;
+
+    while (retries > 0) {
+        try {
+            const response = await axios.post(
+                'https://google.serper.dev/search',
+                { q: query, num },
+                {
+                    headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+                    timeout: 15000 // 15 second timeout
+                }
+            );
+            return response.data.organic || [];
+        } catch (error: any) {
+            if (error.response?.status === 429) {
+                console.warn(`[Research] Serper rate limit hit (429). Retrying in ${delay}ms...`);
+                await sleep(delay);
+                delay *= 2;
+                retries--;
+                continue;
             }
-        );
-        return response.data.organic || [];
-    } catch (error: any) {
-        console.error('Serper search error:', error.message);
-        return [];
+            console.error('Serper search error:', error.message);
+            return [];
+        }
     }
+    console.error('[Research] Serper search failed after retries due to rate limiting.');
+    return [];
 }
 
 export async function searchImages(query: string, num: number = 5): Promise<string[]> {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey) return [];
 
-    try {
-        const response = await axios.post(
-            'https://google.serper.dev/images',
-            { q: query, num },
-            {
-                headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-                timeout: 15000 // 15 second timeout
+    let retries = 3;
+    let delay = 2000;
+
+    while (retries > 0) {
+        try {
+            const response = await axios.post(
+                'https://google.serper.dev/images',
+                { q: query, num },
+                {
+                    headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+                    timeout: 15000 // 15 second timeout
+                }
+            );
+            return (response.data.images || []).map((img: any) => img.imageUrl).filter(Boolean);
+        } catch (error: any) {
+            if (error.response?.status === 429) {
+                console.warn(`[Research] Serper Images rate limit hit (429). Retrying in ${delay}ms...`);
+                await sleep(delay);
+                delay *= 2;
+                retries--;
+                continue;
             }
-        );
-        return (response.data.images || []).map((img: any) => img.imageUrl).filter(Boolean);
-    } catch (error) {
-        return [];
+            return [];
+        }
     }
+    return [];
 }
 
 export async function searchVideos(query: string, num: number = 3): Promise<string[]> {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey) return [];
 
-    try {
-        const response = await axios.post(
-            'https://google.serper.dev/videos',
-            { q: query, num },
-            {
-                headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-                timeout: 15000 // 15 second timeout
+    let retries = 3;
+    let delay = 2000;
+
+    while (retries > 0) {
+        try {
+            const response = await axios.post(
+                'https://google.serper.dev/videos',
+                { q: query, num },
+                {
+                    headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+                    timeout: 15000 // 15 second timeout
+                }
+            );
+            return (response.data.videos || []).map((v: any) => v.link).filter(Boolean);
+        } catch (error: any) {
+            if (error.response?.status === 429) {
+                console.warn(`[Research] Serper Videos rate limit hit (429). Retrying in ${delay}ms...`);
+                await sleep(delay);
+                delay *= 2;
+                retries--;
+                continue;
             }
-        );
-        return (response.data.videos || []).map((v: any) => v.link).filter(Boolean);
-    } catch (error) {
-        return [];
+            return [];
+        }
     }
+    return [];
 }
 
 export async function fetchPageContent(url: string): Promise<string> {

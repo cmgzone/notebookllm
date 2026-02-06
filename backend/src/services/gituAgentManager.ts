@@ -149,9 +149,14 @@ export class GituAgentManager {
 
     const agents = agentsResult.rows.map(this.mapRowToAgent);
 
-    // Process in parallel with error handling and timeout
-    const promises = agents.map(agent => this.processSingleAgentSafe(agent));
-    await Promise.allSettled(promises);
+    // Process in parallel with concurrency limit to prevent API rate limits
+    const CONCURRENCY_LIMIT = 5;
+    
+    for (let i = 0; i < agents.length; i += CONCURRENCY_LIMIT) {
+      const chunk = agents.slice(i, i + CONCURRENCY_LIMIT);
+      const promises = chunk.map(agent => this.processSingleAgentSafe(agent));
+      await Promise.allSettled(promises);
+    }
   }
 
   private async processSingleAgentSafe(agent: GituAgent): Promise<void> {
