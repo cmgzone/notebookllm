@@ -26,6 +26,11 @@ export interface SwarmTask {
 
 class GituAgentOrchestrator {
     private readonly DEFAULT_MAX_TASKS = 100;
+    private readonly DISABLE_BROWSER_TOOLS = (() => {
+        const raw = process.env.GITU_SWARM_DISABLE_BROWSER_TOOLS;
+        if (!raw) return false;
+        return ['1', 'true', 'yes', 'on'].includes(String(raw).toLowerCase());
+    })();
 
     private getMaxTasks(): number {
         const raw = process.env.GITU_SWARM_MAX_TASKS;
@@ -104,6 +109,11 @@ class GituAgentOrchestrator {
         return rawTools.filter(tool => matchesAnyTool(tool));
     }
 
+    private filterToolNames(toolNames: string[]): string[] {
+        if (!this.DISABLE_BROWSER_TOOLS) return toolNames;
+        return toolNames.filter(name => !name.toLowerCase().startsWith('browser_'));
+    }
+
     /**
      * Create and plan a new mission.
      * Uses AI to decompose the high-level objective into a dependency graph.
@@ -118,7 +128,8 @@ class GituAgentOrchestrator {
         const maxTasks = this.getMaxTasks();
         const availableTools = await gituMCPHub.listTools(userId);
         const toolNames = availableTools.map(t => t.name).sort();
-        const toolListText = toolNames.length > 0 ? toolNames.join(', ') : '(none)';
+        const filteredToolNames = this.filterToolNames(toolNames);
+        const toolListText = filteredToolNames.length > 0 ? filteredToolNames.join(', ') : '(none)';
 
         // We ask the AI to break it down into tasks
         const prompt = `
@@ -146,8 +157,10 @@ class GituAgentOrchestrator {
       - Max ${maxTasks} tasks.
       - If a task needs no tools, set allowedTools to [].
       - Otherwise choose allowedTools from this list: ${toolListText}
+      - If a tool is not listed, do not include it.
       - Use "*" only if any tool is acceptable for that task.
       - Keep tasks focused and non-overlapping.
+      ${this.DISABLE_BROWSER_TOOLS ? '- Browser tools are disabled in this environment.' : ''}
     `;
 
         try {
@@ -160,7 +173,7 @@ class GituAgentOrchestrator {
 
             // Parse AI plan
             const plan = this.parsePlan(response.content);
-            const normalizedPlan = this.normalizePlan(plan, objective, maxTasks, toolNames);
+            const normalizedPlan = this.normalizePlan(plan, objective, maxTasks, filteredToolNames);
 
             // Ensure all tasks have a status of 'pending' if not provided by AI
             normalizedPlan.tasks = normalizedPlan.tasks.map(t => ({

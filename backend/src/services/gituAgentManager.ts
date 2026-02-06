@@ -46,6 +46,11 @@ export class GituAgentManager {
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
     return 8;
   })();
+  private readonly DISABLE_BROWSER_TOOLS = (() => {
+    const raw = process.env.GITU_SWARM_DISABLE_BROWSER_TOOLS;
+    if (!raw) return false;
+    return ['1', 'true', 'yes', 'on'].includes(String(raw).toLowerCase());
+  })();
 
   /**
    * Spawn a new autonomous agent.
@@ -187,6 +192,7 @@ export class GituAgentManager {
       : 0;
     const allowedTools = this.normalizeAllowedTools((agent.memory as any)?.allowedTools);
     const allowedToolsText = allowedTools.length === 0 ? 'none' : allowedTools.join(', ');
+    const browserToolsNote = this.DISABLE_BROWSER_TOOLS ? '\nBrowser tools are disabled in this environment.' : '';
 
     if (stepCount >= this.MAX_AGENT_STEPS) {
       const lastContent = history.length > 0 ? String(history[history.length - 1]?.content ?? '') : 'No output';
@@ -231,7 +237,7 @@ export class GituAgentManager {
 
     const response = await gituAIRouter.route({
       userId: agent.userId,
-      prompt: `Recent Context: ${JSON.stringify(history.slice(-5))}\n\nTask: ${agent.task}\n\nAllowed tools for this task: ${allowedToolsText}\n\nRespond with a single JSON object in a \`\`\`json\`\`\` code block:\n{\n  \"status\": \"continue\" | \"done\" | \"failed\",\n  \"message\": \"what you did / what you will do next\",\n  \"toolCall\": { \"tool\": \"tool_name\", \"args\": { } },\n  \"artifact\": {\n    \"title\": \"Short title\",\n    \"summary\": \"Concise summary of results\",\n    \"findings\": [\"bullet\", \"bullet\"],\n    \"deliverables\": [\"item\"],\n    \"openQuestions\": [\"question\"],\n    \"confidence\": 0.0\n  }\n}\n\nRules:\n- Include toolCall only if you need a tool from the allowed list.\n- Include artifact only when status is \"done\" or \"failed\".\n- If no tool is needed, omit toolCall.\n- Confidence is 0.0 to 1.0.`,
+      prompt: `Recent Context: ${JSON.stringify(history.slice(-5))}\n\nTask: ${agent.task}\n\nAllowed tools for this task: ${allowedToolsText}${browserToolsNote}\n\nRespond with a single JSON object in a \`\`\`json\`\`\` code block:\n{\n  \"status\": \"continue\" | \"done\" | \"failed\",\n  \"message\": \"what you did / what you will do next\",\n  \"toolCall\": { \"tool\": \"tool_name\", \"args\": { } },\n  \"artifact\": {\n    \"title\": \"Short title\",\n    \"summary\": \"Concise summary of results\",\n    \"findings\": [\"bullet\", \"bullet\"],\n    \"deliverables\": [\"item\"],\n    \"openQuestions\": [\"question\"],\n    \"confidence\": 0.0\n  }\n}\n\nRules:\n- Include toolCall only if you need a tool from the allowed list.\n- Include artifact only when status is \"done\" or \"failed\".\n- If no tool is needed, omit toolCall.\n- Confidence is 0.0 to 1.0.`,
       taskType: 'chat',
       platform: 'terminal',
       includeSystemPrompt: true, // Let router build the standard Gitu prompt + tools
@@ -469,6 +475,7 @@ export class GituAgentManager {
     if (!Array.isArray(allowedTools)) return true;
     if (allowedTools.length === 0) return false;
     const lowerTool = toolName.toLowerCase();
+    if (this.DISABLE_BROWSER_TOOLS && lowerTool.startsWith('browser_')) return false;
 
     const matchesPattern = (pattern: string): boolean => {
       const lowerPattern = pattern.toLowerCase();
