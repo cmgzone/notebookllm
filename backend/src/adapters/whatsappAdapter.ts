@@ -270,6 +270,26 @@ class WhatsAppAdapter {
         return this.normalizeJid(jid);
     }
 
+    private getGroupAllowlist(): string[] {
+        const raw = (process.env.GITU_WHATSAPP_GROUP_ALLOWLIST || '').trim();
+        if (!raw) return [];
+        return raw
+            .split(',')
+            .map(value => value.trim())
+            .filter(value => value.length > 0);
+    }
+
+    private isGroupAllowed(remoteJid: string): boolean {
+        const allowlist = this.getGroupAllowlist();
+        if (allowlist.length === 0) return true;
+        const normalizedJid = (this.normalizeContactJid(remoteJid) || remoteJid).toLowerCase();
+        const allow = allowlist.map(item => item.toLowerCase());
+        if (allow.includes(normalizedJid)) return true;
+        const displayName = this.getContactDisplayName(remoteJid);
+        if (displayName && allow.includes(displayName.toLowerCase())) return true;
+        return false;
+    }
+
     private parseGituCommand(text: string): { command: string; args: string } | null {
         const trimmed = text.trim();
         if (!trimmed) return null;
@@ -686,8 +706,15 @@ class WhatsAppAdapter {
         // Check for Note to Self or direct user messages
         const isNoteToSelf = this.isSelfChat(remoteJid);
         const isGroup = remoteJid.endsWith('@g.us');
+        const isGroupAllowed = !isGroup || this.isGroupAllowed(remoteJid);
 
         this.logger.info(`Received message from ${remoteJid}: ${text} (fromMe: ${msg.key.fromMe}, Note to Self: ${isNoteToSelf})`);
+
+        if (isGroup && !isGroupAllowed) {
+            const displayName = this.getContactDisplayName(remoteJid);
+            this.logger.info({ groupJid: remoteJid, groupName: displayName }, 'Group not in allowlist; ignoring message.');
+            return;
+        }
 
         // Upsert contact info from live messages (ensures search works even without full sync)
         try {
