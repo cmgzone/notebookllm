@@ -40,6 +40,12 @@ export class GituAgentManager {
     if (Number.isFinite(parsed) && parsed > 0) return Math.min(parsed, 100);
     return 100;
   })();
+  private readonly MAX_AGENT_STEPS = (() => {
+    const raw = process.env.GITU_AGENT_MAX_STEPS;
+    const parsed = raw ? Number(raw) : NaN;
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    return 8;
+  })();
 
   /**
    * Spawn a new autonomous agent.
@@ -176,8 +182,52 @@ export class GituAgentManager {
    */
   private async executeAgentStep(agent: GituAgent): Promise<void> {
     const history = (agent.memory.history as any[]) || [];
+    const stepCount = typeof (agent.memory as any)?.stepCount === 'number'
+      ? (agent.memory as any).stepCount
+      : 0;
     const allowedTools = this.normalizeAllowedTools((agent.memory as any)?.allowedTools);
     const allowedToolsText = allowedTools.length === 0 ? 'none' : allowedTools.join(', ');
+
+    if (stepCount >= this.MAX_AGENT_STEPS) {
+      const lastContent = history.length > 0 ? String(history[history.length - 1]?.content ?? '') : 'No output';
+      const finalContent = `${lastContent}\n\n[Auto-completed: step limit reached (${this.MAX_AGENT_STEPS})]`;
+      const resultPayload: any = {
+        output: finalContent,
+        artifact: this.buildAutoArtifact(lastContent, 'Step limit reached')
+      };
+
+      await this.updateAgentStatus(agent.id, 'completed', resultPayload);
+
+      await gituMessageGateway.notifyUser(
+        agent.userId,
+        `🎉 **Agent Task Completed**\n\n*Task:* ${agent.task}\n\n*Result:* ${finalContent}`
+      );
+
+      if (agent.memory.missionId) {
+        try {
+          await gituEvaluationService.createAgentCompletionEvaluation({
+            userId: agent.userId,
+            missionId: agent.memory.missionId,
+            agentId: agent.id,
+            status: 'completed',
+            toolCallsAttempted: 0
+          });
+        } catch (e) {
+          console.error(`[AgentManager] Failed to store evaluation for agent ${agent.id}`, e);
+        }
+      }
+
+      if (agent.memory.missionId) {
+        try {
+          const { gituAgentOrchestrator } = await import('./gituAgentOrchestrator.js');
+          await gituAgentOrchestrator.handleTaskCompletion(agent.memory.missionId, agent.id);
+        } catch (e) {
+          console.error(`[AgentManager] Failed to notify orchestrator for agent ${agent.id}`, e);
+        }
+      }
+
+      return;
+    }
 
     const response = await gituAIRouter.route({
       userId: agent.userId,
@@ -234,7 +284,7 @@ export class GituAgentManager {
       newHistory.splice(0, newHistory.length - 20);
     }
 
-    const newMemory = { ...agent.memory, history: newHistory, nonEnvelopeCount };
+    const newMemory = { ...agent.memory, history: newHistory, nonEnvelopeCount, stepCount: stepCount + 1 };
 
     const completionStatus = envelope?.status === 'done'
       ? 'done'
@@ -389,6 +439,23 @@ export class GituAgentManager {
     if (/^\s*(DONE|COMPLETED|FINISHED|FINAL)\b/m.test(content)) return 'done';
     if (/^\s*(FAILED|ERROR|FAILURE)\b/m.test(content)) return 'failed';
     return null;
+  }
+
+  private buildAutoArtifact(content: string, reason: string) {
+    const summary = this.clampText(content || 'Auto-completed', 240);
+    return {
+      title: 'Auto-completed',
+      summary,
+      findings: [],
+      deliverables: [],
+      openQuestions: [reason],
+      confidence: 0.2
+    };
+  }
+
+  private clampText(text: string, max: number): string {
+    if (text.length <= max) return text;
+    return `${text.slice(0, max - 1).trim()}…`;
   }
 
   private normalizeAllowedTools(value: any): string[] {

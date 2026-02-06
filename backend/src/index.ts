@@ -54,6 +54,7 @@ import { registerGoogleCalendarTools } from './services/googleCalendarMCPTools.j
 import { registerShopifyTools } from './services/shopifyMCPTools.js';
 import { registerLanguageTools } from './services/languageMCPTools.js';
 import { registerBrowserTools } from './services/browserMCPTools.js';
+import { registerDocumentTools } from './services/documentMCPTools.js';
 import { registerPluginMCPTools } from './services/pluginMCPTools.js';
 import { registerRuleMCPTools } from './services/ruleMCPTools.js';
 import { registerGitHubTools } from './services/githubMCPTools.js';
@@ -133,6 +134,7 @@ registerGoogleCalendarTools();
 registerShopifyTools();
 registerLanguageTools();
 registerBrowserTools();
+registerDocumentTools();
 registerPluginMCPTools();
 registerRuleMCPTools();
 registerVoiceTools();

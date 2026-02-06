@@ -36,9 +36,10 @@ class GituAgentOrchestrator {
         return this.DEFAULT_MAX_TASKS;
     }
 
-    private normalizePlan(plan: MissionPlan, objective: string, maxTasks: number): MissionPlan {
+    private normalizePlan(plan: MissionPlan, objective: string, maxTasks: number, validTools: string[]): MissionPlan {
         const incomingTasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
         const trimmed = incomingTasks.slice(0, maxTasks);
+        const validToolsLower = validTools.map(t => t.toLowerCase());
 
         let normalizedTasks: SwarmTask[] = trimmed.map((t, idx) => {
             const dependencies = Array.isArray(t.dependencies)
@@ -48,7 +49,8 @@ class GituAgentOrchestrator {
             const allowedToolsRaw = Array.isArray((t as any).allowedTools)
                 ? (t as any).allowedTools.filter((tool: any) => typeof tool === 'string' && tool.trim().length > 0)
                 : undefined;
-            const allowedTools = allowedToolsRaw !== undefined ? allowedToolsRaw : ['*'];
+            const filteredAllowedTools = this.filterAllowedTools(allowedToolsRaw, validToolsLower);
+            const allowedTools = filteredAllowedTools !== undefined ? filteredAllowedTools : ['*'];
 
             return {
                 id: typeof t.id === 'string' && t.id.trim().length > 0 ? t.id : `task_${idx + 1}`,
@@ -82,6 +84,24 @@ class GituAgentOrchestrator {
             strategy: plan?.strategy || 'parallel',
             tasks: normalizedTasks,
         };
+    }
+
+    private filterAllowedTools(rawTools: string[] | undefined, validToolsLower: string[]): string[] | undefined {
+        if (rawTools === undefined) return undefined;
+        if (rawTools.length === 0) return [];
+
+        const matchesAnyTool = (pattern: string): boolean => {
+            const lowerPattern = pattern.toLowerCase();
+            if (lowerPattern === '*') return true;
+            if (lowerPattern.includes('*')) {
+                const escaped = lowerPattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+                const regex = new RegExp('^' + escaped.replace(/\\\*/g, '.*') + '$');
+                return validToolsLower.some(t => regex.test(t));
+            }
+            return validToolsLower.includes(lowerPattern);
+        };
+
+        return rawTools.filter(tool => matchesAnyTool(tool));
     }
 
     /**
@@ -140,7 +160,7 @@ class GituAgentOrchestrator {
 
             // Parse AI plan
             const plan = this.parsePlan(response.content);
-            const normalizedPlan = this.normalizePlan(plan, objective, maxTasks);
+            const normalizedPlan = this.normalizePlan(plan, objective, maxTasks, toolNames);
 
             // Ensure all tasks have a status of 'pending' if not provided by AI
             normalizedPlan.tasks = normalizedPlan.tasks.map(t => ({
