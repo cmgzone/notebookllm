@@ -1,6 +1,6 @@
 # Plugin Prompt Visibility
 
-Gitu plugins can be enabled for execution but hidden from the AI model prompt to reduce prompt size and prevent automatic invocation.
+Plugins can be enabled for execution but hidden from the AI model prompt to reduce prompt size and prevent automatic invocation.
 
 ## Behavior
 - If a plugin has `config.disableModelInvocation = true`, it is excluded from the “User Plugins (Custom Tools)” section of the system prompt.
@@ -24,4 +24,3 @@ Hide a plugin from the model prompt:
   }
 }
 ```
-

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/admin/services/ai_model_service.dart';
 
+typedef ProviderRead = T Function<T>(ProviderListenable<T> provider);
+
 /// Centralized AI settings service - no hardcoded models
 /// All model defaults come from user settings or are fetched dynamically
 class AISettingsService {
@@ -32,9 +34,10 @@ class AISettingsService {
 
   /// Get the actual provider for a specific model by looking it up in the database
   /// This ensures custom models added via admin panel use the correct service
-  static Future<String> getProviderForModel(String modelId, Ref ref) async {
+  static Future<String> getProviderForModel(
+      String modelId, ProviderRead read) async {
     try {
-      final service = ref.read(aiModelServiceProvider);
+      final service = read(aiModelServiceProvider);
       final models = await service.listModels();
 
       // Find the model in the database
@@ -67,12 +70,12 @@ class AISettingsService {
     );
   }
 
-  static Future<AISettings> getSettingsWithDefault(Ref ref) async {
+  static Future<AISettings> getSettingsWithDefault(ProviderRead read) async {
     final prefs = await SharedPreferences.getInstance();
     final modelId = prefs.getString(_modelKey);
 
     if (modelId != null && modelId.isNotEmpty) {
-      final provider = await getProviderForModel(modelId, ref);
+      final provider = await getProviderForModel(modelId, read);
       return AISettings(
         provider: provider,
         model: modelId,
@@ -80,7 +83,7 @@ class AISettingsService {
     }
 
     try {
-      final service = ref.read(aiModelServiceProvider);
+      final service = read(aiModelServiceProvider);
       final defaultModel = await service.getDefaultModel();
       if (defaultModel != null && defaultModel.modelId.isNotEmpty) {
         final provider = _normalizeProvider(defaultModel.provider);
@@ -105,14 +108,15 @@ class AISettingsService {
   }
 
   /// Get settings with provider auto-detected from the model
-  static Future<AISettings> getSettingsWithProviderDetection(Ref ref) async {
+  static Future<AISettings> getSettingsWithProviderDetection(
+      ProviderRead read) async {
     final prefs = await SharedPreferences.getInstance();
     final modelId = prefs.getString(_modelKey);
 
     String provider;
     if (modelId != null && modelId.isNotEmpty) {
       // Auto-detect provider from model
-      provider = await getProviderForModel(modelId, ref);
+      provider = await getProviderForModel(modelId, read);
     } else {
       // No model selected, use saved provider
       provider = prefs.getString(_providerKey) ?? 'gemini';
@@ -138,9 +142,10 @@ class AISettingsService {
 
   /// Get the context window for a specific model
   /// Returns a safe max_tokens value (typically 1/4 of context window, capped)
-  static Future<int> getMaxTokensForModel(String modelId, Ref ref) async {
+  static Future<int> getMaxTokensForModel(
+      String modelId, ProviderRead read) async {
     try {
-      final service = ref.read(aiModelServiceProvider);
+      final service = read(aiModelServiceProvider);
       final models = await service.listModels();
       final model = models.where((m) => m.modelId == modelId).firstOrNull;
 
@@ -168,12 +173,12 @@ class AISettingsService {
   }
 
   /// Get context window for current model
-  static Future<int> getCurrentModelContextWindow(Ref ref) async {
+  static Future<int> getCurrentModelContextWindow(ProviderRead read) async {
     final modelId = await getModel();
     if (modelId == null || modelId.isEmpty) return 32768;
 
     try {
-      final service = ref.read(aiModelServiceProvider);
+      final service = read(aiModelServiceProvider);
       final models = await service.listModels();
       final model = models.where((m) => m.modelId == modelId).firstOrNull;
 
@@ -208,7 +213,7 @@ class AISettingsService {
 
 /// Provider for AI settings
 final aiSettingsProvider = FutureProvider<AISettings>((ref) async {
-  final settings = await AISettingsService.getSettingsWithDefault(ref);
+  final settings = await AISettingsService.getSettingsWithDefault(ref.read);
   return AISettings(
     provider: settings.provider,
     model: settings.model,

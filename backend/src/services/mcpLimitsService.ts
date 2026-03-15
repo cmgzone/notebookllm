@@ -52,6 +52,39 @@ export interface UserMcpLimitOverrides {
 }
 
 class McpLimitsService {
+  private async getPlanMcpLimits(userId: string): Promise<{
+    sourcesLimit: number | null;
+    tokensLimit: number | null;
+    apiCallsPerDay: number | null;
+  }> {
+    try {
+      const result = await pool.query(
+        `SELECT sp.mcp_sources_limit, sp.mcp_tokens_limit, sp.mcp_api_calls_per_day
+         FROM user_subscriptions us
+         JOIN subscription_plans sp ON us.plan_id = sp.id
+         WHERE us.user_id = $1
+         LIMIT 1`,
+        [userId]
+      );
+
+      if (result.rows.length === 0) {
+        return { sourcesLimit: null, tokensLimit: null, apiCallsPerDay: null };
+      }
+
+      const row = result.rows[0];
+      return {
+        sourcesLimit: row.mcp_sources_limit ?? null,
+        tokensLimit: row.mcp_tokens_limit ?? null,
+        apiCallsPerDay: row.mcp_api_calls_per_day ?? null,
+      };
+    } catch (err: any) {
+      const msg = String(err?.message || '').toLowerCase();
+      if (msg.includes('does not exist') && msg.includes('mcp_')) {
+        return { sourcesLimit: null, tokensLimit: null, apiCallsPerDay: null };
+      }
+      throw err;
+    }
+  }
   /**
    * Get MCP settings
    */
@@ -284,11 +317,12 @@ class McpLimitsService {
    * Get user's quota information
    */
   async getUserQuota(userId: string): Promise<UserQuota> {
-    const [settings, usage, isPremium, overrides] = await Promise.all([
+    const [settings, usage, isPremium, overrides, planLimits] = await Promise.all([
       this.getSettings(),
       this.getUserUsage(userId),
       this.isUserPremium(userId),
       this.getUserLimitOverrides(userId),
+      this.getPlanMcpLimits(userId),
     ]);
 
     // Get actual token count (active = not revoked)
@@ -298,9 +332,15 @@ class McpLimitsService {
     );
     const tokensUsed = parseInt(tokensResult.rows[0].count) || 0;
 
-    const baseSourcesLimit = isPremium ? settings.premiumSourcesLimit : settings.freeSourcesLimit;
-    const baseTokensLimit = isPremium ? settings.premiumTokensLimit : settings.freeTokensLimit;
-    const baseApiCallsLimit = isPremium ? settings.premiumApiCallsPerDay : settings.freeApiCallsPerDay;
+    const baseSourcesLimit = Number.isFinite(planLimits.sourcesLimit as any)
+      ? (planLimits.sourcesLimit as number)
+      : (isPremium ? settings.premiumSourcesLimit : settings.freeSourcesLimit);
+    const baseTokensLimit = Number.isFinite(planLimits.tokensLimit as any)
+      ? (planLimits.tokensLimit as number)
+      : (isPremium ? settings.premiumTokensLimit : settings.freeTokensLimit);
+    const baseApiCallsLimit = Number.isFinite(planLimits.apiCallsPerDay as any)
+      ? (planLimits.apiCallsPerDay as number)
+      : (isPremium ? settings.premiumApiCallsPerDay : settings.freeApiCallsPerDay);
 
     const sourcesLimit =
       typeof overrides?.sourcesLimitOverride === 'number' ? overrides.sourcesLimitOverride : baseSourcesLimit;

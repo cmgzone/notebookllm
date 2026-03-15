@@ -5,7 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../ui/widgets/app_network_image.dart';
 import 'dart:ui';
 import 'dart:async';
 import '../sources/source_provider.dart';
@@ -917,12 +917,12 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
                             padding: const EdgeInsets.only(right: 8),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: CachedNetworkImage(
+                              child: AppNetworkImage(
                                 imageUrl: _webBrowsingScreenshots[index],
                                 width: 80,
                                 height: 60,
                                 fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
+                                placeholder: (_) => Container(
                                   width: 80,
                                   height: 60,
                                   color: scheme.surfaceContainerHighest,
@@ -932,7 +932,7 @@ class _NotebookChatScreenState extends ConsumerState<NotebookChatScreen> {
                                     ),
                                   ),
                                 ),
-                                errorWidget: (context, url, error) => Container(
+                                errorWidget: (_) => Container(
                                   width: 80,
                                   height: 60,
                                   color: scheme.surfaceContainerHighest,
@@ -1249,13 +1249,13 @@ class _MessageBubble extends ConsumerWidget {
                                 children: [
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
-                                    child: CachedNetworkImage(
+                                    child: AppNetworkImage(
                                       imageUrl:
                                           message.webBrowsingScreenshots[index],
                                       width: 120,
                                       height: 80,
                                       fit: BoxFit.cover,
-                                      placeholder: (context, url) => Container(
+                                      placeholder: (_) => Container(
                                         width: 120,
                                         height: 80,
                                         color: scheme.surfaceContainerHighest,
@@ -1265,8 +1265,7 @@ class _MessageBubble extends ConsumerWidget {
                                           ),
                                         ),
                                       ),
-                                      errorWidget: (context, url, error) =>
-                                          Container(
+                                      errorWidget: (_) => Container(
                                         width: 120,
                                         height: 80,
                                         color: scheme.surfaceContainerHighest,
@@ -1480,12 +1479,12 @@ class _MessageBubble extends ConsumerWidget {
                               children: [
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(4),
-                                  child: CachedNetworkImage(
+                                  child: AppNetworkImage(
                                     imageUrl:
                                         'https://www.google.com/s2/favicons?domain=$domain&sz=32',
                                     width: 14,
                                     height: 14,
-                                    errorWidget: (context, url, error) =>
+                                    errorWidget: (_) =>
                                         const Icon(Icons.link, size: 14),
                                   ),
                                 ),
@@ -1595,10 +1594,10 @@ class _MessageBubble extends ConsumerWidget {
                 maxScale: 4.0,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: CachedNetworkImage(
+                  child: AppNetworkImage(
                     imageUrl: url,
                     fit: BoxFit.contain,
-                    placeholder: (context, url) => Container(
+                    placeholder: (_) => Container(
                       width: 200,
                       height: 200,
                       color: Colors.black54,
@@ -1606,7 +1605,7 @@ class _MessageBubble extends ConsumerWidget {
                         child: CircularProgressIndicator(color: Colors.white),
                       ),
                     ),
-                    errorWidget: (context, url, error) => Container(
+                    errorWidget: (_) => Container(
                       width: 200,
                       height: 200,
                       color: Colors.black54,

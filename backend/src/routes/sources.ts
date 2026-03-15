@@ -79,6 +79,59 @@ router.post('/', async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ error: 'Notebook not found' });
         }
 
+        // Enforce plan-based note storage limit (applies to text notes only)
+        if (type === 'text') {
+            try {
+                let notesLimit: number | null = null;
+
+                const planLimitResult = await pool.query(
+                    `SELECT sp.notes_limit
+                     FROM user_subscriptions us
+                     JOIN subscription_plans sp ON us.plan_id = sp.id
+                     WHERE us.user_id = $1
+                     LIMIT 1`,
+                    [req.userId]
+                );
+                notesLimit = planLimitResult.rows[0]?.notes_limit ?? null;
+
+                if (notesLimit === null || notesLimit === undefined) {
+                    const freePlanResult = await pool.query(
+                        `SELECT notes_limit FROM subscription_plans WHERE is_free_plan = TRUE LIMIT 1`
+                    );
+                    notesLimit = freePlanResult.rows[0]?.notes_limit ?? null;
+                }
+
+                if (typeof notesLimit === 'number' && notesLimit > 0) {
+                    const countResult = await pool.query(
+                        `SELECT COUNT(*)::int AS count
+                         FROM sources s
+                         INNER JOIN notebooks n ON s.notebook_id = n.id
+                         WHERE n.user_id = $1 AND s.type = 'text'`,
+                        [req.userId]
+                    );
+                    const used = countResult.rows[0]?.count ?? 0;
+
+                    if (used >= notesLimit) {
+                        return res.status(403).json({
+                            error: 'Note limit reached',
+                            message: `You have reached your notes limit (${notesLimit}). Upgrade your plan to store more notes.`,
+                            upgrade_required: true,
+                            limit: notesLimit,
+                            used,
+                        });
+                    }
+                }
+            } catch (err: any) {
+                // If schema isn't migrated yet, don't block source creation.
+                const msg = String(err?.message || '');
+                if (msg.toLowerCase().includes('notes_limit') && msg.toLowerCase().includes('does not exist')) {
+                    // ignore
+                } else {
+                    console.error('[Sources] Note limit check failed:', err);
+                }
+            }
+        }
+
         const id = uuidv4();
         const result = await pool.query(
             `INSERT INTO sources (id, notebook_id, type, title, content, url, created_at, updated_at)

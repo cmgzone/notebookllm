@@ -11,6 +11,7 @@ const _logger = AppLogger('StudyGroup');
 enum GroupRole {
   owner,
   admin,
+  moderator,
   member;
 
   /// Parse role from string, defaults to member if invalid
@@ -25,6 +26,12 @@ enum GroupRole {
   /// Check if this role has admin privileges
   bool get hasAdminPrivileges =>
       this == GroupRole.owner || this == GroupRole.admin;
+
+  /// Check if this role has moderation privileges
+  bool get hasModerationPrivileges =>
+      this == GroupRole.owner ||
+      this == GroupRole.admin ||
+      this == GroupRole.moderator;
 }
 
 // ============================================================================
@@ -257,6 +264,7 @@ class StudyGroup {
 
   bool get isOwner => role == GroupRole.owner;
   bool get isAdmin => role.hasAdminPrivileges;
+  bool get isModerator => role == GroupRole.moderator;
 
   /// Filter upcoming sessions from a list using shared DateTime reference
   static List<StudySession> filterUpcomingSessions(
@@ -394,6 +402,7 @@ class GroupMember {
 
   bool get isOwner => role == GroupRole.owner;
   bool get isAdmin => role.hasAdminPrivileges;
+  bool get isModerator => role == GroupRole.moderator;
 }
 
 // ============================================================================
@@ -657,4 +666,58 @@ class GroupInvitation {
         'invited_by_username': invitedByUsername,
         'created_at': createdAt.toIso8601String(),
       };
+}
+
+// ============================================================================
+// GROUP BAN MODEL
+// ============================================================================
+
+/// Represents a banned user in a study group.
+class GroupBan {
+  final String id;
+  final String groupId;
+  final String userId;
+  final String? username;
+  final String? email;
+  final String? avatarUrl;
+  final String? reason;
+  final String? bannedBy;
+  final DateTime createdAt;
+
+  const GroupBan({
+    required this.id,
+    required this.groupId,
+    required this.userId,
+    this.username,
+    this.email,
+    this.avatarUrl,
+    this.reason,
+    this.bannedBy,
+    required this.createdAt,
+  });
+
+  factory GroupBan.fromJson(Map<String, dynamic> json) {
+    final id = json.getString('id');
+    final groupId = json.getStringOrDefault('group_id', 'groupId');
+    final userId = json.getStringOrDefault('user_id', 'userId');
+
+    if (id == null || id.isEmpty) {
+      throw const FormatException('GroupBan: Missing required field "id"');
+    }
+    if (groupId.isEmpty || userId.isEmpty) {
+      throw const FormatException('GroupBan: Missing required user/group id');
+    }
+
+    return GroupBan(
+      id: id,
+      groupId: groupId,
+      userId: userId,
+      username: json.getString('username'),
+      email: json.getString('email'),
+      avatarUrl: json.getString('avatar_url', 'avatarUrl'),
+      reason: json.getString('reason'),
+      bannedBy: json.getString('banned_by', 'bannedBy'),
+      createdAt: json.getDateTimeOrNow('created_at', 'createdAt'),
+    );
+  }
 }

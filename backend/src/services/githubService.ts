@@ -392,6 +392,15 @@ class GitHubService {
   }
 
   /**
+   * Get repository default branch
+   */
+  async getRepoDefaultBranch(userId: string, owner: string, repo: string): Promise<string> {
+    const octokit = await this.getOctokit(userId);
+    const { data: repoData } = await octokit.repos.get({ owner, repo });
+    return repoData.default_branch || 'main';
+  }
+
+  /**
    * Get file contents
    */
   async getFileContent(

@@ -1221,6 +1221,198 @@ router.post('/add-source', authenticateToken, async (req: Request, res: Response
   }
 });
 
+/**
+ * POST /api/github/add-repo-sources
+ * Add all files from a GitHub repository as sources to a notebook
+ */
+router.post('/add-repo-sources', authenticateToken, async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  const {
+    notebookId,
+    owner,
+    repo,
+    branch,
+    maxFiles,
+    maxFileSizeBytes,
+    includeExtensions,
+    excludeExtensions,
+  } = req.body;
+  const agentSessionId = getAgentSessionId(req);
+  const agentName = req.headers['x-agent-name'] as string | undefined;
+
+  try {
+    if (!notebookId || !owner || !repo) {
+      return res.status(400).json({
+        success: false,
+        error: GITHUB_ERROR_CODES.INVALID_REQUEST,
+        message: 'Missing required fields: notebookId, owner, repo',
+      });
+    }
+
+    // Check GitHub connection first
+    const connectionCheck = await requireGitHubConnection(userId);
+    if (!connectionCheck.connected) {
+      await auditLoggerService.log({
+        userId,
+        action: 'add_repo_sources',
+        owner,
+        repo,
+        agentSessionId,
+        success: false,
+        errorMessage: connectionCheck.error!.message,
+      });
+
+      return res.status(401).json({
+        success: false,
+        error: connectionCheck.error!.code,
+        message: connectionCheck.error!.message,
+      });
+    }
+
+    // Validate agent session if provided
+    const sessionValidation = await validateAgentSessionForRequest(agentSessionId, userId);
+    if (!sessionValidation.valid) {
+      await auditLoggerService.log({
+        userId,
+        action: 'add_repo_sources',
+        owner,
+        repo,
+        agentSessionId,
+        success: false,
+        errorMessage: sessionValidation.errorResponse?.message || 'Invalid agent session',
+      });
+
+      return res.status(sessionValidation.statusCode || 401).json(sessionValidation.errorResponse);
+    }
+
+    // Verify repository access
+    const accessCheck = await verifyRepoAccess(userId, owner, repo);
+    if (!accessCheck.hasAccess) {
+      await auditLoggerService.log({
+        userId,
+        action: 'add_repo_sources',
+        owner,
+        repo,
+        agentSessionId,
+        success: false,
+        errorMessage: accessCheck.errorResponse?.message || 'Repository access denied',
+      });
+
+      return res.status(accessCheck.statusCode || 403).json(accessCheck.errorResponse);
+    }
+
+    const parsedMaxFiles =
+      typeof maxFiles === 'number'
+        ? maxFiles
+        : (typeof maxFiles === 'string' ? parseInt(maxFiles, 10) : undefined);
+    const parsedMaxFileSizeBytes =
+      typeof maxFileSizeBytes === 'number'
+        ? maxFileSizeBytes
+        : (typeof maxFileSizeBytes === 'string'
+            ? parseInt(maxFileSizeBytes, 10)
+            : undefined);
+
+    const result = await githubSourceService.createRepoSources({
+      notebookId,
+      owner,
+      repo,
+      branch,
+      userId,
+      agentSessionId,
+      agentName,
+      maxFiles: Number.isFinite(parsedMaxFiles as number) ? parsedMaxFiles : undefined,
+      maxFileSizeBytes: Number.isFinite(parsedMaxFileSizeBytes as number)
+        ? parsedMaxFileSizeBytes
+        : undefined,
+      includeExtensions: Array.isArray(includeExtensions)
+        ? includeExtensions.map((ext: any) => String(ext))
+        : undefined,
+      excludeExtensions: Array.isArray(excludeExtensions)
+        ? excludeExtensions.map((ext: any) => String(ext))
+        : undefined,
+    });
+
+    await auditLoggerService.log({
+      userId,
+      action: 'add_repo_sources',
+      owner,
+      repo,
+      agentSessionId,
+      success: true,
+      requestMetadata: {
+        notebookId,
+        branch: result.branch,
+        addedCount: result.addedCount,
+        skippedCount: result.skippedCount,
+        limited: result.limited,
+        maxFilesApplied: result.maxFilesApplied,
+        maxFileSizeBytesApplied: result.maxFileSizeBytesApplied,
+      },
+    });
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error: any) {
+    console.error('GitHub add repo sources error:', error);
+
+    const rateLimitInfo = parseRateLimitError(error);
+    if (rateLimitInfo.isRateLimited) {
+      await auditLoggerService.log({
+        userId,
+        action: 'add_repo_sources',
+        owner,
+        repo,
+        agentSessionId,
+        success: false,
+        errorMessage: 'Rate limit exceeded',
+        requestMetadata: { resetTime: rateLimitInfo.resetTime?.toISOString() },
+      });
+
+      return res.status(429).json({
+        success: false,
+        error: GITHUB_ERROR_CODES.RATE_LIMITED,
+        message: formatRateLimitMessage(rateLimitInfo.resetTime),
+        resetTime: rateLimitInfo.resetTime?.toISOString(),
+      });
+    }
+
+    await auditLoggerService.log({
+      userId,
+      action: 'add_repo_sources',
+      owner,
+      repo,
+      agentSessionId,
+      success: false,
+      errorMessage: error.message,
+      requestMetadata: { notebookId, branch },
+    });
+
+    if (error.message === 'GitHub not connected') {
+      return res.status(401).json({
+        success: false,
+        error: GITHUB_ERROR_CODES.NOT_CONNECTED,
+        message: 'GitHub account not connected. Please connect your GitHub account in Settings.',
+      });
+    }
+
+    if (error.message?.includes('not found') || error.message?.includes('404')) {
+      return res.status(404).json({
+        success: false,
+        error: GITHUB_ERROR_CODES.NOT_FOUND,
+        message: `Repository not found or access denied: ${owner}/${repo}`,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: 'GITHUB_ERROR',
+      message: error.message,
+    });
+  }
+});
+
 
 /**
  * POST /api/github/analyze

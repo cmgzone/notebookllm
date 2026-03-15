@@ -40,6 +40,32 @@ export interface CreateGitHubSourceParams {
   agentName?: string;
 }
 
+export interface CreateGitHubRepoSourcesParams {
+  notebookId: string;
+  owner: string;
+  repo: string;
+  branch?: string;
+  userId: string;
+  agentSessionId?: string;
+  agentName?: string;
+  maxFiles?: number;
+  maxFileSizeBytes?: number;
+  includeExtensions?: string[];
+  excludeExtensions?: string[];
+}
+
+export interface RepoSourcesImportResult {
+  addedCount: number;
+  skippedCount: number;
+  skippedByReason: Record<string, number>;
+  totalFiles: number;
+  candidateFiles: number;
+  limited: boolean;
+  maxFilesApplied: number;
+  maxFileSizeBytesApplied: number;
+  branch: string;
+}
+
 export interface GitHubSource {
   id: string;
   notebookId: string;
@@ -247,6 +273,60 @@ export function detectLanguage(filePath: string): string {
   return Object.prototype.hasOwnProperty.call(LANGUAGE_MAP, extension) ? LANGUAGE_MAP[extension] : 'text';
 }
 
+// ==================== BULK IMPORT FILTERS ====================
+
+const DEFAULT_MAX_FILES = 200;
+const DEFAULT_MAX_FILE_SIZE_BYTES = 200 * 1024; // 200 KB
+const HARD_MAX_FILES = 5000;
+const HARD_MAX_FILE_SIZE_BYTES = 1_000_000; // GitHub content API limit is ~1MB
+
+const BINARY_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico',
+  'pdf',
+  'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'tar.gz', 'tar.bz2', 'tar.xz', 'tgz', 'tbz2', 'txz',
+  'mp3', 'wav', 'flac', 'ogg', 'm4a',
+  'mp4', 'mov', 'avi', 'mkv', 'webm',
+  'exe', 'dll', 'so', 'dylib',
+  'jar', 'war', 'class', 'apk', 'ipa',
+  'dmg', 'pkg', 'msi',
+  'ttf', 'otf', 'woff', 'woff2', 'eot',
+  'psd', 'ai',
+]);
+
+function normalizeExtensions(list?: string[]): Set<string> {
+  if (!list || list.length === 0) return new Set<string>();
+  return new Set(
+    list
+      .map((ext) => ext.trim().toLowerCase())
+      .filter((ext) => ext.length > 0)
+      .map((ext) => (ext.startsWith('.') ? ext.slice(1) : ext))
+  );
+}
+
+function getFileExtension(path: string): string {
+  const fileName = path.split('/').pop() || path;
+  const lowerName = fileName.toLowerCase();
+
+  if (lowerName.endsWith('.tar.gz')) return 'tar.gz';
+  if (lowerName.endsWith('.tar.bz2')) return 'tar.bz2';
+  if (lowerName.endsWith('.tar.xz')) return 'tar.xz';
+  if (lowerName.endsWith('.tgz')) return 'tgz';
+  if (lowerName.endsWith('.tbz2')) return 'tbz2';
+  if (lowerName.endsWith('.txz')) return 'txz';
+
+  const lastDotIndex = lowerName.lastIndexOf('.');
+  if (lastDotIndex <= 0) return '';
+  return lowerName.substring(lastDotIndex + 1);
+}
+
+function isRateLimitError(error: any): boolean {
+  const status = error?.response?.status;
+  if (status !== 403 && status !== 429) return false;
+  const headers = error?.response?.headers || {};
+  const remaining = parseInt(headers['x-ratelimit-remaining'] || '0', 10);
+  return remaining === 0 || error?.message?.includes('rate limit');
+}
+
 // ==================== CACHE FRESHNESS ====================
 
 /**
@@ -360,6 +440,180 @@ class GitHubSourceService {
     this.analyzeSourceAsync(sourceId, content, language, path, { owner, repo, branch: actualBranch }, userId);
     
     return this.mapSource(result.rows[0]);
+  }
+
+  /**
+   * Create GitHub sources for an entire repository
+   * Applies filtering, size limits, and duplicate detection
+   */
+  async createRepoSources(
+    params: CreateGitHubRepoSourcesParams
+  ): Promise<RepoSourcesImportResult> {
+    const {
+      notebookId,
+      owner,
+      repo,
+      branch,
+      userId,
+      agentSessionId,
+      agentName,
+      maxFiles,
+      maxFileSizeBytes,
+      includeExtensions,
+      excludeExtensions,
+    } = params;
+
+    // Verify notebook exists and belongs to user (once)
+    const notebookResult = await pool.query(
+      'SELECT id FROM notebooks WHERE id = $1 AND user_id = $2',
+      [notebookId, userId]
+    );
+
+    if (notebookResult.rows.length === 0) {
+      throw new Error('Notebook not found or access denied');
+    }
+
+    // Determine effective limits
+    const requestedMaxFiles = typeof maxFiles === 'number' ? maxFiles : DEFAULT_MAX_FILES;
+    const appliedMaxFiles =
+      requestedMaxFiles <= 0 ? HARD_MAX_FILES : Math.min(requestedMaxFiles, HARD_MAX_FILES);
+
+    const requestedMaxSize =
+      typeof maxFileSizeBytes === 'number' ? maxFileSizeBytes : DEFAULT_MAX_FILE_SIZE_BYTES;
+    const appliedMaxSize =
+      requestedMaxSize <= 0
+        ? HARD_MAX_FILE_SIZE_BYTES
+        : Math.min(requestedMaxSize, HARD_MAX_FILE_SIZE_BYTES);
+
+    // Build extension filters
+    const includeSet = normalizeExtensions(includeExtensions);
+    const excludeSet = normalizeExtensions(excludeExtensions);
+
+    // Resolve branch (use default if not provided)
+    const resolvedBranch =
+      branch && branch.trim().length > 0
+        ? branch
+        : await githubService.getRepoDefaultBranch(userId, owner, repo);
+
+    // Get existing GitHub sources for this repo/branch in this notebook to avoid duplicates
+    const existingResult = await pool.query(
+      `SELECT metadata->>'path' as path
+       FROM sources
+       WHERE notebook_id = $1
+         AND type = 'github'
+         AND metadata->>'owner' = $2
+         AND metadata->>'repo' = $3
+         AND COALESCE(metadata->>'branch', '') = $4`,
+      [notebookId, owner, repo, resolvedBranch]
+    );
+
+    const existingPaths = new Set<string>(
+      existingResult.rows.map((row) => row.path).filter((p) => typeof p === 'string')
+    );
+
+    // Fetch repo tree
+    const tree = await githubService.getRepoTree(userId, owner, repo, resolvedBranch);
+    const files = tree.filter((item) => item.type === 'blob' && item.path);
+
+    const skippedByReason: Record<string, number> = {
+      duplicate: 0,
+      binary: 0,
+      tooLarge: 0,
+      filtered: 0,
+      error: 0,
+      limit: 0,
+    };
+
+    // Build candidate list after applying filters
+    const candidates: string[] = [];
+    for (const item of files) {
+      const path = item.path;
+      if (!path) continue;
+
+      if (existingPaths.has(path)) {
+        skippedByReason.duplicate += 1;
+        continue;
+      }
+
+      const extension = getFileExtension(path);
+
+      if (includeSet.size > 0 && !includeSet.has(extension)) {
+        skippedByReason.filtered += 1;
+        continue;
+      }
+
+      if (includeSet.size === 0 && excludeSet.size > 0 && excludeSet.has(extension)) {
+        skippedByReason.filtered += 1;
+        continue;
+      }
+
+      if (includeSet.size === 0 && excludeSet.size === 0 && BINARY_EXTENSIONS.has(extension)) {
+        skippedByReason.binary += 1;
+        continue;
+      }
+
+      if (item.size && appliedMaxSize > 0 && item.size > appliedMaxSize) {
+        skippedByReason.tooLarge += 1;
+        continue;
+      }
+
+      if (item.size && item.size > HARD_MAX_FILE_SIZE_BYTES) {
+        skippedByReason.tooLarge += 1;
+        continue;
+      }
+
+      candidates.push(path);
+    }
+
+    // Apply max files limit
+    let limited = false;
+    let importList = candidates;
+    if (candidates.length > appliedMaxFiles) {
+      limited = true;
+      skippedByReason.limit = candidates.length - appliedMaxFiles;
+      importList = candidates.slice(0, appliedMaxFiles);
+    }
+
+    // Import files sequentially to avoid rate limit spikes
+    let addedCount = 0;
+    for (const path of importList) {
+      try {
+        await this.createSource({
+          notebookId,
+          owner,
+          repo,
+          path,
+          branch: resolvedBranch,
+          userId,
+          agentSessionId,
+          agentName,
+        });
+        addedCount += 1;
+        existingPaths.add(path);
+      } catch (error) {
+        if (isRateLimitError(error)) {
+          throw error;
+        }
+        skippedByReason.error += 1;
+      }
+    }
+
+    const skippedCount = Object.values(skippedByReason).reduce(
+      (sum, value) => sum + value,
+      0
+    );
+
+    return {
+      addedCount,
+      skippedCount,
+      skippedByReason,
+      totalFiles: files.length,
+      candidateFiles: candidates.length,
+      limited,
+      maxFilesApplied: appliedMaxFiles,
+      maxFileSizeBytesApplied: appliedMaxSize,
+      branch: resolvedBranch,
+    };
   }
 
   /**

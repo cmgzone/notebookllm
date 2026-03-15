@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../ui/widgets/app_network_image.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -982,19 +982,19 @@ class _MessageBubble extends ConsumerWidget {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: CachedNetworkImage(
+                              child: AppNetworkImage(
                                 imageUrl: screenshotUrl,
                                 width: 120,
                                 height: 80,
                                 fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
+                                placeholder: (_) => Container(
                                   width: 120,
                                   height: 80,
                                   color: scheme.surfaceContainerHighest,
                                   child: const CircularProgressIndicator(
                                       strokeWidth: 2),
                                 ),
-                                errorWidget: (_, __, ___) => Container(
+                                errorWidget: (_) => Container(
                                   width: 120,
                                   height: 80,
                                   color: scheme.surfaceContainerHighest,

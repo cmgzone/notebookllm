@@ -5,7 +5,7 @@
 -- Replace 'your@email.com' with your actual email address
 UPDATE users 
 SET role = 'admin', is_active = TRUE 
-WHERE email = 'your@email.com';
+WHERE email = 'cmgtrend@gmail.com';
 
 -- Option 2: Insert a new admin user (if the email doesn't exist)
 -- Replace the values with your desired admin credentials

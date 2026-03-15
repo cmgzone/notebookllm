@@ -551,7 +551,7 @@ class _AppDrawer extends ConsumerWidget {
                           ],
                         ),
                         child: Image.asset(
-                          'assets/images/app_logo.png',
+                          'assets/images/logo.png',
                           height: 32,
                           color: Colors.white,
                         ),
@@ -685,22 +685,6 @@ class _AppDrawer extends ConsumerWidget {
                         onTap: () {
                           Navigator.pop(context);
                           context.push('/language-learning');
-                        },
-                      ),
-                      _DrawerItem(
-                        icon: LucideIcons.bot,
-                        label: 'Gitu Assistant',
-                        onTap: () {
-                          Navigator.pop(context);
-                          context.push('/gitu-chat');
-                        },
-                      ),
-                      _DrawerItem(
-                        icon: LucideIcons.network,
-                        label: 'Swarm Intelligence',
-                        onTap: () {
-                          Navigator.pop(context);
-                          context.push('/gitu/swarm');
                         },
                       ),
                       // Bloat features hidden for UI discipline
@@ -854,14 +838,6 @@ class _AppDrawer extends ConsumerWidget {
                         onTap: () {
                           Navigator.pop(context);
                           context.push('/background-settings');
-                        },
-                      ),
-                      _DrawerItem(
-                        icon: LucideIcons.helpCircle,
-                        label: 'Feature Tour',
-                        onTap: () {
-                          Navigator.pop(context);
-                          context.push('/feature-tour');
                         },
                       ),
                     ],

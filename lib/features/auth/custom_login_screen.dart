@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/auth/custom_auth_service.dart';
 import '../../ui/components/glass_container.dart';
@@ -36,6 +37,14 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
   bool _showTwoFactor = false;
   bool _showForgotPassword = false;
   PasswordStrength? _passwordStrength;
+
+  static const String _hasSelectedPackagePref = 'has_selected_package';
+
+  Future<String> _getPostAuthRoute() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasSelected = prefs.getBool(_hasSelectedPackagePref) ?? false;
+    return hasSelected ? '/home' : '/plan-selection';
+  }
 
   @override
   void initState() {
@@ -92,7 +101,7 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
           password: _passwordController.text,
           displayName: _nameController.text.trim(),
         );
-        if (mounted) context.go('/home');
+        if (mounted) context.go('/plan-selection');
       } else {
         await authNotifier.signIn(
           email: _emailController.text.trim(),
@@ -103,8 +112,9 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
         final state = ref.read(customAuthStateProvider);
         if (state.requiresTwoFactor) {
           setState(() => _showTwoFactor = true);
-        } else if (mounted) {
-          context.go('/home');
+        } else {
+          final dest = await _getPostAuthRoute();
+          if (mounted) context.go(dest);
         }
       }
     } on AuthException catch (e) {
@@ -128,7 +138,8 @@ class _CustomLoginScreenState extends ConsumerState<CustomLoginScreen>
       await ref.read(customAuthStateProvider.notifier).verifyTwoFactor(
             _twoFactorController.text,
           );
-      if (mounted) context.go('/home');
+      final dest = await _getPostAuthRoute();
+      if (mounted) context.go(dest);
     } on AuthException catch (e) {
       _showError(e.message);
     } finally {

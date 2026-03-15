@@ -1133,6 +1133,56 @@ class _McpConfigInstructionsState extends State<McpConfigInstructions> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: scheme.outlineVariant.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Common Errors',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '401: Invalid or expired API key. Generate a new token in Settings -> Agent Connections.',
+                          style: TextStyle(fontSize: 11, color: scheme.onSurface),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '403: MCP disabled or insufficient permissions. Check MCP is enabled and your token permissions.',
+                          style: TextStyle(fontSize: 11, color: scheme.onSurface),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '429: Rate limit exceeded. Call get_quota and retry later.',
+                          style: TextStyle(fontSize: 11, color: scheme.onSurface),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '503: Service unavailable. Wait briefly and retry.',
+                          style: TextStyle(fontSize: 11, color: scheme.onSurface),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Network: Verify BACKEND_URL and CODING_AGENT_API_KEY in your .env.',
+                          style: TextStyle(fontSize: 11, color: scheme.onSurface),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   // Steps
                   const _InstructionStep(
                     number: '1',

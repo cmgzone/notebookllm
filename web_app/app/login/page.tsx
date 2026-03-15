@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { BrainCircuit, Loader2, ArrowRight, AlertCircle } from "lucide-react";
+import { Loader2, ArrowRight, AlertCircle } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
@@ -34,8 +35,8 @@ export default function LoginPage() {
         <div className="min-h-screen flex items-center justify-center bg-neutral-950 px-4">
             <div className="w-full max-w-md space-y-8 rounded-2xl border border-white/5 bg-neutral-900/50 p-8 backdrop-blur-xl shadow-2xl">
                 <div className="text-center">
-                    <Link href="/" className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors">
-                        <BrainCircuit size={32} />
+                    <Link href="/" className="inline-block transition-transform hover:scale-105">
+                        <Image src="/icon.png" alt="NoteClaw" width={48} height={48} className="mx-auto rounded-xl drop-shadow-md" />
                     </Link>
                     <h2 className="mt-6 text-3xl font-bold tracking-tight text-white">
                         Welcome back

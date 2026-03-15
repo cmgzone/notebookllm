@@ -7,6 +7,7 @@ import 'infographic.dart';
 import 'infographic_viewer_screen.dart';
 import '../sources/source_provider.dart';
 import '../subscription/services/credit_manager.dart';
+import '../../ui/widgets/app_network_image.dart';
 
 class InfographicsListScreen extends ConsumerStatefulWidget {
   final String notebookId;
@@ -298,10 +299,10 @@ class _InfographicCard extends StatelessWidget {
 
   Widget _buildImagePreview() {
     if (infographic.imageUrl != null) {
-      return Image.network(
-        infographic.imageUrl!,
+      return AppNetworkImage(
+        imageUrl: infographic.imageUrl!,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => const Center(
+        errorWidget: (context) => const Center(
           child: Icon(LucideIcons.imageOff, size: 32),
         ),
       );

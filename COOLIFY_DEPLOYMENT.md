@@ -55,7 +55,7 @@ SERPER_API_KEY=your-serper-api-key
 # Google Calendar OAuth (Optional)
 GOOGLE_CALENDAR_CLIENT_ID=your-google-calendar-client-id
 GOOGLE_CALENDAR_CLIENT_SECRET=your-google-calendar-client-secret
-GOOGLE_CALENDAR_REDIRECT_URI=https://backend.taskiumnetwork.com/api/gitu/calendar/callback
+GOOGLE_CALENDAR_REDIRECT_URI=https://backend.taskiumnetwork.com/api/google-calendar/callback
 
 # Optional Integrations (Add if you use them)
 # Audio
@@ -95,7 +95,7 @@ Once the deployment is "Healthy":
 *   **Application Error**: Check the "Application Logs" in Coolify for startup errors.
 *   **WebSockets Not Working (Offline/Connection Closed)**:
     *   If using Cloudflare Proxy, ensure WebSockets are enabled.
-    *   **Symptom**: If you see `{"error":"Route not found","path":"/ws/gitu"}` in the response, it means the request reached the backend but as **HTTP**, not WebSocket. The Proxy stripped the headers.
+    *   **Symptom**: If you see `{"error":"Route not found","path":"/ws/agent"}` in the response, it means the request reached the backend but as **HTTP**, not WebSocket. The Proxy stripped the headers.
     *   **Coolify Proxy**: Ensure your proxy configuration forwards `Upgrade` and `Connection` headers. You may need to add custom Nginx configuration:
         ```nginx
         location /ws/ {

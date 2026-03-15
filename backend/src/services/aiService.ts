@@ -9,6 +9,13 @@ const genAI = process.env.GEMINI_API_KEY
     ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
     : null;
 
+function getGeminiClient(apiKey?: string): GoogleGenerativeAI {
+    const key = (apiKey ?? '').trim();
+    if (key) return new GoogleGenerativeAI(key);
+    if (genAI) return genAI;
+    throw new Error('Gemini API key not configured. Please add GEMINI_API_KEY to your environment or provide X-User-Api-Key.');
+}
+
 export interface ChatMessage {
     role: 'user' | 'assistant' | 'system' | 'model';
     content: string | Array<any>;
@@ -19,12 +26,9 @@ export interface ChatMessage {
  */
 export async function generateWithGemini(
     messages: ChatMessage[],
-    model: string = 'gemini-2.0-flash'
+    model: string = 'gemini-2.0-flash',
+    apiKey?: string
 ): Promise<string> {
-    if (!genAI) {
-        throw new Error('Gemini API key not configured. Please add GEMINI_API_KEY to your environment.');
-    }
-
     console.log(`[Gemini] Generating response with model: ${model}`);
 
     // Create a timeout promise
@@ -33,7 +37,8 @@ export async function generateWithGemini(
     });
 
     try {
-        const geminiModel = genAI.getGenerativeModel({ model });
+        const client = getGeminiClient(apiKey);
+        const geminiModel = client.getGenerativeModel({ model });
 
         // Helper to convert content to Gemini parts
         const convertContent = (content: string | Array<any>) => {
@@ -80,12 +85,13 @@ export async function generateWithGemini(
 export async function generateWithOpenRouter(
     messages: ChatMessage[],
     model: string = 'meta-llama/llama-3.3-70b-instruct',
-    maxTokens: number = 4096
+    maxTokens: number = 4096,
+    apiKeyOverride?: string
 ): Promise<string> {
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    const apiKey = (apiKeyOverride ?? '').trim() || process.env.OPENROUTER_API_KEY;
 
     if (!apiKey) {
-        throw new Error('OpenRouter API key not configured');
+        throw new Error('OpenRouter API key not configured. Please add OPENROUTER_API_KEY or provide X-User-Api-Key.');
     }
 
     try {
@@ -146,14 +152,12 @@ export async function generateWithOpenRouter(
  */
 export async function* streamWithGemini(
     messages: ChatMessage[],
-    model: string = 'gemini-2.0-flash'
+    model: string = 'gemini-2.0-flash',
+    apiKey?: string
 ): AsyncGenerator<string> {
-    if (!genAI) {
-        throw new Error('Gemini API key not configured');
-    }
-
     try {
-        const geminiModel = genAI.getGenerativeModel({ model });
+        const client = getGeminiClient(apiKey);
+        const geminiModel = client.getGenerativeModel({ model });
 
         // Helper to convert content to Gemini parts
         const convertContent = (content: string | Array<any>) => {
@@ -200,12 +204,13 @@ export async function* streamWithGemini(
 export async function* streamWithOpenRouter(
     messages: ChatMessage[],
     model: string = 'meta-llama/llama-3.3-70b-instruct',
-    maxTokens: number = 4096
+    maxTokens: number = 4096,
+    apiKeyOverride?: string
 ): AsyncGenerator<string> {
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    const apiKey = (apiKeyOverride ?? '').trim() || process.env.OPENROUTER_API_KEY;
 
     if (!apiKey) {
-        throw new Error('OpenRouter API key not configured');
+        throw new Error('OpenRouter API key not configured. Please add OPENROUTER_API_KEY or provide X-User-Api-Key.');
     }
 
     try {

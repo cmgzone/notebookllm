@@ -11,15 +11,9 @@
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
     "test:pbt": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --testMatch \"**/*.pbt.test.ts\"",
-    "test:qr-mobile": "tsx src/scripts/test-qr-auth-mobile.ts",
-    "test:qr-mobile:full": "tsx src/scripts/test-qr-auth-mobile.ts --with-expiry",
     "migrate:agent-communication": "tsx src/scripts/run-agent-communication-migration.ts",
-    "migrate:gitu-core": "tsx src/scripts/run-gitu-core-migration.ts",
     "migrate:google-calendar": "tsx src/scripts/run-google-calendar-migration.ts",
-    "migrate:mcp-user-limits": "tsx src/scripts/run-mcp-user-limits-migration.ts",
-    "verify:swarm-schema": "tsx src/scripts/verify-swarm-schema.ts",
-    "gitu-cli": "tsx src/scripts/gitu-cli.ts",
-    "gitu": "tsx src/scripts/gitu-cli.ts"
+    "migrate:mcp-user-limits": "tsx src/scripts/run-mcp-user-limits-migration.ts"
   },
   "keywords": [
     "notebook",

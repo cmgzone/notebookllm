@@ -39,32 +39,6 @@ import contentRoutes from './routes/content.js';
 import deepResearchRoutes from './routes/deepResearch.js';
 import ragRoutes from './routes/rag.js';
 import agentSkillsRoutes from './routes/agentSkills.js';
-import gituRoutes from './routes/gitu.js';
-import { flutterAdapter } from './adapters/flutterAdapter.js';
-import { gituWebSocketService } from './services/gituWebSocketService.js';
-import { gituRemoteTerminalService } from './services/gituRemoteTerminalService.js';
-import { gituShellWebSocketService } from './services/gituShellWebSocketService.js';
-import { registerNotebookTools } from './services/notebookMCPTools.js';
-import { registerResearchTools } from './services/researchMCPTools.js';
-import { registerGmailTools } from './services/gmailMCPTools.js';
-import { registerShellTools } from './services/shellMCPTools.js';
-import { registerMessagingTools } from './services/messagingMCPTools.js';
-import { registerGoogleDriveTools } from './services/googleDriveMCPTools.js';
-import { registerGoogleCalendarTools } from './services/googleCalendarMCPTools.js';
-import { registerShopifyTools } from './services/shopifyMCPTools.js';
-import { registerLanguageTools } from './services/languageMCPTools.js';
-import { registerBrowserTools } from './services/browserMCPTools.js';
-import { registerDocumentTools } from './services/documentMCPTools.js';
-import { registerPluginMCPTools } from './services/pluginMCPTools.js';
-import { registerRuleMCPTools } from './services/ruleMCPTools.js';
-import { registerGitHubTools } from './services/githubMCPTools.js';
-import { registerAgentTools } from './services/agentMCPTools.js';
-import { registerExternalMcpTools } from './services/externalMCPTools.js';
-import { registerVoiceTools } from './services/voiceMCPTools.js';
-import { registerRemotionTools } from './services/remotionMCPTools.js';
-import { whatsappAdapter } from './adapters/whatsappAdapter.js';
-import { whatsappHealthMonitor } from './services/whatsappHealthMonitor.js';
-import { telegramAdapter } from './adapters/telegramAdapter.js';
 
 // Import services
 import bunnyService from './services/bunnyService.js';
@@ -72,47 +46,10 @@ import codeVerificationService from './services/codeVerificationService.js';
 import codeAnalysisService from './services/codeAnalysisService.js';
 import { agentWebSocketService } from './services/agentWebSocketService.js';
 import { planningWebSocketService } from './services/planningWebSocketService.js';
-import { gituQRAuthWebSocketService } from './services/gituQRAuthWebSocketService.js';
 import { connectRedis, disconnectRedis } from './config/redis.js';
-import { gituScheduler } from './services/gituScheduler.js';
-import { gituTaskScheduler } from './services/gituTaskScheduler.js';
-import { ensureGituSchema } from './config/gituSchema.js';
-import { gituProactiveService } from './services/gituProactiveService.js';
 
 // Load environment variables
 dotenv.config();
-
-ensureGituSchema()
-    .then(() => {
-        console.log('✅ Gitu schema ensured');
-        gituScheduler.start();
-        gituTaskScheduler.start();
-        console.log('✅ Gitu Task Scheduler started');
-    })
-    .catch(err => console.error('❌ Failed to ensure Gitu schema:', err));
-
-// Proactive checks scheduling
-const proactiveIntervalMinutes = (() => {
-    const raw = process.env.GITU_PROACTIVE_CHECKS_INTERVAL_MINUTES;
-    if (!raw) return 15;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? parsed : 15;
-})();
-
-if (proactiveIntervalMinutes > 0) {
-    setTimeout(() => {
-        gituProactiveService.runProactiveChecks().catch(err => {
-            console.error('❌ Proactive checks failed:', err);
-        });
-    }, 60_000);
-
-    setInterval(() => {
-        gituProactiveService.runProactiveChecks().catch(err => {
-            console.error('❌ Proactive checks failed:', err);
-        });
-    }, proactiveIntervalMinutes * 60_000);
-    console.log(`✅ Proactive checks scheduled every ${proactiveIntervalMinutes} minutes`);
-}
 
 // Initialize Redis
 connectRedis().catch(err => {
@@ -124,73 +61,15 @@ connectRedis().catch(err => {
 bunnyService.initialize();
 codeVerificationService.initialize();
 codeAnalysisService.initialize();
-registerNotebookTools();
-registerResearchTools();
-registerGmailTools();
-registerShellTools();
-registerMessagingTools();
-registerGoogleDriveTools();
-registerGoogleCalendarTools();
-registerShopifyTools();
-registerLanguageTools();
-registerBrowserTools();
-registerDocumentTools();
-registerPluginMCPTools();
-registerRuleMCPTools();
-registerVoiceTools();
-registerRemotionTools();
-registerAgentTools();
-registerExternalMcpTools();
-
-// Initialize WhatsApp
-whatsappAdapter.initialize({ printQRInTerminal: false }).then(() => {
-    console.log('📱 WhatsApp Adapter initialized');
-    whatsappHealthMonitor.start();
-}).catch(err => {
-    console.error('❌ Failed to initialize WhatsApp Adapter:', err);
-});
-
-// Initialize Telegram
-const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
-if (telegramBotToken && telegramBotToken.trim().length > 0) {
-    telegramAdapter.initialize(telegramBotToken.trim(), { polling: true }).then(async () => {
-        console.log('✈️  Telegram Adapter initialized (polling)');
-        try {
-            await telegramAdapter.setCommands([
-                { command: 'start', description: 'Start the bot' },
-                { command: 'help', description: 'Show help message' },
-                { command: 'id', description: 'Show your Chat ID for linking' },
-                { command: 'status', description: 'Check your Gitu status' },
-                { command: 'notebooks', description: 'List your notebooks' },
-                { command: 'session', description: 'View current session info' },
-                { command: 'clear', description: 'Clear conversation history' },
-                { command: 'settings', description: 'View your settings' },
-            ]);
-        } catch (err) {
-            console.error('❌ Failed to set Telegram bot commands:', err);
-        }
-    }).catch(err => {
-        console.error('❌ Failed to initialize Telegram Adapter:', err);
-    });
-} else {
-    console.log('ℹ️  Telegram Adapter disabled (TELEGRAM_BOT_TOKEN not set)');
-}
-
 // Graceful shutdown
 process.on('SIGTERM', async () => {
     console.log('SIGTERM received, shutting down gracefully...');
-    gituScheduler.stop();
-    whatsappHealthMonitor.stop();
-    try { await telegramAdapter.disconnect(); } catch { }
     await disconnectRedis();
     process.exit(0);
 });
 
 process.on('SIGINT', async () => {
     console.log('SIGINT received, shutting down gracefully...');
-    gituScheduler.stop();
-    whatsappHealthMonitor.stop();
-    try { await telegramAdapter.disconnect(); } catch { }
     await disconnectRedis();
     process.exit(0);
 });
@@ -209,7 +88,7 @@ app.use(compression());
 app.use(cors({
     origin: true, // Allow all origins (reflects the request origin)
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-User-Api-Key'],
     credentials: true,
 }));
 
@@ -274,8 +153,6 @@ app.use('/api/messaging', messagingRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/google-drive', googleDriveRoutes);
 app.use('/api/content', contentRoutes);
-app.use('/api/gitu', gituRoutes);
-
 // 404 handler
 app.use((req, res) => {
     console.log(`[404] Route not found: ${req.method} ${req.path}`);
@@ -300,18 +177,6 @@ agentWebSocketService.initialize(server);
 // Initialize WebSocket service for real-time planning updates
 planningWebSocketService.initialize(server);
 
-// Initialize WebSocket service for QR code authentication
-gituQRAuthWebSocketService.initialize(server);
-
-// Initialize WebSocket service for Flutter Gitu adapter
-flutterAdapter.initialize(server);
-
-// Initialize WebSocket service for Web Gitu adapter
-gituWebSocketService.initialize(server);
-
-gituShellWebSocketService.initialize(server);
-gituRemoteTerminalService.initialize(server);
-
 let activePort = requestedPort;
 let portAttempts = 0;
 let isStartingServer = false;
@@ -328,26 +193,6 @@ const startListening = () => {
         const url = parse(req.url || '').pathname || '';
         console.log(`[WS UPGRADE] Request for ${url}`);
 
-        // Manual routing for Flutter Gitu WebSocket
-        if (url === '/ws/gitu' || url === '/ws/gitu/') {
-            console.log(`[WS UPGRADE] Routing to Flutter Adapter`);
-            flutterAdapter.handleUpgrade(req, socket, head);
-            return;
-        }
-
-        // Manual routing for Web Gitu WebSocket
-        if (url === '/ws/gitu-web' || url === '/ws/gitu-web/') {
-            console.log(`[WS UPGRADE] Routing to Web Service`);
-            gituWebSocketService.handleUpgrade(req, socket, head);
-            return;
-        }
-
-        if (url === '/ws/remote-terminal' || url === '/ws/remote-terminal/') {
-            console.log(`[WS UPGRADE] Routing to Remote Terminal Service`);
-            // The service handles its own upgrade in .initialize but we can also do it here manually for consistency
-            return;
-        }
-
         if (url.startsWith('/ws/')) {
             // Let the other specialized handlers deal with it if they are still using auto-attach
             // Note: We should eventually migrate all to manual for consistency
@@ -362,10 +207,6 @@ const startListening = () => {
         console.log(`🚀 Server is running on http://localhost:${activePort}`);
         console.log(`🔌 WebSocket available at ws://localhost:${activePort}/ws/agent`);
         console.log(`📋 Planning WebSocket available at ws://localhost:${activePort}/ws/planning`);
-        console.log(`🔐 Gitu QR Auth WebSocket available at ws://localhost:${activePort}/api/gitu/terminal/qr-auth`);
-        console.log(`📱 Gitu Flutter WebSocket available at ws://localhost:${activePort}/ws/gitu`);
-        console.log(`🌐 Gitu Web WebSocket available at ws://localhost:${activePort}/ws/gitu-web`);
-        console.log(`🖥️  Shell WebSocket available at ws://localhost:${activePort}/ws/shell`);
         console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
         console.log(`📅 Started at: ${new Date().toISOString()}`);
     });

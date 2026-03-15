@@ -732,16 +732,16 @@ class _AIModelSettingsScreenState extends ConsumerState<AIModelSettingsScreen> {
 
           const SizedBox(height: 32),
 
-          // Tools Section - API Key management moved to web admin panel
+          // Tools Section
           _SettingsSection(
             title: 'Tools',
             children: [
               _ActionTile(
-                title: 'Gitu Assistant',
-                subtitle: 'Configure universal assistant settings',
-                icon: Icons.assistant,
-                onTap: () => context.push('/gitu-settings'),
-                color: Colors.deepPurple,
+                title: 'API Keys',
+                subtitle: 'Use your own Gemini/OpenRouter keys (local)',
+                icon: Icons.vpn_key,
+                color: Colors.amber,
+                onTap: () => context.push('/settings/api-keys'),
               ),
               _ActionTile(
                 title: 'Custom Agents',

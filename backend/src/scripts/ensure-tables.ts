@@ -147,40 +147,6 @@ async function ensureTables() {
         `);
         console.log('✅ chat_messages table ready');
 
-        // Gitu Chat Tables (Compatible with GituSessionService)
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS gitu_sessions (
-                id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
-                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                platform TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'active',
-                context JSONB NOT NULL DEFAULT '{}',
-                started_at TIMESTAMPTZ DEFAULT NOW(),
-                last_activity_at TIMESTAMPTZ DEFAULT NOW(),
-                ended_at TIMESTAMPTZ
-            );
-
-            CREATE TABLE IF NOT EXISTS gitu_linked_accounts (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                platform TEXT NOT NULL,
-                platform_user_id TEXT NOT NULL,
-                display_name TEXT,
-                settings JSONB DEFAULT '{}',
-                linked_at TIMESTAMPTZ DEFAULT NOW(),
-                last_used_at TIMESTAMPTZ DEFAULT NOW(),
-                verified BOOLEAN DEFAULT false,
-                is_primary BOOLEAN DEFAULT false,
-                status TEXT DEFAULT 'active',
-                UNIQUE(platform, platform_user_id)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_gitu_sessions_user ON gitu_sessions(user_id);
-            CREATE INDEX IF NOT EXISTS idx_gitu_sessions_platform ON gitu_sessions(platform);
-            CREATE INDEX IF NOT EXISTS idx_gitu_sessions_status ON gitu_sessions(status);
-        `);
-        console.log('✅ Gitu chat tables ready');
-
         // Add is_active column to users if not exists
         try {
             await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`);

@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import {
-  BrainCircuit,
   Code,
   Terminal,
   Key,
@@ -21,6 +20,7 @@ import {
   RefreshCw
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function DocsPage() {
@@ -54,10 +54,8 @@ function DocsNav() {
     <nav className="sticky top-0 z-50 border-b border-white/5 bg-neutral-950/80 backdrop-blur-xl">
       <div className="container mx-auto flex h-16 items-center justify-between px-6">
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600/20 text-blue-400">
-            <BrainCircuit size={20} />
-          </div>
-          <span className="font-bold tracking-tight">NotebookLM</span>
+          <Image src="/icon.png" alt="NoteClaw" width={24} height={24} className="rounded-md" />
+          <span className="font-bold tracking-tight">NoteClaw</span>
           <span className="text-neutral-500 text-sm ml-2">/ Docs</span>
         </Link>
         <div className="flex items-center gap-4">
@@ -123,11 +121,11 @@ function HeroSection() {
         </div>
         <div>
           <h1 className="text-3xl font-bold tracking-tight">MCP Server Documentation</h1>
-          <p className="text-neutral-400">Connect coding agents to NotebookLM</p>
+          <p className="text-neutral-400">Connect coding agents to NoteClaw</p>
         </div>
       </div>
       <p className="text-lg text-neutral-300 leading-relaxed mt-6">
-        The NotebookLM MCP (Model Context Protocol) server allows third-party coding agents 
+        The NoteClaw MCP (Model Context Protocol) server allows third-party coding agents 
         like Claude, Kiro, and Cursor to verify code, access GitHub repositories, manage implementation plans,
         and save sources to your notebooks. This enables seamless integration between your AI coding workflow and research management.
       </p>
@@ -177,10 +175,10 @@ function QuickStartSection() {
       <div className="space-y-6">
         <Step number={1} title="Generate a Personal API Token">
           <p className="text-neutral-400 mb-4">
-            Before setting up the MCP server, generate a personal API token from the NotebookLM app:
+            Before setting up the MCP server, generate a personal API token from the NoteClaw app:
           </p>
           <ol className="list-decimal list-inside space-y-2 text-neutral-300 text-sm">
-            <li>Open the NotebookLM app</li>
+            <li>Open the NoteClaw app</li>
             <li>Go to <strong>Settings</strong> → <strong>Agent Connections</strong></li>
             <li>In the <strong>API Tokens</strong> section, click <strong>Generate New Token</strong></li>
             <li>Enter a name for your token (e.g., "Kiro Coding Agent")</li>
@@ -235,7 +233,7 @@ function QuickStartSection() {
       "command": "node",
       "args": ["~/.notebookllm-mcp/index.js"],
       "env": {
-        "BACKEND_URL": "https://notebookllm-ufj7.onrender.com",
+        "BACKEND_URL": "http://localhost:3000",
         "CODING_AGENT_API_KEY": "nllm_your-token-here"
       }
     }
@@ -247,8 +245,18 @@ function QuickStartSection() {
         <Step number={4} title="Start Using the Tools">
           <p className="text-neutral-400 mb-4">
             Once configured, your coding agent can use the MCP tools to verify code and save it to your notebooks.
-            The server will automatically connect to the NotebookLM backend.
+            The server will automatically connect to the NoteClaw backend.
           </p>
+        </Step>
+
+        <Step number={5} title="Troubleshooting">
+          <ul className="list-disc list-inside space-y-2 text-neutral-300 text-sm">
+            <li>401: Invalid or expired API key. Generate a new token in Settings -&gt; Agent Connections.</li>
+            <li>403: MCP disabled or insufficient permissions. Check MCP is enabled and your token permissions.</li>
+            <li>429: Rate limit exceeded. Call get_quota and retry later.</li>
+            <li>503: Service unavailable. Wait briefly and retry.</li>
+            <li>Network: Verify BACKEND_URL and CODING_AGENT_API_KEY in your .env.</li>
+          </ul>
         </Step>
       </div>
     </section>
@@ -424,7 +432,18 @@ function ToolsSection() {
   return (
     <section id="tools" className="mb-16">
       <SectionHeader title="MCP Tools" icon={<Code className="text-blue-400" size={20} />} />
-      
+
+      <div className="mt-4 mb-6 p-4 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-200 text-sm">
+        <div className="font-semibold mb-2">Common Errors</div>
+        <ul className="list-disc list-inside space-y-1">
+          <li>401: Invalid or expired API key. Generate a new token in Settings -&gt; Agent Connections.</li>
+          <li>403: MCP disabled or insufficient permissions. Check MCP is enabled and your token permissions.</li>
+          <li>429: Rate limit exceeded. Call get_quota and retry later.</li>
+          <li>503: Service unavailable. Wait briefly and retry.</li>
+          <li>Network: Verify BACKEND_URL and CODING_AGENT_API_KEY in your .env.</li>
+        </ul>
+      </div>
+
       <div className="space-y-6">
         {tools.map((tool) => (
           <ToolCard key={tool.name} tool={tool} />
@@ -858,7 +877,7 @@ function ConfigurationSection() {
       "command": "node",
       "args": ["C:/Users/YourName/.notebookllm-mcp/index.js"],
       "env": {
-        "BACKEND_URL": "https://notebookllm-ufj7.onrender.com",
+        "BACKEND_URL": "http://localhost:3000",
         "CODING_AGENT_API_KEY": "nllm_your-personal-api-token-here"
       }
     }
@@ -880,7 +899,7 @@ function ConfigurationSection() {
       "command": "node",
       "args": ["~/.notebookllm-mcp/index.js"],
       "env": {
-        "BACKEND_URL": "https://notebookllm-ufj7.onrender.com",
+        "BACKEND_URL": "http://localhost:3000",
         "CODING_AGENT_API_KEY": "nllm_your-personal-api-token-here"
       }
     }
@@ -913,11 +932,11 @@ npm install --production`}
           <CodeBlock
             language="bash"
             code={`# Get configuration template
-curl https://notebookllm-ufj7.onrender.com/api/mcp/config
+curl http://localhost:3000/api/mcp/config
 
 # Or use the backend install scripts
-# Windows: irm https://notebookllm-ufj7.onrender.com/api/mcp/install.ps1 | iex
-# Mac/Linux: curl -fsSL https://notebookllm-ufj7.onrender.com/api/mcp/install.sh | bash`}
+# Windows: irm http://localhost:3000/api/mcp/install.ps1 | iex
+# Mac/Linux: curl -fsSL http://localhost:3000/api/mcp/install.sh | bash`}
           />
         </div>
       </div>
@@ -934,7 +953,7 @@ function TokenManagementSection() {
         <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
           <h3 className="text-lg font-semibold mb-4">Viewing Your Tokens</h3>
           <p className="text-neutral-400 mb-4">
-            In the NotebookLM app, go to <strong>Settings</strong> → <strong>Agent Connections</strong> to see all your active tokens:
+            In the NoteClaw app, go to <strong>Settings</strong> → <strong>Agent Connections</strong> to see all your active tokens:
           </p>
           <ul className="space-y-2 text-sm text-neutral-300">
             <li>• Token name and description</li>
@@ -1159,8 +1178,8 @@ function Footer() {
       <div className="container mx-auto px-6">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <BrainCircuit className="text-blue-400" size={20} />
-            <span className="font-bold">NotebookLM</span>
+            <className="text-blue-400" size={20} />
+            <span className="font-bold">NoteClaw</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-neutral-500">
             <Link href="/" className="hover:text-white transition-colors">Home</Link>
@@ -1174,9 +1193,10 @@ function Footer() {
               MCP Server <ExternalLink size={12} />
             </a>
           </div>
-          <p className="text-sm text-neutral-500">© 2025 NotebookLM</p>
+          <p className="text-sm text-neutral-500">© 2025 NoteClaw</p>
         </div>
       </div>
     </footer>
   );
 }
+

@@ -4,9 +4,9 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
     ArrowLeft,
-    BrainCircuit,
     FileText,
     Link as LinkIcon,
     Youtube,
@@ -382,8 +382,8 @@ export default function NotebookDetailPage() {
                     {
                         messages.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto">
-                                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mb-6">
-                                    <BrainCircuit size={32} className="text-blue-400" />
+                                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mb-6 overflow-hidden">
+                                    <Image src="/icon.png" alt="NoteClaw" width={32} height={32} />
                                 </div>
                                 <h2 className="text-2xl font-bold mb-3">Chat with your notebook</h2>
                                 <p className="text-neutral-400 mb-8">
@@ -410,8 +410,8 @@ export default function NotebookDetailPage() {
                                 {messages.filter(m => m.role !== 'system').map((msg, idx) => (
                                     <div key={idx} className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                         {msg.role === 'model' && (
-                                            <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 mt-1">
-                                                <BrainCircuit size={16} className="text-purple-400" />
+                                            <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
+                                                <Image src="/icon.png" alt="NoteClaw" width={16} height={16} />
                                             </div>
                                         )}
                                         <div className={`rounded-2xl px-5 py-3.5 max-w-[85%] text-sm leading-relaxed ${msg.role === 'user'
@@ -426,8 +426,8 @@ export default function NotebookDetailPage() {
                                 ))}
                                 {isChatLoading && (
                                     <div className="flex gap-4 justify-start">
-                                        <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 mt-1">
-                                            <BrainCircuit size={16} className="text-purple-400" />
+                                        <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
+                                            <Image src="/icon.png" alt="NoteClaw" width={16} height={16} />
                                         </div>
                                         <div className="bg-neutral-800 rounded-2xl px-5 py-3.5 border border-white/5 flex items-center gap-2">
                                             <div className="w-2 h-2 bg-neutral-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />

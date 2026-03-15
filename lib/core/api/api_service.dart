@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../security/global_credentials_service.dart';
 
 // Custom exception for insufficient credits
 class InsufficientCreditsException implements Exception {
@@ -35,7 +36,16 @@ class ApiService {
     if (envUrl != null && envUrl.isNotEmpty) {
       return envUrl.endsWith('/') ? envUrl : '$envUrl/';
     }
-    return 'https://backend.taskiumnetwork.com/api/';
+    if (kReleaseMode) {
+      return 'https://backend.taskiumnetwork.com/api/';
+    }
+    if (kIsWeb) {
+      return 'http://localhost:3001/api/';
+    }
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return 'http://10.0.2.2:3001/api/';
+    }
+    return 'http://localhost:3001/api/';
   })();
   String get baseUrl => _baseUrl;
   static const String _tokenKey = 'auth_token';
@@ -636,10 +646,16 @@ class ApiService {
   }
 
   Future<bool> sourceHasChunks(String sourceId) async {
-    final response =
-        await get<Map<String, dynamic>>('/sources/$sourceId/chunks');
-    final chunks = response['chunks'] as List?;
-    return chunks != null && chunks.isNotEmpty;
+    final token = await getToken();
+    if (token == null) return false;
+    try {
+      final response =
+          await get<Map<String, dynamic>>('/chunks/source/$sourceId');
+      final chunks = response['chunks'] as List?;
+      return chunks != null && chunks.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<List<Map<String, dynamic>>> getRelatedSources(String sourceId) async {
@@ -730,28 +746,6 @@ class ApiService {
     await post('/chunks/bulk', {'sourceId': sourceId, 'chunks': chunks});
   }
 
-  // ============ GITU ============
-
-  Future<String> gituChatMessage({
-    required String message,
-    List<String>? context,
-    String? sessionId,
-  }) async {
-    final response = await post<Map<String, dynamic>>('/gitu/message', {
-      'message': message,
-      if (context != null) 'context': context,
-      if (sessionId != null) 'sessionId': sessionId,
-    });
-    return (response['content'] as String?) ??
-        (response['response'] as String?) ??
-        '';
-  }
-
-  Future<Map<String, dynamic>> getGituAnalytics() async {
-    final response = await get<Map<String, dynamic>>('/gitu/analytics');
-    return Map<String, dynamic>.from(response);
-  }
-
   // ============ CHAT ============
 
   Future<List<Map<String, dynamic>>> getChatHistory({String? notebookId}) async {
@@ -778,16 +772,57 @@ class ApiService {
 
   // ============ AI ============
 
+  Future<String?> _getByokKeyForProvider({required String provider, String? model}) async {
+    try {
+      // Prefer model-derived provider when available.
+      final normalizedModel = (model ?? '').trim().toLowerCase();
+      final normalizedProvider = provider.trim().toLowerCase();
+
+      final service = (() {
+        if (normalizedModel.startsWith('gemini')) return 'gemini';
+        if (normalizedModel.contains('/') ||
+            normalizedModel.startsWith('gpt-') ||
+            normalizedModel.startsWith('claude-') ||
+            normalizedModel.startsWith('meta-')) {
+          return 'openrouter';
+        }
+
+        if (normalizedProvider == 'openrouter' ||
+            normalizedProvider == 'openai' ||
+            normalizedProvider == 'anthropic') {
+          return 'openrouter';
+        }
+
+        return 'gemini';
+      })();
+
+      final creds = ref.read(globalCredentialsServiceProvider);
+      final key = await creds.getApiKey(service);
+      final trimmed = (key ?? '').trim();
+      return trimmed.isEmpty ? null : trimmed;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<String> chatWithAI({
     required List<Map<String, dynamic>> messages,
     String provider = 'gemini',
     String? model,
   }) async {
-    final response = await post<Map<String, dynamic>>('/ai/chat', {
-      'messages': messages,
-      'provider': provider,
-      if (model != null) 'model': model,
-    });
+    final byokKey =
+        await _getByokKeyForProvider(provider: provider, model: model);
+    final response = await post<Map<String, dynamic>>(
+      '/ai/chat',
+      {
+        'messages': messages,
+        'provider': provider,
+        if (model != null) 'model': model,
+      },
+      options: byokKey != null
+          ? Options(headers: {'X-User-Api-Key': byokKey})
+          : null,
+    );
     return response['response'];
   }
 
@@ -797,12 +832,21 @@ class ApiService {
     String? provider,
     String? model,
   }) async {
-    final response = await post<Map<String, dynamic>>('/ai/vision', {
-      'messages': messages,
-      'imageBase64': imageBase64,
-      if (provider != null) 'provider': provider,
-      if (model != null) 'model': model,
-    });
+    final byokKey = provider != null
+        ? await _getByokKeyForProvider(provider: provider, model: model)
+        : null;
+    final response = await post<Map<String, dynamic>>(
+      '/ai/vision',
+      {
+        'messages': messages,
+        'imageBase64': imageBase64,
+        if (provider != null) 'provider': provider,
+        if (model != null) 'model': model,
+      },
+      options: byokKey != null
+          ? Options(headers: {'X-User-Api-Key': byokKey})
+          : null,
+    );
     return response['response'];
   }
 
@@ -816,6 +860,8 @@ class ApiService {
     final token = await getToken();
     if (token == null) throw Exception('Not authenticated');
     try {
+      final byokKey =
+          await _getByokKeyForProvider(provider: provider, model: model);
       final response = await _dio.post(
         '/ai/chat/stream',
         data: {
@@ -831,6 +877,7 @@ class ApiService {
             'Accept': 'text/event-stream',
             'Cache-Control': 'no-cache',
             'Connection': 'keep-alive',
+            if (byokKey != null) 'X-User-Api-Key': byokKey,
           },
         ),
       );

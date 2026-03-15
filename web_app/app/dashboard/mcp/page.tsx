@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from "react";
 import {
-    BrainCircuit,
     Key,
     Activity,
     Code,
@@ -26,6 +25,7 @@ import {
     Sparkles,
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
@@ -118,6 +118,16 @@ export default function McpDashboardPage() {
                             Refresh
                         </button>
                     </div>
+                    <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 text-amber-200">
+                        <div className="font-semibold mb-2">Common Errors</div>
+                        <ul className="list-disc list-inside space-y-1 text-sm">
+                            <li>401: Invalid or expired API key. Generate a new token in Settings -&gt; Agent Connections.</li>
+                            <li>403: MCP disabled or insufficient permissions. Check MCP is enabled and your token permissions.</li>
+                            <li>429: Rate limit exceeded. Call get_quota and retry later.</li>
+                            <li>503: Service unavailable. Wait briefly and retry.</li>
+                            <li>Network: Verify BACKEND_URL and CODING_AGENT_API_KEY in your .env.</li>
+                        </ul>
+                    </div>
                 </header>
 
                 {/* Tabs */}
@@ -160,10 +170,8 @@ function DashboardNav({ user, onLogout }: { user: any; onLogout: () => void }) {
         <nav className="border-b border-white/5 bg-neutral-900/50 backdrop-blur-xl">
             <div className="container mx-auto flex h-16 items-center justify-between px-6">
                 <Link href="/" className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600/20 text-blue-400">
-                        <BrainCircuit size={20} />
-                    </div>
-                    <span className="font-bold tracking-tight">NotebookLM</span>
+                    <Image src="/icon.png" alt="NoteClaw" width={24} height={24} className="rounded-md" />
+                    <span className="font-bold tracking-tight">NoteClaw</span>
                 </Link>
                 <div className="flex items-center gap-4">
                     <span className="text-sm text-neutral-400 hidden md:block">{user?.email}</span>
@@ -819,7 +827,7 @@ function SettingsTab({ settings, aiModels, onRefresh }: { settings: McpUserSetti
             {/* Info Card */}
             <div className="rounded-xl border border-white/5 bg-neutral-900/50 p-6">
                 <h4 className="font-medium mb-3 flex items-center gap-2">
-                    <BrainCircuit size={16} className="text-purple-400" />
+                    <size={16} className="text-purple-400" />
                     About Code Analysis
                 </h4>
                 <div className="text-sm text-neutral-400 space-y-2">
@@ -841,3 +849,4 @@ function SettingsTab({ settings, aiModels, onRefresh }: { settings: McpUserSetti
         </div>
     );
 }
+

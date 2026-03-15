@@ -5,6 +5,14 @@ class AppTheme {
   static ThemeData get light => _baseTheme(Brightness.light);
   static ThemeData get dark => _baseTheme(Brightness.dark);
 
+  static const List<String> _fallbackFonts = [
+    'Noto Sans',
+    'Noto Sans SC',
+    'Noto Sans JP',
+    'Arial Unicode MS',
+    'sans-serif',
+  ];
+
   // --- Premium Colors ---
   static const Color _lightPrimary = Color(0xFF6366F1); // Indigo 500
   static const Color _darkPrimary = Color(0xFF818CF8); // Indigo 400
@@ -72,31 +80,37 @@ class AppTheme {
           : Colors.black.withValues(alpha: 0.1),
     );
 
-    final textTheme = GoogleFonts.plusJakartaSansTextTheme().copyWith(
-      displayLarge: GoogleFonts.outfit(
+    final baseTextTheme = GoogleFonts.plusJakartaSansTextTheme()
+        .apply(fontFamilyFallback: _fallbackFonts);
+    TextStyle withFallback(TextStyle? style) =>
+        style?.copyWith(fontFamilyFallback: _fallbackFonts) ??
+        const TextStyle(fontFamilyFallback: _fallbackFonts);
+
+    final textTheme = baseTextTheme.copyWith(
+      displayLarge: withFallback(GoogleFonts.outfit(
           fontWeight: FontWeight.bold,
           letterSpacing: -1.0,
-          color: colorScheme.onSurface),
-      headlineLarge: GoogleFonts.outfit(
+          color: colorScheme.onSurface)),
+      headlineLarge: withFallback(GoogleFonts.outfit(
           fontWeight: FontWeight.bold,
           letterSpacing: -0.5,
-          color: colorScheme.onSurface),
-      headlineMedium: GoogleFonts.outfit(
-          fontWeight: FontWeight.w600, color: colorScheme.onSurface),
-      titleLarge: GoogleFonts.plusJakartaSans(
+          color: colorScheme.onSurface)),
+      headlineMedium: withFallback(GoogleFonts.outfit(
+          fontWeight: FontWeight.w600, color: colorScheme.onSurface)),
+      titleLarge: withFallback(GoogleFonts.plusJakartaSans(
           fontWeight: FontWeight.w600,
           letterSpacing: 0.15,
-          color: colorScheme.onSurface),
-      titleMedium: GoogleFonts.plusJakartaSans(
-          fontWeight: FontWeight.w600, color: colorScheme.onSurface),
-      bodyLarge: GoogleFonts.plusJakartaSans(
-          height: 1.6, color: colorScheme.onSurface),
-      bodyMedium: GoogleFonts.plusJakartaSans(
-          height: 1.5, color: colorScheme.onSurface),
-      labelLarge: GoogleFonts.plusJakartaSans(
+          color: colorScheme.onSurface)),
+      titleMedium: withFallback(GoogleFonts.plusJakartaSans(
+          fontWeight: FontWeight.w600, color: colorScheme.onSurface)),
+      bodyLarge: withFallback(GoogleFonts.plusJakartaSans(
+          height: 1.6, color: colorScheme.onSurface)),
+      bodyMedium: withFallback(GoogleFonts.plusJakartaSans(
+          height: 1.5, color: colorScheme.onSurface)),
+      labelLarge: withFallback(GoogleFonts.plusJakartaSans(
           fontWeight: FontWeight.w600,
           letterSpacing: 0.5,
-          color: colorScheme.onSurface),
+          color: colorScheme.onSurface)),
     );
 
     return ThemeData(

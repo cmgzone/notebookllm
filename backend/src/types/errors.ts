@@ -28,3 +28,13 @@ export class UnauthorizedError extends Error {
     Object.setPrototypeOf(this, UnauthorizedError.prototype);
   }
 }
+
+export class ForbiddenError extends Error {
+  code = 'FORBIDDEN';
+  status = 403;
+  constructor(message: string) {
+    super(message);
+    this.name = 'ForbiddenError';
+    Object.setPrototypeOf(this, ForbiddenError.prototype);
+  }
+}

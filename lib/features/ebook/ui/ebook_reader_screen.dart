@@ -11,6 +11,7 @@ import '../services/ebook_export_service.dart';
 import '../services/ebook_narration_service.dart';
 import 'ebook_editor_screen.dart';
 import '../../../core/extensions/color_compat.dart';
+import '../../../ui/widgets/app_network_image.dart';
 
 class EbookReaderScreen extends ConsumerWidget {
   const EbookReaderScreen({super.key, required this.project});
@@ -69,10 +70,10 @@ class EbookReaderScreen extends ConsumerWidget {
             ],
             flexibleSpace: FlexibleSpaceBar(
               background: project.coverImageUrl != null
-                  ? Image.network(
-                      project.coverImageUrl!,
+                  ? AppNetworkImage(
+                      imageUrl: project.coverImageUrl!,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
+                      errorWidget: (context) =>
                           Container(color: primaryColor),
                     )
                   : Container(color: primaryColor),
@@ -109,12 +110,12 @@ class EbookReaderScreen extends ConsumerWidget {
                       if (chapter.images.isNotEmpty) ...[
                         ClipRRect(
                           borderRadius: BorderRadius.circular(16),
-                          child: Image.network(
-                            chapter.images.first.url,
+                          child: AppNetworkImage(
+                            imageUrl: chapter.images.first.url,
                             height: 200,
                             width: double.infinity,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
+                            errorWidget: (context) =>
                                 const SizedBox.shrink(),
                           ),
                         ),

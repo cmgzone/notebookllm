@@ -266,6 +266,14 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
+## Troubleshooting
+
+- 401: Invalid or expired API key. Generate a new token in Settings -> Agent Connections.
+- 403: MCP disabled or insufficient permissions. Check MCP is enabled and your token permissions.
+- 429: Rate limit exceeded. Call `get_quota` and retry later.
+- 503: Service unavailable. Wait briefly and retry.
+- Network: Verify `BACKEND_URL` and `CODING_AGENT_API_KEY` in your `.env`.
+
 ## Token Management
 
 ### Viewing Your Tokens

@@ -79,7 +79,7 @@ flutter:
   assets:
     - .env
     - assets/images/app_icon.png
-    - assets/images/app_logo.png
+    - assets/images/logo.png
     - assets/images/empty_notebooks.png
     - assets/images/empty_sources.png
     - assets/images/onboarding_collaboration.png

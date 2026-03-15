@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'story.dart';
 import 'story_generator_provider.dart';
+import '../../ui/widgets/app_network_image.dart';
 
 class StoryReaderScreen extends ConsumerStatefulWidget {
   final Story story;
@@ -49,10 +50,10 @@ class _StoryReaderScreenState extends ConsumerState<StoryReaderScreen> {
                   ? Stack(
                       fit: StackFit.expand,
                       children: [
-                        Image.network(
-                          story.coverImageUrl!,
+                        AppNetworkImage(
+                          imageUrl: story.coverImageUrl!,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
+                          errorWidget: (context) => Container(
                             color: scheme.primaryContainer,
                           ),
                         ),
@@ -345,12 +346,12 @@ class _StoryReaderScreenState extends ConsumerState<StoryReaderScreen> {
                             padding: const EdgeInsets.only(right: 8),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                story.imageUrls[index],
+                              child: AppNetworkImage(
+                                imageUrl: story.imageUrls[index],
                                 width: 160,
                                 height: 120,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
+                                errorWidget: (context) => Container(
                                   width: 160,
                                   color: scheme.surfaceContainerHighest,
                                   child: const Icon(LucideIcons.image),
@@ -461,12 +462,12 @@ class _ChapterCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    chapter.imageUrl!,
+                  child: AppNetworkImage(
+                    imageUrl: chapter.imageUrl!,
                     width: double.infinity,
                     height: 220,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    errorWidget: (context) => const SizedBox.shrink(),
                   ),
                 ),
               ),

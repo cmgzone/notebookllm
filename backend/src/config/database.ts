@@ -178,6 +178,10 @@ export async function initializeDatabase() {
                 name TEXT NOT NULL,
                 credits_per_month INTEGER NOT NULL,
                 price DECIMAL NOT NULL,
+                notes_limit INTEGER,
+                mcp_sources_limit INTEGER,
+                mcp_tokens_limit INTEGER,
+                mcp_api_calls_per_day INTEGER,
                 is_free_plan BOOLEAN DEFAULT false,
                 is_active BOOLEAN DEFAULT true,
                 features JSONB DEFAULT '[]',
@@ -390,139 +394,6 @@ export async function initializeDatabase() {
         console.log('✅ API tokens tables initialized');
 
         await client.query(`
-            CREATE TABLE IF NOT EXISTS gitu_linked_accounts (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                platform TEXT NOT NULL,
-                platform_user_id TEXT NOT NULL,
-                display_name TEXT,
-                linked_at TIMESTAMPTZ DEFAULT NOW(),
-                last_used_at TIMESTAMPTZ DEFAULT NOW(),
-                verified BOOLEAN DEFAULT false,
-                is_primary BOOLEAN DEFAULT false,
-                status TEXT DEFAULT 'active',
-                UNIQUE(platform, platform_user_id),
-                CONSTRAINT valid_linked_account_platform CHECK (platform IN ('flutter', 'whatsapp', 'telegram', 'email', 'terminal')),
-                CONSTRAINT valid_linked_account_status CHECK (status IN ('active','inactive','suspended'))
-            );
-            CREATE INDEX IF NOT EXISTS idx_gitu_linked_accounts_user ON gitu_linked_accounts(user_id);
-            CREATE INDEX IF NOT EXISTS idx_gitu_linked_accounts_platform ON gitu_linked_accounts(platform, platform_user_id);
-        `);
-        console.log('✅ Linked accounts table initialized');
-        await client.query(`
-            ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS linked_at TIMESTAMPTZ DEFAULT NOW();
-            ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ DEFAULT NOW();
-            ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS verified BOOLEAN DEFAULT false;
-            ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS is_primary BOOLEAN DEFAULT false;
-            ALTER TABLE gitu_linked_accounts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
-            UPDATE gitu_linked_accounts SET status = 'active' WHERE status IS NULL;
-            DO $$
-            BEGIN
-              IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = 'valid_linked_account_status'
-              ) THEN
-                ALTER TABLE gitu_linked_accounts
-                  ADD CONSTRAINT valid_linked_account_status
-                  CHECK (status IN ('active','inactive','suspended'));
-              END IF;
-            END $$;
-            CREATE INDEX IF NOT EXISTS idx_gitu_linked_accounts_user ON gitu_linked_accounts(user_id);
-            CREATE INDEX IF NOT EXISTS idx_gitu_linked_accounts_platform ON gitu_linked_accounts(platform, platform_user_id);
-        `);
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS gitu_permissions (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                resource TEXT NOT NULL,
-                actions TEXT[] NOT NULL,
-                scope JSONB DEFAULT '{}',
-                granted_at TIMESTAMPTZ DEFAULT NOW(),
-                expires_at TIMESTAMPTZ,
-                revoked_at TIMESTAMPTZ
-            );
-            CREATE INDEX IF NOT EXISTS idx_gitu_permissions_user ON gitu_permissions(user_id, resource);
-            CREATE INDEX IF NOT EXISTS idx_gitu_permissions_active ON gitu_permissions(user_id, resource) WHERE revoked_at IS NULL;
-        `);
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS gitu_automation_rules (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                name TEXT NOT NULL,
-                description TEXT,
-                trigger JSONB NOT NULL,
-                conditions JSONB DEFAULT '[]',
-                actions JSONB NOT NULL,
-                enabled BOOLEAN DEFAULT true,
-                created_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            CREATE INDEX IF NOT EXISTS idx_gitu_automation_user ON gitu_automation_rules(user_id, enabled);
-        `);
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS gitu_rule_executions (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                rule_id UUID NOT NULL REFERENCES gitu_automation_rules(id) ON DELETE CASCADE,
-                matched BOOLEAN NOT NULL,
-                success BOOLEAN NOT NULL,
-                result JSONB,
-                error TEXT,
-                executed_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            CREATE INDEX IF NOT EXISTS idx_gitu_rule_exec_user_time ON gitu_rule_executions(user_id, executed_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_gitu_rule_exec_rule_time ON gitu_rule_executions(rule_id, executed_at DESC);
-        `);
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS gitu_plugins (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                name TEXT NOT NULL,
-                description TEXT,
-                code TEXT NOT NULL,
-                entrypoint TEXT DEFAULT 'run',
-                config JSONB DEFAULT '{}',
-                source_catalog_id UUID,
-                source_catalog_version TEXT,
-                enabled BOOLEAN DEFAULT true,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            CREATE INDEX IF NOT EXISTS idx_gitu_plugins_user ON gitu_plugins(user_id, updated_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_gitu_plugins_enabled ON gitu_plugins(user_id, enabled);
-        `);
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS gitu_plugin_catalog (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                slug TEXT NOT NULL UNIQUE,
-                name TEXT NOT NULL,
-                description TEXT,
-                code TEXT NOT NULL,
-                entrypoint TEXT DEFAULT 'run',
-                version TEXT DEFAULT '1.0.0',
-                author TEXT,
-                tags JSONB DEFAULT '[]',
-                is_active BOOLEAN DEFAULT true,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            CREATE INDEX IF NOT EXISTS idx_gitu_plugin_catalog_active ON gitu_plugin_catalog(is_active, updated_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_gitu_plugin_catalog_updated ON gitu_plugin_catalog(updated_at DESC);
-        `);
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS gitu_plugin_executions (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                plugin_id UUID NOT NULL REFERENCES gitu_plugins(id) ON DELETE CASCADE,
-                success BOOLEAN NOT NULL,
-                duration_ms INTEGER DEFAULT 0,
-                result JSONB,
-                error TEXT,
-                logs JSONB DEFAULT '[]',
-                executed_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            CREATE INDEX IF NOT EXISTS idx_gitu_plugin_exec_user_time ON gitu_plugin_executions(user_id, executed_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_gitu_plugin_exec_plugin_time ON gitu_plugin_executions(plugin_id, executed_at DESC);
-        `);
-        await client.query(`
             CREATE TABLE IF NOT EXISTS file_audit_logs (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id TEXT NOT NULL,
@@ -534,27 +405,6 @@ export async function initializeDatabase() {
             );
             CREATE INDEX IF NOT EXISTS idx_file_audit_user ON file_audit_logs(user_id);
             CREATE INDEX IF NOT EXISTS idx_file_audit_action ON file_audit_logs(action);
-        `);
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS gitu_shell_audit_logs (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                mode TEXT NOT NULL CHECK (mode IN ('sandboxed', 'unsandboxed', 'dry_run')),
-                command TEXT NOT NULL,
-                args JSONB DEFAULT '[]',
-                cwd TEXT,
-                success BOOLEAN DEFAULT true,
-                exit_code INTEGER,
-                error_message TEXT,
-                duration_ms INTEGER,
-                stdout_bytes INTEGER DEFAULT 0,
-                stderr_bytes INTEGER DEFAULT 0,
-                stdout_truncated BOOLEAN DEFAULT false,
-                stderr_truncated BOOLEAN DEFAULT false,
-                created_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            CREATE INDEX IF NOT EXISTS idx_gitu_shell_audit_user ON gitu_shell_audit_logs(user_id, created_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_gitu_shell_audit_mode ON gitu_shell_audit_logs(mode);
         `);
         await client.query(`
             CREATE TABLE IF NOT EXISTS gmail_connections (

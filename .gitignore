@@ -37,6 +37,9 @@ admin_panel/.env
 # Temporary files
 tmp/
 
+# Local export artifacts
+NOTBOOK_LLM_Project.zip
+
 .idea/
 .vscode/
 *.iml

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_service.dart';
+import '../../../core/auth/custom_auth_service.dart';
 import '../models/friend.dart';
 import '../models/study_group.dart';
 import '../social_provider.dart';
@@ -56,6 +57,7 @@ class _StudyGroupDetailScreenState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final currentUserId = ref.watch(customAuthStateProvider).user?.uid;
 
     if (_isLoading) {
       return Scaffold(
@@ -92,6 +94,9 @@ class _StudyGroupDetailScreenState
             ),
           PopupMenuButton(
             itemBuilder: (context) => [
+              if (_group!.isAdmin)
+                const PopupMenuItem(
+                    value: 'bans', child: Text('Banned Members')),
               if (!_group!.isOwner)
                 const PopupMenuItem(value: 'leave', child: Text('Leave Group')),
               if (_group!.isOwner)
@@ -99,6 +104,7 @@ class _StudyGroupDetailScreenState
                     value: 'delete', child: Text('Delete Group')),
             ],
             onSelected: (value) {
+              if (value == 'bans') _showBannedMembers();
               if (value == 'leave') _leaveGroup();
               if (value == 'delete') _deleteGroup();
             },
@@ -114,7 +120,7 @@ class _StudyGroupDetailScreenState
             const SizedBox(height: 24),
             _buildSessionsSection(theme),
             const SizedBox(height: 24),
-            _buildMembersSection(theme),
+            _buildMembersSection(theme, currentUserId),
           ],
         ),
       ),
@@ -205,7 +211,7 @@ class _StudyGroupDetailScreenState
     );
   }
 
-  Widget _buildMembersSection(ThemeData theme) {
+  Widget _buildMembersSection(ThemeData theme, String? currentUserId) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -224,6 +230,11 @@ class _StudyGroupDetailScreenState
         Card(
           child: Column(
             children: _members.map((member) {
+              final canShowActions = _canShowMemberActions(
+                currentUserId: currentUserId,
+                member: member,
+              );
+
               return ListTile(
                 leading: CircleAvatar(
                   backgroundImage: member.avatarUrl != null
@@ -234,28 +245,57 @@ class _StudyGroupDetailScreenState
                       : null,
                 ),
                 title: Text(member.username),
-                subtitle: Text(member.role.name),
+                subtitle: Text(_formatRoleLabel(member.role)),
                 trailing: member.isOwner
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Owner',
-                          style: TextStyle(
-                              fontSize: 12, color: theme.colorScheme.onPrimary),
-                        ),
-                      )
-                    : null,
+                    ? _buildOwnerBadge(theme)
+                    : canShowActions
+                        ? _buildMemberActions(theme, member)
+                        : null,
               );
             }).toList(),
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildOwnerBadge(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        'Owner',
+        style: TextStyle(fontSize: 12, color: theme.colorScheme.onPrimary),
+      ),
+    );
+  }
+
+  bool _canShowMemberActions({
+    required String? currentUserId,
+    required GroupMember member,
+  }) {
+    if (currentUserId == null) return false;
+    if (_group == null) return false;
+    if (member.userId == currentUserId) return false;
+    if (member.isOwner) return false;
+    if (!_group!.role.hasModerationPrivileges) return false;
+    return _canActOnMember(_group!.role, member.role);
+  }
+
+  String _formatRoleLabel(GroupRole role) {
+    switch (role) {
+      case GroupRole.owner:
+        return 'Owner';
+      case GroupRole.admin:
+        return 'Admin';
+      case GroupRole.moderator:
+        return 'Moderator';
+      case GroupRole.member:
+        return 'Member';
+    }
   }
 
   void _scheduleSession() {
@@ -371,7 +411,7 @@ class _StudyGroupDetailScreenState
                                     .inviteUser(widget.groupId, user.id);
                                 if (!dialogContext.mounted) return;
                                 Navigator.pop(dialogContext);
-                                if (!mounted) return;
+                                if (!rootContext.mounted) return;
                                 ScaffoldMessenger.of(rootContext).showSnackBar(
                                   SnackBar(
                                     content: Text(
@@ -380,7 +420,7 @@ class _StudyGroupDetailScreenState
                                   ),
                                 );
                               } catch (e) {
-                                if (!mounted) return;
+                                if (!rootContext.mounted) return;
                                 ScaffoldMessenger.of(rootContext).showSnackBar(
                                   SnackBar(
                                     content: Text('Invite failed: $e'),
@@ -414,6 +454,389 @@ class _StudyGroupDetailScreenState
         ),
       ),
     ).then((_) => controller.dispose());
+  }
+
+  Widget _buildMemberActions(ThemeData theme, GroupMember member) {
+    final actorRole = _group?.role ?? GroupRole.member;
+    final canActOn = _canActOnMember(actorRole, member.role);
+    final menuItems = <PopupMenuEntry<String>>[];
+
+    if (actorRole.hasAdminPrivileges && canActOn) {
+      if (actorRole == GroupRole.owner) {
+        if (member.role != GroupRole.admin) {
+          menuItems.add(const PopupMenuItem(
+            value: 'make_admin',
+            child: Text('Make Admin'),
+          ));
+        }
+      }
+      if (member.role != GroupRole.moderator) {
+        menuItems.add(const PopupMenuItem(
+          value: 'make_moderator',
+          child: Text('Make Moderator'),
+        ));
+      }
+      if (member.role != GroupRole.member) {
+        menuItems.add(const PopupMenuItem(
+          value: 'make_member',
+          child: Text('Make Member'),
+        ));
+      }
+    }
+
+    if (actorRole == GroupRole.owner && canActOn) {
+      menuItems.add(const PopupMenuDivider());
+      menuItems.add(const PopupMenuItem(
+        value: 'transfer_owner',
+        child: Text('Transfer Ownership'),
+      ));
+    }
+
+    if (actorRole.hasModerationPrivileges && canActOn) {
+      menuItems.add(const PopupMenuDivider());
+      menuItems.add(const PopupMenuItem(
+        value: 'remove_member',
+        child: Text('Remove Member'),
+      ));
+      menuItems.add(const PopupMenuItem(
+        value: 'ban_member',
+        child: Text('Ban Member'),
+      ));
+    }
+
+    return PopupMenuButton<String>(
+      onSelected: (value) => _handleMemberAction(value, member),
+      itemBuilder: (context) => menuItems,
+      icon: const Icon(Icons.more_vert),
+    );
+  }
+
+  int _roleRank(GroupRole role) {
+    switch (role) {
+      case GroupRole.owner:
+        return 3;
+      case GroupRole.admin:
+        return 2;
+      case GroupRole.moderator:
+        return 1;
+      case GroupRole.member:
+        return 0;
+    }
+  }
+
+  bool _canActOnMember(GroupRole actorRole, GroupRole targetRole) {
+    return _roleRank(actorRole) > _roleRank(targetRole);
+  }
+
+  Future<void> _handleMemberAction(
+      String action, GroupMember member) async {
+    switch (action) {
+      case 'make_admin':
+        await _updateMemberRole(member, GroupRole.admin);
+        break;
+      case 'make_moderator':
+        await _updateMemberRole(member, GroupRole.moderator);
+        break;
+      case 'make_member':
+        await _updateMemberRole(member, GroupRole.member);
+        break;
+      case 'remove_member':
+        await _confirmRemoveMember(member);
+        break;
+      case 'ban_member':
+        await _confirmBanMember(member);
+        break;
+      case 'transfer_owner':
+        await _confirmTransferOwnership(member);
+        break;
+    }
+  }
+
+  Future<void> _updateMemberRole(
+      GroupMember member, GroupRole newRole) async {
+    final rootContext = context;
+    try {
+      await ref.read(studyGroupsProvider.notifier).updateMemberRole(
+            groupId: widget.groupId,
+            memberId: member.userId,
+            role: newRole.name,
+          );
+      if (!mounted) return;
+      await _loadGroup();
+      if (!rootContext.mounted) return;
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        SnackBar(
+          content: Text(
+              '${member.username} is now ${_formatRoleLabel(newRole)}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!rootContext.mounted) return;
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        SnackBar(
+          content: Text('Role update failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmRemoveMember(GroupMember member) async {
+    final rootContext = context;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove Member'),
+        content: Text('Remove ${member.username} from this group?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(studyGroupsProvider.notifier).removeMember(
+            groupId: widget.groupId,
+            memberId: member.userId,
+          );
+      if (!mounted) return;
+      await _loadGroup();
+      if (!rootContext.mounted) return;
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        SnackBar(
+          content: Text('${member.username} removed'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!rootContext.mounted) return;
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        SnackBar(
+          content: Text('Remove failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmBanMember(GroupMember member) async {
+    final rootContext = context;
+    final reasonController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Ban Member'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Ban ${member.username} from this group?'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: 'Reason (optional)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Ban'),
+          ),
+        ],
+      ),
+    );
+
+    final reason = reasonController.text.trim();
+    reasonController.dispose();
+
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(studyGroupsProvider.notifier).banMember(
+            groupId: widget.groupId,
+            memberId: member.userId,
+            reason: reason.isEmpty ? null : reason,
+          );
+      if (!mounted) return;
+      await _loadGroup();
+      if (!rootContext.mounted) return;
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        SnackBar(
+          content: Text('${member.username} banned'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!rootContext.mounted) return;
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        SnackBar(
+          content: Text('Ban failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmTransferOwnership(GroupMember member) async {
+    final rootContext = context;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Transfer Ownership'),
+        content: Text(
+            'Transfer group ownership to ${member.username}? You will become an admin.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Transfer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(studyGroupsProvider.notifier).transferOwnership(
+            groupId: widget.groupId,
+            newOwnerId: member.userId,
+          );
+      if (!mounted) return;
+      await _loadGroup();
+      if (!rootContext.mounted) return;
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        SnackBar(
+          content: Text('Ownership transferred to ${member.username}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!rootContext.mounted) return;
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        SnackBar(
+          content: Text('Transfer failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _showBannedMembers() async {
+    final rootContext = context;
+    try {
+      final bans = await ref
+          .read(studyGroupsProvider.notifier)
+          .listBans(groupId: widget.groupId);
+
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Banned Members'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: bans.isEmpty
+                ? const Text('No banned members')
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: bans.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final ban = bans[index];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage: ban.avatarUrl != null
+                              ? NetworkImage(ban.avatarUrl!)
+                              : null,
+                          child: ban.avatarUrl == null
+                              ? Text(
+                                  (ban.username ?? 'U')
+                                      .substring(0, 1)
+                                      .toUpperCase(),
+                                )
+                              : null,
+                        ),
+                        title: Text(ban.username ?? 'Unknown user'),
+                        subtitle: ban.reason != null && ban.reason!.isNotEmpty
+                            ? Text(ban.reason!)
+                            : null,
+                        trailing: TextButton(
+                          onPressed: () async {
+                            try {
+                              await ref
+                                  .read(studyGroupsProvider.notifier)
+                                  .unbanMember(
+                                    groupId: widget.groupId,
+                                    memberId: ban.userId,
+                                  );
+                              if (!dialogContext.mounted) return;
+                              Navigator.pop(dialogContext);
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(rootContext).showSnackBar(
+                                SnackBar(
+                                  content:
+                                      Text('${ban.username ?? 'User'} unbanned'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            } catch (e) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(rootContext).showSnackBar(
+                                SnackBar(
+                                  content: Text('Unban failed: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          },
+                          child: const Text('Unban'),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!rootContext.mounted) return;
+      ScaffoldMessenger.of(rootContext).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load bans: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _showSettings() {

@@ -28,7 +28,7 @@ class SuggestionService {
     required List<Message> history,
   }) async {
     try {
-      final settings = await AISettingsService.getSettingsWithDefault(ref);
+      final settings = await AISettingsService.getSettingsWithDefault(ref.read);
       final provider = settings.provider;
       final model = settings.getEffectiveModel();
 

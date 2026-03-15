@@ -238,10 +238,13 @@ export async function seedDefaultData() {
         const plansResult = await client.query('SELECT COUNT(*) FROM subscription_plans');
         if (parseInt(plansResult.rows[0].count) === 0) {
             await client.query(`
-                INSERT INTO subscription_plans (name, credits_per_month, price, is_free_plan, features) VALUES
-                ('Free', 50, 0, true, '["Basic features", "50 credits/month", "5 notebooks"]'),
-                ('Pro', 1000, 9.99, false, '["Advanced features", "1000 credits/month", "Unlimited notebooks", "Priority support"]'),
-                ('Ultra', 5000, 29.99, false, '["All features", "5000 credits/month", "Unlimited everything", "VIP support", "Early access"]')
+                INSERT INTO subscription_plans (
+                  name, credits_per_month, price, is_free_plan, features,
+                  notes_limit, mcp_sources_limit, mcp_tokens_limit, mcp_api_calls_per_day
+                ) VALUES
+                ('Free', 50, 0, true, '["Local API keys supported", "100 notes", "MCP: 10 sources, 3 tokens, 100 calls/day"]', 100, 10, 3, 100),
+                ('Pro', 1000, 9.99, false, '["More notes", "MCP: 200 sources, 10 tokens, 2000 calls/day"]', 1000, 200, 10, 2000),
+                ('Ultra', 5000, 29.99, false, '["Highest limits", "MCP: 1000 sources, 25 tokens, 10000 calls/day"]', 10000, 1000, 25, 10000)
             `);
             console.log('✅ Default subscription plans created');
         }

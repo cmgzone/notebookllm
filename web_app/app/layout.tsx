@@ -14,8 +14,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NotebookLM - AI-Powered Deep Research",
+  title: "NoteClaw - AI-Powered Deep Research",
   description: "Transform how you gather information with AI-powered deep research that analyzes thousands of sources in minutes.",
+  icons: {
+    icon: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({

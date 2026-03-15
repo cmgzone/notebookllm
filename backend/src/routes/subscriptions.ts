@@ -116,6 +116,10 @@ router.get('/seed-defaults', async (req: Request, res: Response) => {
                 description TEXT,
                 credits_per_month INTEGER NOT NULL,
                 price DECIMAL NOT NULL,
+                notes_limit INTEGER,
+                mcp_sources_limit INTEGER,
+                mcp_tokens_limit INTEGER,
+                mcp_api_calls_per_day INTEGER,
                 is_free_plan BOOLEAN DEFAULT false,
                 is_active BOOLEAN DEFAULT true,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -160,10 +164,13 @@ router.get('/seed-defaults', async (req: Request, res: Response) => {
         const plans = await pool.query('SELECT COUNT(*) FROM subscription_plans');
         if (parseInt(plans.rows[0].count) === 0) {
             await pool.query(`
-                INSERT INTO subscription_plans (name, credits_per_month, price, is_free_plan, description) VALUES
-                ('Free', 50, 0, true, 'Basic features, 50 credits/month, 5 notebooks'),
-                ('Pro', 1000, 9.99, false, 'Advanced features, 1000 credits/month, Unlimited notebooks, Priority support'),
-                ('Ultra', 5000, 29.99, false, 'All features, 5000 credits/month, Unlimited everything, VIP support, Early access')
+                INSERT INTO subscription_plans (
+                  name, credits_per_month, price, is_free_plan, description,
+                  notes_limit, mcp_sources_limit, mcp_tokens_limit, mcp_api_calls_per_day
+                ) VALUES
+                ('Free', 50, 0, true, 'Basic features, local API keys supported, limited notes + MCP quota', 100, 10, 3, 100),
+                ('Pro', 1000, 9.99, false, 'More notes + MCP quota', 1000, 200, 10, 2000),
+                ('Ultra', 5000, 29.99, false, 'Highest notes + MCP quota', 10000, 1000, 25, 10000)
             `);
         }
 

@@ -1,9 +1,8 @@
 {
-  "name": "gitu-user-sandbox-proxy",
+  "name": "assistant-user-sandbox-proxy",
   "private": true,
   "type": "module",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.3"
   }
 }
-

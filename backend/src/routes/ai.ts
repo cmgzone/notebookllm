@@ -125,6 +125,7 @@ router.use(authenticateToken);
 router.post('/chat', async (req: AuthRequest, res: Response) => {
     try {
         let { messages, provider = 'gemini', model } = req.body;
+        const userApiKey = (req.get('x-user-api-key') || '').trim();
 
         console.log(`[AI Chat] Received request - provider: ${provider}, model: ${model}`);
 
@@ -178,9 +179,9 @@ router.post('/chat', async (req: AuthRequest, res: Response) => {
 
         let response: string;
         if (provider === 'openrouter') {
-            response = await generateWithOpenRouter(messages, model, maxTokens);
+            response = await generateWithOpenRouter(messages, model, maxTokens, userApiKey || undefined);
         } else {
-            response = await generateWithGemini(messages, model);
+            response = await generateWithGemini(messages, model, userApiKey || undefined);
         }
 
         res.json({ success: true, response });
@@ -195,6 +196,8 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
     try {
         let { messages, provider = 'gemini', model, useDeepSearch = false, hasImage = false } = req.body;
         const userId = req.userId!;
+        const userApiKey = (req.get('x-user-api-key') || '').trim();
+        const isByok = userApiKey.length > 0;
 
         console.log(`[AI Stream] Received request - provider: ${provider}, model: ${model}, userId: ${userId}`);
 
@@ -215,48 +218,56 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ error: 'messages array is required' });
         }
 
-        // STEP 1: Calculate credit cost
-        const creditCost = calculateChatCreditCost({ useDeepSearch, hasImage });
-        console.log(`[AI Stream] Credit cost: ${creditCost} (deepSearch: ${useDeepSearch}, image: ${hasImage})`);
+        let creditCost = 0;
+        let consumedCredits = false;
 
-        // STEP 2: Check if user has enough credits BEFORE processing
-        const creditCheck = await checkCredits(userId, creditCost);
-        
-        if (!creditCheck.hasEnough) {
-            console.log(`[AI Stream] Insufficient credits for user ${userId}. Required: ${creditCost}, Available: ${creditCheck.currentBalance}`);
-            return res.status(402).json({
-                error: 'Insufficient credits',
-                message: `You need ${creditCost} credits but only have ${creditCheck.currentBalance} credits available.`,
-                required: creditCost,
-                available: creditCheck.currentBalance,
-                payment_required: true
-            });
-        }
+        if (isByok) {
+            console.log('[AI Stream] BYOK enabled via X-User-Api-Key header; skipping credit checks.');
+        } else {
+            // STEP 1: Calculate credit cost
+            creditCost = calculateChatCreditCost({ useDeepSearch, hasImage });
+            console.log(`[AI Stream] Credit cost: ${creditCost} (deepSearch: ${useDeepSearch}, image: ${hasImage})`);
 
-        // STEP 3: Deduct credits IMMEDIATELY (before AI call)
-        const consumeResult = await consumeCredits(
-            userId,
-            creditCost,
-            useDeepSearch ? 'deep_research' : 'chat_message',
-            {
-                model,
-                provider,
-                useDeepSearch,
-                hasImage,
-                messageCount: messages.length
+            // STEP 2: Check if user has enough credits BEFORE processing
+            const creditCheck = await checkCredits(userId, creditCost);
+
+            if (!creditCheck.hasEnough) {
+                console.log(`[AI Stream] Insufficient credits for user ${userId}. Required: ${creditCost}, Available: ${creditCheck.currentBalance}`);
+                return res.status(402).json({
+                    error: 'Insufficient credits',
+                    message: `You need ${creditCost} credits but only have ${creditCheck.currentBalance} credits available.`,
+                    required: creditCost,
+                    available: creditCheck.currentBalance,
+                    payment_required: true
+                });
             }
-        );
 
-        if (!consumeResult.success) {
-            console.error(`[AI Stream] Failed to consume credits for user ${userId}: ${consumeResult.error}`);
-            return res.status(402).json({
-                error: 'Failed to process credits',
-                message: consumeResult.error || 'Unable to deduct credits',
-                payment_required: true
-            });
+            // STEP 3: Deduct credits IMMEDIATELY (before AI call)
+            const consumeResult = await consumeCredits(
+                userId,
+                creditCost,
+                useDeepSearch ? 'deep_research' : 'chat_message',
+                {
+                    model,
+                    provider,
+                    useDeepSearch,
+                    hasImage,
+                    messageCount: messages.length
+                }
+            );
+
+            if (!consumeResult.success) {
+                console.error(`[AI Stream] Failed to consume credits for user ${userId}: ${consumeResult.error}`);
+                return res.status(402).json({
+                    error: 'Failed to process credits',
+                    message: consumeResult.error || 'Unable to deduct credits',
+                    payment_required: true
+                });
+            }
+
+            consumedCredits = true;
+            console.log(`[AI Stream] Credits consumed. New balance: ${consumeResult.newBalance}`);
         }
-
-        console.log(`[AI Stream] Credits consumed. New balance: ${consumeResult.newBalance}`);
 
         // Check if the requested model is premium and if user has access
         let maxTokens = 4096;
@@ -279,9 +290,11 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
                     const hasPremiumAccess = await userHasPremiumAccess(userId);
                     if (!hasPremiumAccess) {
                         // Refund credits since we can't process the request
-                        await consumeCredits(userId, -creditCost, 'refund', {
-                            reason: 'Premium model access denied'
-                        });
+                        if (consumedCredits) {
+                            await consumeCredits(userId, -creditCost, 'refund', {
+                                reason: 'Premium model access denied'
+                            });
+                        }
                         
                         return res.status(403).json({
                             error: 'Premium model access required',
@@ -301,9 +314,9 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
 
         let generator;
         if (provider === 'openrouter') {
-            generator = streamWithOpenRouter(messages, model, maxTokens);
+            generator = streamWithOpenRouter(messages, model, maxTokens, userApiKey || undefined);
         } else {
-            generator = streamWithGemini(messages, model);
+            generator = streamWithGemini(messages, model, userApiKey || undefined);
         }
 
         for await (const chunk of generator) {

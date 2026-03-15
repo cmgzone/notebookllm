@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:go_router/go_router.dart';
 import 'package:responsive_framework/responsive_framework.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:flutter/foundation.dart'; // Import for PlatformDispatcher
 import 'core/router.dart';
@@ -20,6 +21,7 @@ import 'core/theme/theme_provider.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   // Capture errors in the framework
   FlutterError.onError = (FlutterErrorDetails details) {

@@ -937,7 +937,7 @@ REQUIREMENTS:
 
   Future<String> _callAI(String prompt) async {
     try {
-      final settings = await AISettingsService.getSettingsWithDefault(ref);
+      final settings = await AISettingsService.getSettingsWithDefault(ref.read);
       final model = settings.model;
 
       if (model == null || model.isEmpty) {

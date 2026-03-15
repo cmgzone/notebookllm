@@ -5,7 +5,6 @@ import { motion, useAnimation, useMotionValue, useSpring, useTransform } from "f
 import {
   Search,
   Globe,
-  BrainCircuit,
   Sparkles,
   ArrowRight,
   Zap,
@@ -264,10 +263,8 @@ function Navbar() {
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-neutral-950/20 backdrop-blur-2xl">
       <div className="container mx-auto flex h-20 items-center justify-between px-6">
         <div className="flex items-center gap-2 group cursor-pointer">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600/10 text-blue-400 group-hover:bg-blue-600/20 group-hover:scale-110 transition-all duration-500">
-            <BrainCircuit size={24} />
-          </div>
-          <span className="text-xl font-bold tracking-tighter text-white">NotebookLM</span>
+          <Image src="/icon.png" alt="NoteClaw" width={32} height={32} className="rounded-lg group-hover:scale-110 transition-all duration-500" />
+          <span className="text-xl font-bold tracking-tighter text-white">NoteClaw</span>
         </div>
         <div className="hidden items-center gap-10 text-xs font-semibold uppercase tracking-widest text-neutral-400 md:flex">
           <a href="#" className="hover:text-blue-400 transition-colors">Features</a>
@@ -464,7 +461,7 @@ function FeaturesSection() {
       desc: "Analyze more than just text. Ingest YouTube videos, academic PDFs, and live web pages for a truly 360-degree understanding."
     },
     {
-      icon: <BrainCircuit className="text-orange-400" />,
+      icon: <className="text-orange-400" />,
       title: "Custom Agent Skills",
       desc: "Teach your AI Agent specialized capabilities. Define custom prompts, workflows, and rules that persist across sessions."
     }
@@ -623,7 +620,7 @@ function Footer() {
   return (
     <footer className="border-t border-white/5 bg-neutral-950 py-12">
       <div className="container mx-auto px-6 text-center text-neutral-500 text-sm">
-        <p>© 2025 NotebookLM. Built for the future of research.</p>
+        <p>© 2025 NoteClaw. Built for the future of research.</p>
       </div>
     </footer>
   );

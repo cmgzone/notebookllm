@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/app_network_image.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
@@ -82,7 +82,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   fit: StackFit.expand,
                   children: [
                     if (user.coverUrl != null)
-                      CachedNetworkImage(
+                      AppNetworkImage(
                         imageUrl: user.coverUrl!,
                         fit: BoxFit.cover,
                       )
@@ -128,7 +128,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               radius: 45,
                               backgroundColor: scheme.primaryContainer,
                               backgroundImage: user.avatarUrl != null
-                                  ? CachedNetworkImageProvider(user.avatarUrl!)
+                                  ? appNetworkImageProvider(user.avatarUrl!)
                                   : null,
                               child: user.avatarUrl == null
                                   ? Icon(LucideIcons.user,

@@ -32,7 +32,8 @@ class _VisualStudioScreenState extends ConsumerState<VisualStudioScreen> {
     });
 
     try {
-      final settings = await AISettingsService.getSettingsWithDefault(ref as Ref);
+      final settings =
+          await AISettingsService.getSettingsWithDefault(ref.read);
       final provider = settings.provider;
       final model = settings.model;
       final creds = ref.read(globalCredentialsServiceProvider);

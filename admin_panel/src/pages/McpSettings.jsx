@@ -69,6 +69,16 @@ export default function McpSettings() {
                 <p className="text-muted-foreground">
                     Configure MCP (Model Context Protocol) limits and monitor usage across plans.
                 </p>
+                <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 text-amber-700">
+                    <div className="font-semibold mb-2">Common Errors</div>
+                    <ul className="list-disc list-inside space-y-1 text-sm">
+                        <li>401: Invalid or expired API key. Generate a new token in Settings -&gt; Agent Connections.</li>
+                        <li>403: MCP disabled or insufficient permissions. Check MCP is enabled and your token permissions.</li>
+                        <li>429: Rate limit exceeded. Call get_quota and retry later.</li>
+                        <li>503: Service unavailable. Wait briefly and retry.</li>
+                        <li>Network: Verify BACKEND_URL and CODING_AGENT_API_KEY in your .env.</li>
+                    </ul>
+                </div>
             </div>
 
             {/* Tabs */}
@@ -412,7 +422,7 @@ function UsageTab({ users, settings, onRefresh }) {
                                 className="w-full rounded-md border border-border bg-background p-2"
                             />
                             <div className="text-xs text-muted-foreground">
-                                Blank = use plan default. This affects Gitu tool calling quota.
+                                Blank = use plan default. This affects tool calling quota.
                             </div>
                         </div>
 

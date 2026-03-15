@@ -91,11 +91,6 @@ class AppScaffold extends StatelessWidget {
                     child: QuickAIModelSelector(compact: true),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.auto_awesome),
-                    tooltip: 'Gitu AI',
-                    onPressed: () => context.push('/gitu/dashboard'),
-                  ),
-                  IconButton(
                     icon: const Icon(Icons.settings),
                     tooltip: 'Settings',
                     onPressed: () => context.push('/settings'),
@@ -135,18 +130,6 @@ class AppScaffold extends StatelessWidget {
             bottom: 80,
             child: SafeArea(
               child: QuickAIModelSelector(),
-            ),
-          ),
-          Positioned(
-            right: 8,
-            bottom: 130,
-            child: SafeArea(
-              child: FloatingActionButton.small(
-                heroTag: 'gitu_fab',
-                onPressed: () => context.push('/gitu/dashboard'),
-                tooltip: 'Gitu AI',
-                child: const Icon(Icons.auto_awesome),
-              ),
             ),
           ),
           Positioned(

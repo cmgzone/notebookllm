@@ -23,12 +23,12 @@ class StreamNotifier extends StateNotifier<List<StreamToken>> {
   late final SerperService _serperService = SerperService(ref);
 
   Future<String> _getSelectedProvider() async {
-    final settings = await AISettingsService.getSettingsWithDefault(ref);
+    final settings = await AISettingsService.getSettingsWithDefault(ref.read);
     return settings.provider;
   }
 
   Future<String> _getSelectedModel() async {
-    final settings = await AISettingsService.getSettingsWithDefault(ref);
+    final settings = await AISettingsService.getSettingsWithDefault(ref.read);
     if (settings.model != null && settings.model!.isNotEmpty) {
       debugPrint('[StreamNotifier] Using selected model: ${settings.model}');
       return settings.model!;

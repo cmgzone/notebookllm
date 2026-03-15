@@ -5,6 +5,7 @@ import '../../core/github/github_service.dart';
 import 'github_provider.dart';
 import 'github_file_viewer_screen.dart';
 import 'github_notebook_selector.dart';
+import 'github_repo_source_selector.dart';
 
 class GitHubFileBrowserScreen extends ConsumerStatefulWidget {
   final GitHubRepo repo;
@@ -43,6 +44,11 @@ class _GitHubFileBrowserScreenState
               icon: const Icon(Icons.search),
               tooltip: 'Search Code',
               onPressed: () => _showSearchDialog(context)),
+          IconButton(
+              icon: const Icon(Icons.playlist_add),
+              tooltip: 'Add repo as sources',
+              onPressed: () =>
+                  showGitHubRepoSourceSelector(context, repo: widget.repo)),
         ],
       ),
       body: _buildBody(state),
@@ -234,7 +240,8 @@ class _GitHubFileBrowserScreenState
         showGitHubNotebookSelector(context,
             filePath: item.path,
             owner: widget.repo.owner,
-            repo: widget.repo.name);
+            repo: widget.repo.name,
+            branch: widget.repo.defaultBranch);
         break;
     }
   }

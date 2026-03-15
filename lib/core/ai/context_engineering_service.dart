@@ -38,12 +38,12 @@ class ContextEngineeringService {
   );
 
   Future<String> _getSelectedProvider() async {
-    final settings = await AISettingsService.getSettingsWithDefault(ref);
+    final settings = await AISettingsService.getSettingsWithDefault(ref.read);
     return settings.provider;
   }
 
   Future<String> _getSelectedModel() async {
-    final settings = await AISettingsService.getSettingsWithDefault(ref);
+    final settings = await AISettingsService.getSettingsWithDefault(ref.read);
     return settings.getEffectiveModel();
   }
 
@@ -71,7 +71,8 @@ class ContextEngineeringService {
 
     // Get dynamic max_tokens based on model's context window if not specified
     final effectiveMaxTokens =
-        maxTokens ?? await AISettingsService.getMaxTokensForModel(model, ref);
+        maxTokens ??
+            await AISettingsService.getMaxTokensForModel(model, ref.read);
 
     try {
       if (provider == 'openrouter') {

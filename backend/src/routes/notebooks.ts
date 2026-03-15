@@ -2,7 +2,7 @@ import express, { type Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
-import { gituAIRouter } from '../services/gituAIRouter.js';
+import { generateWithGemini, generateWithOpenRouter, type ChatMessage } from '../services/aiService.js';
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -233,24 +233,60 @@ router.post('/:id/query', async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ error: 'Notebook not found' });
         }
 
-        // Retrieve context from this specific notebook (returns string[])
-        const contextChunks = await gituAIRouter.retrieveContext(query, req.userId!, 5);
-        
-        // Generate answer using the AI router
-        const response = await gituAIRouter.route({
-            userId: req.userId!,
-            prompt: query,
-            taskType: 'chat',
-            useRetrieval: false // We already have context
-        });
+        const searchTerm = `%${query}%`;
+        let contextRows = await pool.query(
+            `SELECT s.title, s.type, substring(s.content from 1 for 1500) AS content
+             FROM sources s
+             JOIN notebooks n ON n.id = s.notebook_id
+             WHERE n.id = $1 AND n.user_id = $2
+               AND (s.title ILIKE $3 OR s.content ILIKE $3)
+             ORDER BY s.updated_at DESC
+             LIMIT 5`,
+            [id, req.userId, searchTerm]
+        );
+
+        if (contextRows.rows.length === 0) {
+            contextRows = await pool.query(
+                `SELECT s.title, s.type, substring(s.content from 1 for 1500) AS content
+                 FROM sources s
+                 JOIN notebooks n ON n.id = s.notebook_id
+                 WHERE n.id = $1 AND n.user_id = $2
+                 ORDER BY s.updated_at DESC
+                 LIMIT 3`,
+                [id, req.userId]
+            );
+        }
+
+        const contextChunks = contextRows.rows
+            .map((row) => row.content || '')
+            .filter((chunk) => chunk.trim().length > 0);
+
+        const contextText = contextChunks.length
+            ? `Use the following notebook context to answer the question.\n\nContext:\n${contextChunks.join('\n\n')}`
+            : 'Answer the question clearly and succinctly.';
+
+        const messages: ChatMessage[] = [
+            { role: 'system', content: contextText },
+            { role: 'user', content: query },
+        ];
+
+        const modelResult = await pool.query(
+            'SELECT model_id, provider FROM ai_models WHERE is_default = TRUE AND is_active = TRUE LIMIT 1'
+        );
+        const modelId = modelResult.rows[0]?.model_id;
+        const provider = modelResult.rows[0]?.provider || (modelId && modelId.includes('/') ? 'openrouter' : 'gemini');
+
+        const answer = provider === 'openrouter'
+            ? await generateWithOpenRouter(messages, modelId)
+            : await generateWithGemini(messages, modelId);
 
         res.json({
             success: true,
-            answer: response.content,
-            sources: contextChunks.map((chunk, idx) => ({
-                title: `Context ${idx + 1}`,
+            answer,
+            sources: contextRows.rows.map((row: any, idx: number) => ({
+                title: row.title || `Source ${idx + 1}`,
                 score: 1.0,
-                content: chunk
+                content: row.content || ''
             }))
         });
     } catch (error: any) {

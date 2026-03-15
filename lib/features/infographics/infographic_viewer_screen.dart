@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'infographic.dart';
 import 'infographic_provider.dart';
+import '../../ui/widgets/app_network_image.dart';
 
 /// Screen for viewing an infographic
 class InfographicViewerScreen extends StatefulWidget {
@@ -106,23 +107,13 @@ class _InfographicViewerScreenState extends State<InfographicViewerScreen> {
 
     Widget image;
     if (hasUrl) {
-      image = Image.network(
-        widget.infographic.imageUrl!,
+      image = AppNetworkImage(
+        imageUrl: widget.infographic.imageUrl!,
         fit: BoxFit.contain,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return Center(
-            child: CircularProgressIndicator(
-              value: loadingProgress.expectedTotalBytes != null
-                  ? loadingProgress.cumulativeBytesLoaded /
-                      loadingProgress.expectedTotalBytes!
-                  : null,
-            ),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) {
-          return _buildErrorState(text);
-        },
+        placeholder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+        errorWidget: (context) => _buildErrorState(text),
       );
     } else {
       // Decode base64

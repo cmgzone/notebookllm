@@ -403,6 +403,57 @@ class StudyGroupsNotifier extends StateNotifier<StudyGroupsState> {
           groupId,
         );
   }
+
+  Future<void> updateMemberRole({
+    required String groupId,
+    required String memberId,
+    required String role,
+  }) async {
+    await _api.post('/social/groups/$groupId/members/$memberId/role', {
+      'role': role,
+    });
+  }
+
+  Future<void> removeMember({
+    required String groupId,
+    required String memberId,
+  }) async {
+    await _api.post('/social/groups/$groupId/members/$memberId/remove', {});
+  }
+
+  Future<void> banMember({
+    required String groupId,
+    required String memberId,
+    String? reason,
+  }) async {
+    await _api.post('/social/groups/$groupId/bans', {
+      'userId': memberId,
+      if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+    });
+  }
+
+  Future<void> unbanMember({
+    required String groupId,
+    required String memberId,
+  }) async {
+    await _api.delete('/social/groups/$groupId/bans/$memberId');
+  }
+
+  Future<List<GroupBan>> listBans({required String groupId}) async {
+    final response = await _api.get('/social/groups/$groupId/bans');
+    final bans = response['bans'] as List? ?? [];
+    return bans.map((b) => GroupBan.fromJson(b)).toList();
+  }
+
+  Future<void> transferOwnership({
+    required String groupId,
+    required String newOwnerId,
+  }) async {
+    await _api.post('/social/groups/$groupId/transfer-ownership', {
+      'newOwnerId': newOwnerId,
+    });
+    await loadGroups();
+  }
 }
 
 final studyGroupsProvider =

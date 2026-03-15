@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from "react";
 import {
-    BrainCircuit,
     Check,
     Zap,
     Crown,
@@ -11,6 +10,7 @@ import {
     Loader2
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
@@ -119,10 +119,8 @@ export default function PlansPage() {
                         <span>Back to Dashboard</span>
                     </Link>
                     <Link href="/" className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600/20 text-blue-400">
-                            <BrainCircuit size={20} />
-                        </div>
-                        <span className="font-bold tracking-tight">NotebookLM</span>
+                        <Image src="/icon.png" alt="NoteClaw" width={24} height={24} className="rounded-md" />
+                        <span className="font-bold tracking-tight">NoteClaw</span>
                     </Link>
                 </div>
             </nav>

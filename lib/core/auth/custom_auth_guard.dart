@@ -23,6 +23,7 @@ const protectedRoutePrefixes = [
   '/artifact',
   '/research',
   '/settings',
+  '/plan-selection',
   '/security',
   '/deploy-keys',
   '/migrate-agent-id',

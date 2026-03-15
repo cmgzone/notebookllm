@@ -394,6 +394,7 @@ class _GitHubFileViewerScreenState
     showGitHubNotebookSelector(
       context,
       filePath: widget.filePath,
+      branch: widget.repo.defaultBranch,
     );
   }
 }

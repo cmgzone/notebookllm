@@ -15,12 +15,12 @@ class AINotifier extends StateNotifier<AIState> {
   final OpenRouterService _openRouterService = OpenRouterService();
 
   Future<String> _getSelectedProvider() async {
-    final settings = await AISettingsService.getSettingsWithDefault(ref);
+    final settings = await AISettingsService.getSettingsWithDefault(ref.read);
     return settings.provider;
   }
 
   Future<String> _getSelectedModel() async {
-    final settings = await AISettingsService.getSettingsWithDefault(ref);
+    final settings = await AISettingsService.getSettingsWithDefault(ref.read);
     final model = settings.model;
     if (model == null || model.isEmpty) {
       // Optional: try to get the first available model from provider as last resort?

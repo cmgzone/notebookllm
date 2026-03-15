@@ -31,7 +31,7 @@ class ContentAgent {
       }
     } else {
       // Fallback to global settings
-      final settings = await AISettingsService.getSettingsWithDefault(ref);
+      final settings = await AISettingsService.getSettingsWithDefault(ref.read);
       provider = settings.provider;
       targetModel = settings.getEffectiveModel();
     }

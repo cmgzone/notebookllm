@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../ui/widgets/app_network_image.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../../core/auth/custom_auth_service.dart';
 import '../profile_provider.dart';
@@ -157,7 +157,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                             )
                           : (_coverUrl != null
                               ? DecorationImage(
-                                  image: CachedNetworkImageProvider(_coverUrl!),
+                                  image: appNetworkImageProvider(_coverUrl!),
                                   fit: BoxFit.cover,
                                 )
                               : null),
@@ -217,10 +217,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                         radius: 50,
                         backgroundColor: scheme.primaryContainer,
                         backgroundImage: _localAvatar != null
-                            ? FileImage(_localAvatar!) as ImageProvider
+                            ? FileImage(_localAvatar!)
                             : (_avatarUrl != null
-                                ? CachedNetworkImageProvider(_avatarUrl!)
-                                    as ImageProvider
+                                ? appNetworkImageProvider(_avatarUrl!)
                                 : null),
                         child: _localAvatar == null && _avatarUrl == null
                             ? Icon(LucideIcons.user,

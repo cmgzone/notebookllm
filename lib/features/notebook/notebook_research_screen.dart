@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../ui/widgets/app_network_image.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/ai/deep_research_service.dart';
 import '../sources/source_provider.dart';
@@ -455,19 +456,19 @@ class _NotebookResearchScreenState
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: CachedNetworkImage(
+                      child: AppNetworkImage(
                         imageUrl: config.uri.toString(),
                         width: config.width,
                         height: config.height,
                         fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
+                        placeholder: (_) => Container(
                           height: 200,
                           color: scheme.surfaceContainerHighest,
                           child: const Center(
                             child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                         ),
-                        errorWidget: (context, url, error) => Container(
+                        errorWidget: (_) => Container(
                           height: 100,
                           color: scheme.surfaceContainerHighest,
                           child: Center(
@@ -627,6 +628,11 @@ class _NotebookResearchScreenState
   }
 
   void _showVideoPlayer(String videoId) {
+    if (kIsWeb) {
+      final url = Uri.parse('https://www.youtube.com/watch?v=$videoId');
+      launchUrl(url, mode: LaunchMode.externalApplication);
+      return;
+    }
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -734,16 +740,16 @@ class _VideoCard extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              CachedNetworkImage(
+              AppNetworkImage(
                 imageUrl: thumbnailUrl,
                 fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
+                placeholder: (_) => Container(
                   color: scheme.surfaceContainerHighest,
                   child: const Center(
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                 ),
-                errorWidget: (context, url, error) => Container(
+                errorWidget: (_) => Container(
                   color: scheme.surfaceContainerHighest,
                   child: Icon(Icons.video_library,
                       color: scheme.outline, size: 48),

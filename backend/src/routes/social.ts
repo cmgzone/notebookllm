@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 import { friendService, NotFoundError, ConflictError, ValidationError } from '../services/friendService.js';
+import { UnauthorizedError, ForbiddenError } from '../types/errors.js';
 import { studyGroupService } from '../services/studyGroupService.js';
 import { activityFeedService } from '../services/activityFeedService.js';
 import { leaderboardService } from '../services/leaderboardService.js';
@@ -22,6 +23,12 @@ const handleError = (error: any, res: Response) => {
   }
   if (error instanceof ConflictError) {
     return res.status(409).json({ error: error.message, code: error.code });
+  }
+  if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+    return res.status(error.status).json({ error: error.message, code: error.code });
+  }
+  if (typeof error?.status === 'number') {
+    return res.status(error.status).json({ error: error.message, code: error.code || 'ERROR' });
   }
   
   // Don't expose internal errors
@@ -368,6 +375,125 @@ router.get('/groups/:id/members', async (req: AuthRequest, res: Response) => {
     
     const members = await studyGroupService.getMembers(id);
     res.json({ members });
+  } catch (error: any) {
+    handleError(error, res);
+  }
+});
+
+// Update member role
+router.post('/groups/:id/members/:memberId/role', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+
+    const { id, memberId } = req.params;
+    const { role } = req.body;
+
+    if (!id || !memberId) {
+      return res.status(400).json({ error: 'Group ID and member ID required', code: 'VALIDATION_ERROR' });
+    }
+
+    const allowedRoles = ['admin', 'moderator', 'member'];
+    if (!role || !allowedRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role', code: 'VALIDATION_ERROR' });
+    }
+
+    await studyGroupService.updateMemberRole(id, userId, memberId, role);
+    res.json({ success: true });
+  } catch (error: any) {
+    handleError(error, res);
+  }
+});
+
+// Remove member
+router.post('/groups/:id/members/:memberId/remove', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+
+    const { id, memberId } = req.params;
+    if (!id || !memberId) {
+      return res.status(400).json({ error: 'Group ID and member ID required', code: 'VALIDATION_ERROR' });
+    }
+
+    await studyGroupService.removeMember(id, userId, memberId);
+    res.json({ success: true });
+  } catch (error: any) {
+    handleError(error, res);
+  }
+});
+
+// Ban member
+router.post('/groups/:id/bans', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+
+    const { id } = req.params;
+    const { userId: targetUserId, reason } = req.body;
+
+    if (!id || !targetUserId) {
+      return res.status(400).json({ error: 'Group ID and user ID required', code: 'VALIDATION_ERROR' });
+    }
+
+    await studyGroupService.banMember(id, userId, targetUserId, reason);
+    res.json({ success: true });
+  } catch (error: any) {
+    handleError(error, res);
+  }
+});
+
+// List bans
+router.get('/groups/:id/bans', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID required', code: 'VALIDATION_ERROR' });
+    }
+
+    const bans = await studyGroupService.listBans(id, userId);
+    res.json({ bans });
+  } catch (error: any) {
+    handleError(error, res);
+  }
+});
+
+// Unban member
+router.delete('/groups/:id/bans/:memberId', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+
+    const { id, memberId } = req.params;
+    if (!id || !memberId) {
+      return res.status(400).json({ error: 'Group ID and user ID required', code: 'VALIDATION_ERROR' });
+    }
+
+    await studyGroupService.unbanMember(id, userId, memberId);
+    res.json({ success: true });
+  } catch (error: any) {
+    handleError(error, res);
+  }
+});
+
+// Transfer ownership
+router.post('/groups/:id/transfer-ownership', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = validateUserId(req, res);
+    if (!userId) return;
+
+    const { id } = req.params;
+    const { newOwnerId } = req.body;
+
+    if (!id || !newOwnerId) {
+      return res.status(400).json({ error: 'Group ID and new owner ID required', code: 'VALIDATION_ERROR' });
+    }
+
+    await studyGroupService.transferOwnership(id, userId, newOwnerId);
+    res.json({ success: true });
   } catch (error: any) {
     handleError(error, res);
   }

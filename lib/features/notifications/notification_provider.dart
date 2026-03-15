@@ -64,6 +64,17 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
     if (state.isLoading && !refresh) return;
 
     state = state.copyWith(isLoading: true, error: null);
+    final token = await _api.getToken();
+    if (token == null) {
+      state = state.copyWith(
+        notifications: const [],
+        unreadCount: 0,
+        total: 0,
+        isLoading: false,
+        error: null,
+      );
+      return;
+    }
     try {
       final response = await _api.get('/notifications');
       final notifications = (response['notifications'] as List)
@@ -83,6 +94,13 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
 
   Future<void> fetchUnreadCount() async {
     try {
+      final token = await _api.getToken();
+      if (token == null) {
+        if (state.unreadCount != 0) {
+          state = state.copyWith(unreadCount: 0);
+        }
+        return;
+      }
       final response = await _api.get('/notifications/unread-count');
       state = state.copyWith(unreadCount: response['unreadCount'] ?? 0);
     } catch (e) {

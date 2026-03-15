@@ -1,5 +1,26 @@
 import pool from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import { ForbiddenError, ValidationError, NotFoundError } from '../types/errors.js';
+
+type GroupRole = 'owner' | 'admin' | 'moderator' | 'member';
+
+const ROLE_RANK: Record<GroupRole, number> = {
+  owner: 3,
+  admin: 2,
+  moderator: 1,
+  member: 0,
+};
+
+const hasRankAtLeast = (role: GroupRole, minimum: GroupRole) =>
+  ROLE_RANK[role] >= ROLE_RANK[minimum];
+
+const hasHigherRank = (actor: GroupRole, target: GroupRole) =>
+  ROLE_RANK[actor] > ROLE_RANK[target];
+
+const normalizeRole = (role?: string): GroupRole =>
+  role === 'owner' || role === 'admin' || role === 'moderator'
+    ? role
+    : 'member';
 
 export interface StudyGroup {
   id: string;
@@ -26,6 +47,48 @@ export interface StudySession {
 }
 
 export const studyGroupService = {
+  async getMemberRole(groupId: string, userId: string): Promise<GroupRole | null> {
+    const result = await pool.query(
+      'SELECT role FROM study_group_members WHERE group_id = $1 AND user_id = $2',
+      [groupId, userId]
+    );
+    if (result.rows.length === 0) return null;
+    return normalizeRole(result.rows[0].role);
+  },
+
+  async logGroupAudit(
+    groupId: string,
+    actorId: string,
+    action: string,
+    targetUserId?: string,
+    metadata?: Record<string, any>
+  ) {
+    try {
+      await pool.query(
+        `INSERT INTO group_audit_logs (id, group_id, actor_id, action, target_user_id, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          uuidv4(),
+          groupId,
+          actorId,
+          action,
+          targetUserId || null,
+          metadata || {},
+        ]
+      );
+    } catch (error) {
+      // Audit logging should not block main operations
+      console.error('Failed to log group audit:', (error as Error).message);
+    }
+  },
+
+  async isBanned(groupId: string, userId: string): Promise<boolean> {
+    const result = await pool.query(
+      'SELECT id FROM group_bans WHERE group_id = $1 AND user_id = $2',
+      [groupId, userId]
+    );
+    return result.rows.length > 0;
+  },
   async createGroup(data: {
     name: string;
     description?: string;
@@ -124,11 +187,15 @@ export const studyGroupService = {
     );
 
     if (groupCheck.rows.length === 0) {
-      throw new Error('Group not found');
+      throw new NotFoundError('Group not found');
     }
 
     if (!groupCheck.rows[0].is_public) {
-      throw new Error('This group is not public');
+      throw new ValidationError('This group is not public');
+    }
+
+    if (await this.isBanned(groupId, userId)) {
+      throw new ForbiddenError('You are banned from this group');
     }
 
     // Check member count
@@ -138,7 +205,7 @@ export const studyGroupService = {
     );
 
     if (parseInt(memberCount.rows[0].count) >= groupCheck.rows[0].max_members) {
-      throw new Error('Group is full');
+      throw new ValidationError('Group is full');
     }
 
     // Check if already a member
@@ -148,7 +215,7 @@ export const studyGroupService = {
     );
 
     if (existingMember.rows.length > 0) {
-      throw new Error('Already a member of this group');
+      throw new ValidationError('Already a member of this group');
     }
 
     // Join the group
@@ -169,7 +236,7 @@ export const studyGroupService = {
     `, [groupId, userId]);
 
     if (memberCheck.rows.length === 0) {
-      throw new Error('Not authorized to update this group');
+      throw new ForbiddenError('Not authorized to update this group');
     }
 
     const result = await pool.query(`
@@ -193,7 +260,7 @@ export const studyGroupService = {
     `, [groupId, userId]);
 
     if (result.rows.length === 0) {
-      throw new Error('Not authorized to delete this group');
+      throw new ForbiddenError('Not authorized to delete this group');
     }
     return { success: true };
   },
@@ -205,7 +272,11 @@ export const studyGroupService = {
     `, [groupId, invitedBy]);
 
     if (memberCheck.rows.length === 0) {
-      throw new Error('Not a member of this group');
+      throw new ForbiddenError('Not a member of this group');
+    }
+
+    if (await this.isBanned(groupId, invitedUserId)) {
+      throw new ForbiddenError('User is banned from this group');
     }
 
     const id = uuidv4();
@@ -231,14 +302,19 @@ export const studyGroupService = {
       `, [invitationId, userId]);
 
       if (invitation.rows.length === 0) {
-        throw new Error('Invitation not found');
+        throw new NotFoundError('Invitation not found');
+      }
+
+      const groupId = invitation.rows[0].group_id;
+      if (await this.isBanned(groupId, userId)) {
+        throw new ForbiddenError('You are banned from this group');
       }
 
       const memberId = uuidv4();
       await client.query(`
         INSERT INTO study_group_members (id, group_id, user_id, invited_by)
         VALUES ($1, $2, $3, $4)
-      `, [memberId, invitation.rows[0].group_id, userId, invitation.rows[0].invited_by]);
+      `, [memberId, groupId, userId, invitation.rows[0].invited_by]);
 
       await client.query('COMMIT');
       return { success: true };
@@ -257,7 +333,7 @@ export const studyGroupService = {
     `, [groupId]);
 
     if (ownerCheck.rows[0]?.owner_id === userId) {
-      throw new Error('Owner cannot leave the group. Transfer ownership or delete the group.');
+      throw new ValidationError('Owner cannot leave the group. Transfer ownership or delete the group.');
     }
 
     await pool.query(`
@@ -275,6 +351,192 @@ export const studyGroupService = {
       ORDER BY m.role = 'owner' DESC, m.joined_at ASC
     `, [groupId]);
     return result.rows;
+  },
+
+  async updateMemberRole(groupId: string, actorId: string, targetUserId: string, role: GroupRole) {
+    const actorRole = await this.getMemberRole(groupId, actorId);
+    if (!actorRole) {
+      throw new ForbiddenError('Not a member of this group');
+    }
+    if (!hasRankAtLeast(actorRole, 'admin')) {
+      throw new ForbiddenError('Not authorized to update roles');
+    }
+
+    const targetRole = await this.getMemberRole(groupId, targetUserId);
+    if (!targetRole) {
+      throw new ValidationError('Target user is not a member');
+    }
+    if (targetRole === 'owner') {
+      throw new ForbiddenError('Cannot change owner role');
+    }
+
+    // Admins cannot promote to admin or change other admins
+    if (actorRole === 'admin' && role === 'admin') {
+      throw new ForbiddenError('Admins cannot promote to admin');
+    }
+    if (actorRole === 'admin' && targetRole === 'admin') {
+      throw new ForbiddenError('Admins cannot change another admin');
+    }
+
+    await pool.query(
+      `UPDATE study_group_members SET role = $1 WHERE group_id = $2 AND user_id = $3`,
+      [role, groupId, targetUserId]
+    );
+
+    await this.logGroupAudit(groupId, actorId, 'role_updated', targetUserId, {
+      role,
+    });
+
+    return { success: true };
+  },
+
+  async removeMember(groupId: string, actorId: string, targetUserId: string) {
+    const actorRole = await this.getMemberRole(groupId, actorId);
+    if (!actorRole) {
+      throw new ForbiddenError('Not a member of this group');
+    }
+    if (!hasRankAtLeast(actorRole, 'moderator')) {
+      throw new ForbiddenError('Not authorized to remove members');
+    }
+
+    const targetRole = await this.getMemberRole(groupId, targetUserId);
+    if (!targetRole) {
+      throw new ValidationError('Target user is not a member');
+    }
+    if (!hasHigherRank(actorRole, targetRole)) {
+      throw new ForbiddenError('Not authorized to remove this member');
+    }
+
+    await pool.query(
+      'DELETE FROM study_group_members WHERE group_id = $1 AND user_id = $2',
+      [groupId, targetUserId]
+    );
+
+    await this.logGroupAudit(groupId, actorId, 'member_removed', targetUserId);
+    return { success: true };
+  },
+
+  async banMember(groupId: string, actorId: string, targetUserId: string, reason?: string) {
+    const actorRole = await this.getMemberRole(groupId, actorId);
+    if (!actorRole) {
+      throw new ForbiddenError('Not a member of this group');
+    }
+    if (!hasRankAtLeast(actorRole, 'moderator')) {
+      throw new ForbiddenError('Not authorized to ban members');
+    }
+
+    const targetRole = await this.getMemberRole(groupId, targetUserId);
+    if (targetRole && !hasHigherRank(actorRole, targetRole)) {
+      throw new ForbiddenError('Not authorized to ban this member');
+    }
+    if (targetRole === 'owner') {
+      throw new ForbiddenError('Cannot ban the owner');
+    }
+
+    await pool.query(
+      `INSERT INTO group_bans (id, group_id, user_id, banned_by, reason)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (group_id, user_id)
+       DO UPDATE SET banned_by = $4, reason = $5, created_at = NOW()`,
+      [uuidv4(), groupId, targetUserId, actorId, reason || null]
+    );
+
+    await pool.query(
+      'DELETE FROM study_group_members WHERE group_id = $1 AND user_id = $2',
+      [groupId, targetUserId]
+    );
+
+    await this.logGroupAudit(groupId, actorId, 'member_banned', targetUserId, {
+      reason,
+    });
+
+    return { success: true };
+  },
+
+  async unbanMember(groupId: string, actorId: string, targetUserId: string) {
+    const actorRole = await this.getMemberRole(groupId, actorId);
+    if (!actorRole) {
+      throw new ForbiddenError('Not a member of this group');
+    }
+    if (!hasRankAtLeast(actorRole, 'admin')) {
+      throw new ForbiddenError('Not authorized to unban members');
+    }
+
+    await pool.query(
+      'DELETE FROM group_bans WHERE group_id = $1 AND user_id = $2',
+      [groupId, targetUserId]
+    );
+
+    await this.logGroupAudit(groupId, actorId, 'member_unbanned', targetUserId);
+    return { success: true };
+  },
+
+  async listBans(groupId: string, actorId: string) {
+    const actorRole = await this.getMemberRole(groupId, actorId);
+    if (!actorRole) {
+      throw new ForbiddenError('Not a member of this group');
+    }
+    if (!hasRankAtLeast(actorRole, 'admin')) {
+      throw new ForbiddenError('Not authorized to view bans');
+    }
+
+    const result = await pool.query(
+      `SELECT b.*, u.display_name as username, u.email, u.avatar_url
+       FROM group_bans b
+       LEFT JOIN users u ON u.id = b.user_id
+       WHERE b.group_id = $1
+       ORDER BY b.created_at DESC`,
+      [groupId]
+    );
+
+    return result.rows;
+  },
+
+  async transferOwnership(groupId: string, actorId: string, newOwnerId: string) {
+    const actorRole = await this.getMemberRole(groupId, actorId);
+    if (actorRole !== 'owner') {
+      throw new ForbiddenError('Only the owner can transfer ownership');
+    }
+    if (await this.isBanned(groupId, newOwnerId)) {
+      throw new ForbiddenError('Cannot transfer ownership to a banned user');
+    }
+
+    const newOwnerRole = await this.getMemberRole(groupId, newOwnerId);
+    if (!newOwnerRole) {
+      throw new ValidationError('New owner must be a group member');
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      await client.query(
+        'UPDATE study_groups SET owner_id = $1 WHERE id = $2',
+        [newOwnerId, groupId]
+      );
+
+      await client.query(
+        `UPDATE study_group_members SET role = 'admin'
+         WHERE group_id = $1 AND user_id = $2`,
+        [groupId, actorId]
+      );
+
+      await client.query(
+        `UPDATE study_group_members SET role = 'owner'
+         WHERE group_id = $1 AND user_id = $2`,
+        [groupId, newOwnerId]
+      );
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    await this.logGroupAudit(groupId, actorId, 'ownership_transferred', newOwnerId);
+    return { success: true };
   },
 
 

@@ -11,6 +11,7 @@ import '../../core/ai/deep_research_service.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'youtube_player_dialog.dart';
 import '../subscription/services/credit_manager.dart';
+import '../../ui/widgets/app_network_image.dart';
 
 class WebSearchScreen extends ConsumerStatefulWidget {
   const WebSearchScreen({super.key});
@@ -1099,14 +1100,15 @@ $content''',
                       child: Chip(
                         avatar: CircleAvatar(
                           backgroundColor: Colors.transparent,
-                          child: Image.network(
-                            _getFaviconUrl(domain),
+                          child: AppNetworkImage(
+                            imageUrl: _getFaviconUrl(domain),
                             width: 16,
                             height: 16,
-                            errorBuilder: (context, error, stackTrace) => Icon(
-                                Icons.language,
-                                size: 16,
-                                color: scheme.onSurfaceVariant),
+                            errorWidget: (context) => Icon(
+                              Icons.language,
+                              size: 16,
+                              color: scheme.onSurfaceVariant,
+                            ),
                           ),
                         ),
                         label:
@@ -1178,11 +1180,11 @@ $content''',
                             }
                             return ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                config.uri.toString(),
+                              child: AppNetworkImage(
+                                imageUrl: config.uri.toString(),
                                 width: config.width,
                                 height: config.height,
-                                errorBuilder: (c, e, s) =>
+                                errorWidget: (context) =>
                                     const SizedBox.shrink(),
                               ),
                             );
@@ -1267,17 +1269,19 @@ $content''',
                     onTap: () => _showDeepResearchImagePreview(context, url),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        url,
+                      child: AppNetworkImage(
+                        imageUrl: url,
                         width: 110,
                         height: 110,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
+                        errorWidget: (context) => Container(
                           width: 110,
                           height: 110,
                           color: scheme.surfaceContainerHighest,
-                          child: Icon(Icons.broken_image,
-                              color: scheme.onSurfaceVariant),
+                          child: Icon(
+                            Icons.broken_image,
+                            color: scheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ),
@@ -1403,14 +1407,15 @@ $content''',
                 return ActionChip(
                   avatar: CircleAvatar(
                     backgroundColor: Colors.transparent,
-                    child: Image.network(
-                      _getFaviconUrl(domain ?? ''),
+                    child: AppNetworkImage(
+                      imageUrl: _getFaviconUrl(domain ?? ''),
                       width: 16,
                       height: 16,
-                      errorBuilder: (context, error, stackTrace) => Icon(
-                          Icons.language,
-                          size: 16,
-                          color: scheme.onSurfaceVariant),
+                      errorWidget: (context) => Icon(
+                        Icons.language,
+                        size: 16,
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                   label: Text(
@@ -1475,43 +1480,32 @@ $content''',
                   maxWidth: MediaQuery.of(context).size.width * 0.9,
                 ),
                 child: result.imageUrl != null
-                    ? Image.network(
-                        result.imageUrl!,
+                    ? AppNetworkImage(
+                        imageUrl: result.imageUrl!,
                         fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            padding: const EdgeInsets.all(32),
-                            color: Colors.grey[900],
-                            child: const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.broken_image,
-                                    size: 64, color: Colors.white54),
-                                SizedBox(height: 16),
-                                Text(
-                                  'Failed to load image',
-                                  style: TextStyle(color: Colors.white70),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Container(
-                            padding: const EdgeInsets.all(32),
-                            color: Colors.grey[900],
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                value: loadingProgress.expectedTotalBytes !=
-                                        null
-                                    ? loadingProgress.cumulativeBytesLoaded /
-                                        loadingProgress.expectedTotalBytes!
-                                    : null,
+                        placeholder: (context) => Container(
+                          padding: const EdgeInsets.all(32),
+                          color: Colors.grey[900],
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                        errorWidget: (context) => Container(
+                          padding: const EdgeInsets.all(32),
+                          color: Colors.grey[900],
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.broken_image,
+                                  size: 64, color: Colors.white54),
+                              SizedBox(height: 16),
+                              Text(
+                                'Failed to load image',
+                                style: TextStyle(color: Colors.white70),
                               ),
-                            ),
-                          );
-                        },
+                            ],
+                          ),
+                        ),
                       )
                     : Container(
                         padding: const EdgeInsets.all(32),
@@ -1603,10 +1597,17 @@ $content''',
                   maxHeight: MediaQuery.of(context).size.height * 0.7,
                   maxWidth: MediaQuery.of(context).size.width * 0.9,
                 ),
-                child: Image.network(
-                  url,
+                child: AppNetworkImage(
+                  imageUrl: url,
                   fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => Container(
+                  placeholder: (context) => Container(
+                    padding: const EdgeInsets.all(32),
+                    color: Colors.grey[900],
+                    child: const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
+                  errorWidget: (context) => Container(
                     padding: const EdgeInsets.all(32),
                     color: Colors.grey[900],
                     child: const Column(
@@ -1622,21 +1623,6 @@ $content''',
                       ],
                     ),
                   ),
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return Container(
-                      padding: const EdgeInsets.all(32),
-                      color: Colors.grey[900],
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded /
-                                  loadingProgress.expectedTotalBytes!
-                              : null,
-                        ),
-                      ),
-                    );
-                  },
                 ),
               ),
             ),
@@ -1665,12 +1651,12 @@ $content''',
           alignment: Alignment.center,
           children: [
             if (thumbnailUrl != null)
-              Image.network(
-                thumbnailUrl,
+              AppNetworkImage(
+                imageUrl: thumbnailUrl,
                 width: isPreview ? null : double.infinity,
                 height: isPreview ? 120 : 200,
                 fit: BoxFit.cover,
-                errorBuilder: (c, e, s) => Container(
+                errorWidget: (context) => Container(
                   height: isPreview ? 120 : 200,
                   width: isPreview ? 160 : double.infinity,
                   color: Colors.black12,
@@ -1960,10 +1946,16 @@ class _ImageResultCard extends StatelessWidget {
                 width: double.infinity,
                 color: scheme.surfaceContainerHighest,
                 child: result.imageUrl != null
-                    ? Image.network(
-                        result.imageUrl!,
+                    ? AppNetworkImage(
+                        imageUrl: result.imageUrl!,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
+                        placeholder: (context) => Container(
+                          color: scheme.surfaceContainerHighest,
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                        errorWidget: (context) {
                           return Container(
                             color: scheme.surfaceContainerHighest,
                             child: Column(
@@ -1985,21 +1977,6 @@ class _ImageResultCard extends StatelessWidget {
                                   textAlign: TextAlign.center,
                                 ),
                               ],
-                            ),
-                          );
-                        },
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Container(
-                            color: scheme.surfaceContainerHighest,
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                value: loadingProgress.expectedTotalBytes !=
-                                        null
-                                    ? loadingProgress.cumulativeBytesLoaded /
-                                        loadingProgress.expectedTotalBytes!
-                                    : null,
-                              ),
                             ),
                           );
                         },

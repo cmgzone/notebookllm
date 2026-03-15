@@ -14,7 +14,7 @@ class GeminiEmbeddingService {
   Future<List<double>> embed(String text) async {
     try {
       // Use Gemini to generate embeddings
-      final settings = await AISettingsService.getSettingsWithDefault(ref);
+      final settings = await AISettingsService.getSettingsWithDefault(ref.read);
       final model = settings.model;
 
       if (model == null || model.isEmpty) {

@@ -9,7 +9,7 @@ class EditorAgent {
   EditorAgent(this.ref);
 
   Future<String> _generateContent(String prompt) async {
-    final settings = await AISettingsService.getSettingsWithDefault(ref);
+    final settings = await AISettingsService.getSettingsWithDefault(ref.read);
     final model = settings.model;
 
     if (model == null || model.isEmpty) {

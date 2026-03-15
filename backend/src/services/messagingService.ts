@@ -1,7 +1,7 @@
 import pool from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import { notificationService } from './notificationService.js';
-import { ValidationError } from '../types/errors.js';
+import { ForbiddenError, NotFoundError, ValidationError } from '../types/errors.js';
 
 export interface Message {
   id: string;
@@ -13,6 +13,11 @@ export interface Message {
   metadata?: Record<string, any>;
   createdAt: Date;
   isRead?: boolean;
+}
+
+export interface MessageReaction {
+  type: string;
+  count: number;
 }
 
 export interface Conversation {
@@ -29,7 +34,29 @@ export interface GroupMessage extends Message {
   groupId: string;
   replyToId?: string;
   replyToContent?: string;
+  editedAt?: Date;
+  isDeleted?: boolean;
+  deletedAt?: Date;
+  deletedBy?: string;
+  reactions?: MessageReaction[];
+  userReaction?: string;
+  isPinned?: boolean;
+  pinnedAt?: Date;
+  pinnedBy?: string;
+  replyCount?: number;
 }
+
+type GroupRole = 'owner' | 'admin' | 'moderator' | 'member';
+
+const ROLE_RANK: Record<GroupRole, number> = {
+  owner: 3,
+  admin: 2,
+  moderator: 1,
+  member: 0,
+};
+
+const hasModerationPrivileges = (role: GroupRole) =>
+  role === 'owner' || role === 'admin' || role === 'moderator';
 
 // Helper to check if users are friends (direct query to avoid circular dependency)
 async function checkAreFriends(userId1: string, userId2: string): Promise<boolean> {
@@ -60,6 +87,119 @@ async function getOrCreateConversation(userId1: string, userId2: string): Promis
     [id, user1, user2]
   );
   return result.rows[0].id;
+}
+
+const normalizeRole = (role?: string): GroupRole =>
+  role === 'owner' || role === 'admin' || role === 'moderator' ? role : 'member';
+
+async function getGroupRole(groupId: string, userId: string): Promise<GroupRole | null> {
+  const result = await pool.query(
+    'SELECT role FROM study_group_members WHERE group_id = $1 AND user_id = $2',
+    [groupId, userId]
+  );
+  if (result.rows.length === 0) return null;
+  return normalizeRole(result.rows[0].role);
+}
+
+const allowedReactionTypes = new Set([
+  'like',
+  'love',
+  'laugh',
+  'wow',
+  'sad',
+  'party',
+]);
+
+const groupMessageBaseSelect = `
+  SELECT gm.*,
+    u.display_name as sender_username,
+    u.avatar_url as sender_avatar_url,
+    rm.content as reply_to_content,
+    rm.is_deleted as reply_to_deleted,
+    COALESCE(ragg.reactions, '[]'::json) as reactions,
+    ur.reaction_type as user_reaction,
+    pin.pinned_at,
+    pin.pinned_by,
+    rc.reply_count
+  FROM group_messages gm
+  JOIN users u ON u.id = gm.sender_id
+  LEFT JOIN group_messages rm ON rm.id = gm.reply_to_id
+  LEFT JOIN LATERAL (
+    SELECT json_agg(
+      json_build_object('type', reaction_type, 'count', count)
+      ORDER BY reaction_type
+    ) as reactions
+    FROM (
+      SELECT reaction_type, COUNT(*)::int as count
+      FROM group_message_reactions
+      WHERE message_id = gm.id
+      GROUP BY reaction_type
+    ) reaction_counts
+  ) ragg ON true
+  LEFT JOIN LATERAL (
+    SELECT reaction_type
+    FROM group_message_reactions
+    WHERE message_id = gm.id AND user_id = $2
+    LIMIT 1
+  ) ur ON true
+  LEFT JOIN LATERAL (
+    SELECT pinned_at, pinned_by
+    FROM group_message_pins
+    WHERE message_id = gm.id AND group_id = gm.group_id
+    LIMIT 1
+  ) pin ON true
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*)::int as reply_count
+    FROM group_messages
+    WHERE reply_to_id = gm.id
+  ) rc ON true
+`;
+
+const mapGroupMessageRow = (row: any): GroupMessage => {
+  const isDeleted = row.is_deleted ?? false;
+  const replyToContent = row.reply_to_id
+    ? row.reply_to_deleted
+      ? 'Message deleted'
+      : row.reply_to_content
+    : undefined;
+  return {
+    id: row.id,
+    groupId: row.group_id,
+    senderId: row.sender_id,
+    senderUsername: row.sender_username,
+    senderAvatarUrl: row.sender_avatar_url,
+    content: isDeleted ? 'Message deleted' : row.content,
+    messageType: row.message_type,
+    metadata: row.metadata,
+    replyToId: row.reply_to_id,
+    replyToContent,
+    createdAt: row.created_at,
+    editedAt: row.edited_at,
+    isDeleted,
+    deletedAt: row.deleted_at,
+    deletedBy: row.deleted_by,
+    reactions: row.reactions || [],
+    userReaction: row.user_reaction || undefined,
+    isPinned: !!row.pinned_at,
+    pinnedAt: row.pinned_at,
+    pinnedBy: row.pinned_by,
+    replyCount: row.reply_count ?? 0,
+  };
+};
+
+async function getGroupMessageById(
+  groupId: string,
+  messageId: string,
+  userId: string
+): Promise<GroupMessage> {
+  const result = await pool.query(
+    `${groupMessageBaseSelect} WHERE gm.group_id = $1 AND gm.id = $3`,
+    [groupId, userId, messageId]
+  );
+  if (result.rows.length === 0) {
+    throw new NotFoundError('Message not found');
+  }
+  return mapGroupMessageRow(result.rows[0]);
 }
 
 export const messagingService = {
@@ -272,6 +412,16 @@ export const messagingService = {
       throw new ValidationError('You are not a member of this group');
     }
 
+    if (replyToId) {
+      const replyCheck = await pool.query(
+        'SELECT id FROM group_messages WHERE id = $1 AND group_id = $2',
+        [replyToId, groupId]
+      );
+      if (replyCheck.rows.length === 0) {
+        throw new ValidationError('Reply message not found');
+      }
+    }
+
     const messageId = uuidv4();
     const result = await pool.query(`
       INSERT INTO group_messages (id, group_id, sender_id, content, message_type, metadata, reply_to_id)
@@ -283,7 +433,9 @@ export const messagingService = {
 
     const [sender, reply, group] = await Promise.all([
       pool.query('SELECT display_name, avatar_url FROM users WHERE id = $1', [senderId]),
-      replyToId ? pool.query('SELECT content FROM group_messages WHERE id = $1', [replyToId]) : null,
+      replyToId
+        ? pool.query('SELECT content, is_deleted FROM group_messages WHERE id = $1', [replyToId])
+        : null,
       pool.query('SELECT name FROM study_groups WHERE id = $1', [groupId])
     ]);
 
@@ -301,6 +453,12 @@ export const messagingService = {
       }
     }).catch(err => console.error('Failed to get group members for notification:', err));
 
+    const replyContent = reply?.rows[0]
+      ? reply.rows[0].is_deleted
+        ? 'Message deleted'
+        : reply.rows[0].content
+      : undefined;
+
     return {
       id: message.id,
       groupId: message.group_id,
@@ -311,8 +469,18 @@ export const messagingService = {
       messageType: message.message_type,
       metadata: message.metadata,
       replyToId: message.reply_to_id,
-      replyToContent: reply?.rows[0]?.content,
-      createdAt: message.created_at
+      replyToContent: replyContent,
+      createdAt: message.created_at,
+      editedAt: message.edited_at,
+      isDeleted: message.is_deleted,
+      deletedAt: message.deleted_at,
+      deletedBy: message.deleted_by,
+      reactions: [],
+      userReaction: undefined,
+      isPinned: false,
+      pinnedAt: undefined,
+      pinnedBy: undefined,
+      replyCount: 0
     };
   },
 
@@ -332,17 +500,8 @@ export const messagingService = {
 
     const limit = Math.min(options?.limit || 50, 100);
 
-    let query = `
-      SELECT gm.*, 
-        u.display_name as sender_username, 
-        u.avatar_url as sender_avatar_url,
-        rm.content as reply_to_content
-      FROM group_messages gm
-      JOIN users u ON u.id = gm.sender_id
-      LEFT JOIN group_messages rm ON rm.id = gm.reply_to_id
-      WHERE gm.group_id = $1
-    `;
-    const params: any[] = [groupId];
+    let query = `${groupMessageBaseSelect} WHERE gm.group_id = $1`;
+    const params: any[] = [groupId, userId];
 
     if (options?.before) {
       query += ` AND gm.created_at < (SELECT created_at FROM group_messages WHERE id = $${params.length + 1})`;
@@ -354,19 +513,264 @@ export const messagingService = {
 
     const result = await pool.query(query, params);
 
-    return result.rows.map(r => ({
-      id: r.id,
-      groupId: r.group_id,
-      senderId: r.sender_id,
-      senderUsername: r.sender_username,
-      senderAvatarUrl: r.sender_avatar_url,
-      content: r.content,
-      messageType: r.message_type,
-      metadata: r.metadata,
-      replyToId: r.reply_to_id,
-      replyToContent: r.reply_to_content,
-      createdAt: r.created_at
-    })).reverse();
+    return result.rows.map(mapGroupMessageRow).reverse();
+  },
+
+  async editGroupMessage(
+    groupId: string,
+    messageId: string,
+    userId: string,
+    content: string
+  ): Promise<GroupMessage> {
+    if (!content || content.trim().length === 0) {
+      throw new ValidationError('Message content is required');
+    }
+    if (content.length > 5000) {
+      throw new ValidationError('Message too long (max 5000 characters)');
+    }
+
+    const role = await getGroupRole(groupId, userId);
+    if (!role) {
+      throw new ForbiddenError('Not a member of this group');
+    }
+
+    const messageResult = await pool.query(
+      'SELECT sender_id, is_deleted FROM group_messages WHERE id = $1 AND group_id = $2',
+      [messageId, groupId]
+    );
+    if (messageResult.rows.length === 0) {
+      throw new NotFoundError('Message not found');
+    }
+    const messageRow = messageResult.rows[0];
+    if (messageRow.sender_id !== userId) {
+      throw new ForbiddenError('Not authorized to edit this message');
+    }
+    if (messageRow.is_deleted) {
+      throw new ValidationError('Cannot edit a deleted message');
+    }
+
+    await pool.query(
+      `UPDATE group_messages
+       SET content = $1, edited_at = NOW(), updated_at = NOW()
+       WHERE id = $2 AND group_id = $3`,
+      [content.trim(), messageId, groupId]
+    );
+
+    return getGroupMessageById(groupId, messageId, userId);
+  },
+
+  async deleteGroupMessage(
+    groupId: string,
+    messageId: string,
+    userId: string
+  ): Promise<GroupMessage> {
+    const role = await getGroupRole(groupId, userId);
+    if (!role) {
+      throw new ForbiddenError('Not a member of this group');
+    }
+
+    const messageResult = await pool.query(
+      'SELECT sender_id, is_deleted FROM group_messages WHERE id = $1 AND group_id = $2',
+      [messageId, groupId]
+    );
+    if (messageResult.rows.length === 0) {
+      throw new NotFoundError('Message not found');
+    }
+
+    const messageRow = messageResult.rows[0];
+    const canDelete =
+      messageRow.sender_id === userId || hasModerationPrivileges(role);
+    if (!canDelete) {
+      throw new ForbiddenError('Not authorized to delete this message');
+    }
+
+    if (!messageRow.is_deleted) {
+      await pool.query(
+        `UPDATE group_messages
+         SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $1, updated_at = NOW()
+         WHERE id = $2 AND group_id = $3`,
+        [userId, messageId, groupId]
+      );
+      await pool.query(
+        'DELETE FROM group_message_pins WHERE message_id = $1',
+        [messageId]
+      );
+    }
+
+    return getGroupMessageById(groupId, messageId, userId);
+  },
+
+  async addGroupMessageReaction(
+    groupId: string,
+    messageId: string,
+    userId: string,
+    reactionType: string
+  ): Promise<GroupMessage> {
+    const role = await getGroupRole(groupId, userId);
+    if (!role) {
+      throw new ForbiddenError('Not a member of this group');
+    }
+    if (!reactionType || !allowedReactionTypes.has(reactionType)) {
+      throw new ValidationError('Invalid reaction type');
+    }
+
+    const messageResult = await pool.query(
+      'SELECT is_deleted FROM group_messages WHERE id = $1 AND group_id = $2',
+      [messageId, groupId]
+    );
+    if (messageResult.rows.length === 0) {
+      throw new NotFoundError('Message not found');
+    }
+    if (messageResult.rows[0].is_deleted) {
+      throw new ValidationError('Cannot react to a deleted message');
+    }
+
+    await pool.query(
+      `INSERT INTO group_message_reactions (id, message_id, user_id, reaction_type)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (message_id, user_id)
+       DO UPDATE SET reaction_type = EXCLUDED.reaction_type, created_at = NOW()`,
+      [uuidv4(), messageId, userId, reactionType]
+    );
+
+    return getGroupMessageById(groupId, messageId, userId);
+  },
+
+  async removeGroupMessageReaction(
+    groupId: string,
+    messageId: string,
+    userId: string
+  ): Promise<GroupMessage> {
+    const role = await getGroupRole(groupId, userId);
+    if (!role) {
+      throw new ForbiddenError('Not a member of this group');
+    }
+
+    const messageResult = await pool.query(
+      'SELECT id FROM group_messages WHERE id = $1 AND group_id = $2',
+      [messageId, groupId]
+    );
+    if (messageResult.rows.length === 0) {
+      throw new NotFoundError('Message not found');
+    }
+
+    await pool.query(
+      'DELETE FROM group_message_reactions WHERE message_id = $1 AND user_id = $2',
+      [messageId, userId]
+    );
+
+    return getGroupMessageById(groupId, messageId, userId);
+  },
+
+  async pinGroupMessage(
+    groupId: string,
+    messageId: string,
+    userId: string
+  ): Promise<GroupMessage> {
+    const role = await getGroupRole(groupId, userId);
+    if (!role) {
+      throw new ForbiddenError('Not a member of this group');
+    }
+    if (!hasModerationPrivileges(role)) {
+      throw new ForbiddenError('Not authorized to pin messages');
+    }
+
+    const messageResult = await pool.query(
+      'SELECT id FROM group_messages WHERE id = $1 AND group_id = $2',
+      [messageId, groupId]
+    );
+    if (messageResult.rows.length === 0) {
+      throw new NotFoundError('Message not found');
+    }
+
+    await pool.query(
+      `INSERT INTO group_message_pins (id, group_id, message_id, pinned_by)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (group_id, message_id) DO NOTHING`,
+      [uuidv4(), groupId, messageId, userId]
+    );
+
+    return getGroupMessageById(groupId, messageId, userId);
+  },
+
+  async unpinGroupMessage(
+    groupId: string,
+    messageId: string,
+    userId: string
+  ): Promise<GroupMessage> {
+    const role = await getGroupRole(groupId, userId);
+    if (!role) {
+      throw new ForbiddenError('Not a member of this group');
+    }
+    if (!hasModerationPrivileges(role)) {
+      throw new ForbiddenError('Not authorized to unpin messages');
+    }
+
+    const messageResult = await pool.query(
+      'SELECT id FROM group_messages WHERE id = $1 AND group_id = $2',
+      [messageId, groupId]
+    );
+    if (messageResult.rows.length === 0) {
+      throw new NotFoundError('Message not found');
+    }
+
+    await pool.query(
+      'DELETE FROM group_message_pins WHERE group_id = $1 AND message_id = $2',
+      [groupId, messageId]
+    );
+
+    return getGroupMessageById(groupId, messageId, userId);
+  },
+
+  async getPinnedMessages(groupId: string, userId: string): Promise<GroupMessage[]> {
+    const role = await getGroupRole(groupId, userId);
+    if (!role) {
+      throw new ForbiddenError('Not a member of this group');
+    }
+
+    const result = await pool.query(
+      `${groupMessageBaseSelect}
+       WHERE gm.group_id = $1 AND pin.pinned_at IS NOT NULL
+       ORDER BY pin.pinned_at DESC`,
+      [groupId, userId]
+    );
+
+    return result.rows.map(mapGroupMessageRow);
+  },
+
+  async getThreadMessages(
+    groupId: string,
+    rootMessageId: string,
+    userId: string,
+    options?: { limit?: number; before?: string }
+  ): Promise<GroupMessage[]> {
+    const role = await getGroupRole(groupId, userId);
+    if (!role) {
+      throw new ForbiddenError('Not a member of this group');
+    }
+
+    const rootCheck = await pool.query(
+      'SELECT id FROM group_messages WHERE id = $1 AND group_id = $2',
+      [rootMessageId, groupId]
+    );
+    if (rootCheck.rows.length === 0) {
+      throw new NotFoundError('Message not found');
+    }
+
+    const limit = Math.min(options?.limit || 50, 100);
+    let query = `${groupMessageBaseSelect} WHERE gm.group_id = $1 AND gm.reply_to_id = $3`;
+    const params: any[] = [groupId, userId, rootMessageId];
+
+    if (options?.before) {
+      query += ` AND gm.created_at < (SELECT created_at FROM group_messages WHERE id = $${params.length + 1})`;
+      params.push(options.before);
+    }
+
+    query += ` ORDER BY gm.created_at DESC LIMIT $${params.length + 1}`;
+    params.push(limit);
+
+    const result = await pool.query(query, params);
+    return result.rows.map(mapGroupMessageRow).reverse();
   },
 
   async markGroupMessagesRead(groupId: string, userId: string, lastMessageId: string): Promise<void> {

@@ -299,6 +299,30 @@ class GitHubService {
     return response;
   }
 
+  /// Add all files from a repository as sources
+  Future<Map<String, dynamic>> addRepoAsSources({
+    required String notebookId,
+    required String owner,
+    required String repo,
+    String? branch,
+    int? maxFiles,
+    int? maxFileSizeBytes,
+    List<String>? includeExtensions,
+    List<String>? excludeExtensions,
+  }) async {
+    final response = await _api.post('/github/add-repo-sources', {
+      'notebookId': notebookId,
+      'owner': owner,
+      'repo': repo,
+      if (branch != null) 'branch': branch,
+      if (maxFiles != null) 'maxFiles': maxFiles,
+      if (maxFileSizeBytes != null) 'maxFileSizeBytes': maxFileSizeBytes,
+      if (includeExtensions != null) 'includeExtensions': includeExtensions,
+      if (excludeExtensions != null) 'excludeExtensions': excludeExtensions,
+    });
+    return response;
+  }
+
   /// Request AI analysis of repository
   Future<Map<String, dynamic>> analyzeRepo(
     String owner,

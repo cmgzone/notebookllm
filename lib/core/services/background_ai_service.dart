@@ -30,11 +30,11 @@ class BackgroundAIService {
   static const String _taskResultKey = 'background_task_result';
   static const String _taskProgressKey = 'background_task_progress';
   static const String _taskErrorKey = 'background_task_error';
-  static const String _wakeWordEnabledKey = 'gitu_wake_word_enabled';
-  static const String _wakeWordPhraseKey = 'gitu_wake_word_phrase';
+  static const String _wakeWordEnabledKey = 'assistant_wake_word_enabled';
+  static const String _wakeWordPhraseKey = 'assistant_wake_word_phrase';
   static const String _wakeWordAlwaysListeningKey =
-      'gitu_wake_word_always_listening';
-  static const String _wakeWordApiKeyKey = 'gitu_wake_word_deepgram_key';
+      'assistant_wake_word_always_listening';
+  static const String _wakeWordApiKeyKey = 'assistant_wake_word_deepgram_key';
 
   /// Check if background execution is enabled
   Future<bool> get isEnabled async {
@@ -503,7 +503,7 @@ Future<void> _notifyWakeWordDetected(
   await notifications.show(
     891,
     'Wake word detected',
-    snippet.isEmpty ? 'Hey Gitu detected' : snippet,
+    snippet.isEmpty ? 'Wake word detected' : snippet,
     const NotificationDetails(
       android: AndroidNotificationDetails(
         'notebook_llm_background',
@@ -523,14 +523,16 @@ Future<void> _runWakeWordListener(
   ServiceInstance service,
   FlutterLocalNotificationsPlugin notifications,
 ) async {
-  final phraseRaw =
-      (params['phrase'] as String?) ?? prefs.getString('gitu_wake_word_phrase');
+  final phraseRaw = (params['phrase'] as String?) ??
+      prefs.getString('assistant_wake_word_phrase');
   final phrase =
-      (phraseRaw == null || phraseRaw.trim().isEmpty) ? 'hey gitu' : phraseRaw;
+      (phraseRaw == null || phraseRaw.trim().isEmpty)
+          ? 'hey assistant'
+          : phraseRaw;
   final phraseLower = phrase.toLowerCase();
 
   final envKey = dotenv.env['DEEPGRAM_API_KEY'];
-  final storedKey = prefs.getString('gitu_wake_word_deepgram_key');
+  final storedKey = prefs.getString('assistant_wake_word_deepgram_key');
   final apiKey = (params['deepgramApiKey'] as String?) ??
       (storedKey != null && storedKey.trim().isNotEmpty ? storedKey : null) ??
       (envKey != null && envKey.trim().isNotEmpty ? envKey : null);

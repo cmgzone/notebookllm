@@ -6,7 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../ui/widgets/app_network_image.dart';
 import 'ai_browser_service.dart';
 import '../../theme/app_theme.dart';
 import '../subscription/services/credit_manager.dart';
@@ -288,18 +288,17 @@ class _AIBrowserScreenState extends ConsumerState<AIBrowserScreen> {
                       Expanded(
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: CachedNetworkImage(
+                          child: AppNetworkImage(
                             imageUrl: update.productImageUrl!,
                             height: 180,
                             fit: BoxFit.contain,
-                            placeholder: (context, url) => Center(
+                            placeholder: (_) => Center(
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 color: scheme.primary,
                               ),
                             ),
-                            errorWidget: (context, url, error) => screenshot !=
-                                    null
+                            errorWidget: (_) => screenshot != null
                                 ? Image.memory(screenshot, fit: BoxFit.cover)
                                 : Icon(Icons.image_not_supported,
                                     size: 48, color: scheme.outline),
@@ -1005,12 +1004,12 @@ class _AIBrowserScreenState extends ConsumerState<AIBrowserScreen> {
                         product.imageUrl!.startsWith('http')) {
                       return ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImage(
+                        child: AppNetworkImage(
                           imageUrl: product.imageUrl!,
                           width: 60,
                           height: 60,
                           fit: BoxFit.cover,
-                          placeholder: (_, __) => Container(
+                          placeholder: (_) => Container(
                             width: 60,
                             height: 60,
                             color: Theme.of(context)
@@ -1018,7 +1017,7 @@ class _AIBrowserScreenState extends ConsumerState<AIBrowserScreen> {
                                 .surfaceContainerHighest,
                             child: const Icon(Icons.image, size: 24),
                           ),
-                          errorWidget: (_, __, ___) => Container(
+                          errorWidget: (_) => Container(
                             width: 60,
                             height: 60,
                             color: Theme.of(context)

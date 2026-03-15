@@ -27,11 +27,11 @@ class _OnboardingCompletionScreenState
     );
     _controller.forward();
 
-    // Auto-navigate to feature tour after animation
+    // Auto-navigate after animation
     Future.delayed(const Duration(milliseconds: 3000), () {
       if (mounted) {
         ref.read(onboardingProvider.notifier).completeOnboarding();
-        context.go('/feature-tour');
+        context.go('/home');
       }
     });
   }

@@ -704,24 +704,28 @@ class _SourcesList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Column(
-      children: sources
-          .map((s) => Card(
-                child: ListTile(
-                  leading: Icon(_iconForType(s.type), color: scheme.primary),
-                  title: Text(s.title),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                          '${s.type} • ${s.addedAt.day}/${s.addedAt.month}/${s.addedAt.year}'),
-                      _IndexStatusBadge(sourceId: s.id),
-                    ],
-                  ),
-                  trailing: _PreviewTrailing(source: s),
-                ),
-              ))
-          .toList(),
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: sources.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final s = sources[index];
+        return Card(
+          child: ListTile(
+            leading: Icon(_iconForType(s.type), color: scheme.primary),
+            title: Text(s.title),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                    '${s.type} • ${s.addedAt.day}/${s.addedAt.month}/${s.addedAt.year}'),
+                _IndexStatusBadge(sourceId: s.id),
+              ],
+            ),
+            trailing: _PreviewTrailing(source: s),
+          ),
+        );
+      },
     );
   }
 

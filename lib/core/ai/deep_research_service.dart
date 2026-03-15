@@ -138,7 +138,7 @@ class DeepResearchService {
 
       // Get AI settings (provider/model)
       final settings =
-          await AISettingsService.getSettingsWithProviderDetection(ref);
+          await AISettingsService.getSettingsWithProviderDetection(ref.read);
 
       final stream = api.performDeepResearchStream(
         query: query,

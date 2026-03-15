@@ -134,7 +134,7 @@ Vary difficulty across questions.
 
   Future<String> _callAI(String prompt) async {
     try {
-      final settings = await AISettingsService.getSettingsWithDefault(ref);
+      final settings = await AISettingsService.getSettingsWithDefault(ref.read);
       final model = settings.getEffectiveModel();
 
       debugPrint(

@@ -27,8 +27,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   Future<void> _loadPages() async {
     try {
-      final dbScreens =
-          await ref.read(apiServiceProvider).getOnboardingScreens();
+      final api = ref.read(apiServiceProvider);
+      final token = await api.getToken();
+      if (token == null) {
+        _useDefaultPages();
+        return;
+      }
+
+      final dbScreens = await api.getOnboardingScreens();
 
       if (dbScreens.isNotEmpty) {
         setState(() {

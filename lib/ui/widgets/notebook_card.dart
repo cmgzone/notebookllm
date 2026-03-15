@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'app_network_image.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'agent_notebook_badge.dart';
 
@@ -64,15 +64,15 @@ class NotebookCard extends StatelessWidget {
           errorBuilder: (_, __, ___) => _buildPlaceholder(context),
         );
       } else if (coverImage!.startsWith('http')) {
-        return CachedNetworkImage(
+        return AppNetworkImage(
           imageUrl: coverImage!,
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
-          placeholder: (context, url) => Container(
+          placeholder: (_) => Container(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
-          errorWidget: (_, __, ___) => _buildPlaceholder(context),
+          errorWidget: (_) => _buildPlaceholder(context),
         );
       }
     } catch (e) {

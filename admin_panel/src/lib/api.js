@@ -1,7 +1,7 @@
 // API Service for Admin Panel
 // Uses the backend API instead of direct database access
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 class ApiService {
     constructor() {
@@ -174,10 +174,6 @@ class ApiService {
 
     async updateUserStatus(userId, isActive) {
         return this.put(`/admin/users/${userId}/status`, { isActive });
-    }
-
-    async updateShellPermissions(userId, permissions) {
-        return this.put(`/gitu/shell/permissions`, { ...permissions, targetUserId: userId });
     }
 
     // ============ ADMIN - AI MODELS ============
