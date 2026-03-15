@@ -109,25 +109,52 @@ class AuditLoggerService {
       requestMetadata = {},
     } = entry;
 
-    const result = await pool.query(
-      `INSERT INTO github_audit_logs 
-       (user_id, action, owner, repo, path, agent_session_id, success, error_message, request_metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING *`,
-      [
+    try {
+      const result = await pool.query(
+        `INSERT INTO github_audit_logs 
+         (user_id, action, owner, repo, path, agent_session_id, success, error_message, request_metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING *`,
+        [
+          userId,
+          action,
+          owner || null,
+          repo || null,
+          path || null,
+          agentSessionId || null,
+          success,
+          errorMessage || null,
+          JSON.stringify(requestMetadata),
+        ]
+      );
+
+      return this.mapRow(result.rows[0]);
+    } catch (err: any) {
+      // Audit logging must never take down API routes. If the table/constraint isn't
+      // up-to-date in a given environment, degrade gracefully and keep serving.
+      const insertErrorMessage =
+        typeof err?.message === 'string' ? err.message : String(err);
+      // eslint-disable-next-line no-console
+      console.warn('[GitHubAudit] Failed to write audit log:', insertErrorMessage);
+
+      return {
+        id: '00000000-0000-0000-0000-000000000000',
         userId,
         action,
-        owner || null,
-        repo || null,
-        path || null,
-        agentSessionId || null,
+        owner: owner || undefined,
+        repo: repo || undefined,
+        path: path || undefined,
+        agentSessionId: agentSessionId || undefined,
         success,
-        errorMessage || null,
-        JSON.stringify(requestMetadata),
-      ]
-    );
-
-    return this.mapRow(result.rows[0]);
+        errorMessage: errorMessage || insertErrorMessage,
+        requestMetadata: {
+          ...requestMetadata,
+          auditLogWriteFailed: true,
+          auditLogError: insertErrorMessage,
+        },
+        createdAt: new Date(),
+      };
+    }
   }
 
   /**
