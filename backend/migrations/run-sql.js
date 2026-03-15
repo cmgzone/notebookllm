@@ -132,8 +132,35 @@ async function main() {
 
     console.log('[ok] migration applied');
   } catch (err) {
-    const msg = err && typeof err === 'object' && 'message' in err ? err.message : String(err);
+    const msg =
+      err && typeof err === 'object' && 'message' in err
+        ? (err.message || '')
+        : String(err);
     console.error('[error] migration failed:', msg);
+
+    // Node's networking can surface connection failures as AggregateError with an
+    // empty message. Print helpful diagnostics when present.
+    try {
+      if (err && typeof err === 'object') {
+        if ('code' in err && err.code) console.error('[error] code:', err.code);
+        if ('detail' in err && err.detail) console.error('[error] detail:', err.detail);
+        if ('hint' in err && err.hint) console.error('[error] hint:', err.hint);
+
+        const nested = err.errors;
+        if (Array.isArray(nested) && nested.length > 0) {
+          console.error(`[error] nested errors (${nested.length}):`);
+          for (const e of nested) {
+            const emsg = e?.message || String(e);
+            const ecode = e?.code ? ` code=${e.code}` : '';
+            const addr = e?.address ? ` address=${e.address}` : '';
+            const port = e?.port ? ` port=${e.port}` : '';
+            console.error(`  - ${emsg}${ecode}${addr}${port}`);
+          }
+        }
+      }
+    } catch (_) {
+      // Ignore secondary logging errors.
+    }
     process.exitCode = 1;
   } finally {
     await pool.end().catch(() => {});
@@ -144,4 +171,3 @@ main().catch((err) => {
   console.error('[error] unexpected failure:', err?.message || err);
   process.exit(1);
 });
-
